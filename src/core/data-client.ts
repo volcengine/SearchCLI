@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
-import { Signer } from '@volcengine/openapi';
 import type { RuntimeConfig } from './types';
+import { buildSignedRequestHeaders } from './http';
 
 export interface DatasetItemDetail {
   id: string;
@@ -57,31 +57,9 @@ export class VikingDataClient {
     }
 
     const url = new URL(urlString);
-    const headers: Record<string, string> = {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      host: url.host
-    };
-
-    const signer = new Signer(
-      {
-        region: this.config.region,
-        method: 'POST',
-        pathname: url.pathname,
-        params: Object.fromEntries(url.searchParams.entries()),
-        headers,
-        body
-      },
-      this.config.service
-    );
-
-    signer.addAuthorization({
-      accessKeyId: this.config.accessKeyId,
-      secretKey: this.config.secretKey,
-      sessionToken: ''
+    return buildSignedRequestHeaders(this.config, 'POST', url, body, {
+      'content-type': 'application/json'
     });
-
-    return headers;
   }
 }
 

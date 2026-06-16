@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
+import { Signer } from '@volcengine/openapi';
 import { formatMissingVikingAuthMessage } from './auth-errors';
 import type { ServiceConfig } from './service-config';
 
@@ -140,6 +141,7 @@ async function buildHeaders(
   url: URL,
   body?: string
 ): Promise<Record<string, string>> {
+  const signedHost = resolveSignedHost(config, url);
   const headers: Record<string, string> = {
     accept: 'application/json'
   };
@@ -148,8 +150,7 @@ async function buildHeaders(
   }
 
   if (config.accessKeyId && config.secretKey) {
-    const { Signer } = await import('@volcengine/openapi');
-    headers.host = url.host;
+    headers.host = signedHost;
     const signer = new Signer(
       {
         region: config.region,
@@ -172,6 +173,44 @@ async function buildHeaders(
   }
 
   throw new Error(formatMissingVikingAuthMessage());
+}
+
+export function buildSignedRequestHeaders(
+  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  method: SignedHttpMethod,
+  url: URL,
+  body?: string,
+  initialHeaders?: Record<string, string>
+): Record<string, string> {
+  if (!config.accessKeyId || !config.secretKey) {
+    throw new Error(formatMissingVikingAuthMessage());
+  }
+
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    ...initialHeaders,
+    host: resolveSignedHost(config, url)
+  };
+
+  const signer = new Signer(
+    {
+      region: config.region,
+      method,
+      pathname: url.pathname,
+      params: Object.fromEntries(url.searchParams.entries()),
+      headers,
+      body: body ?? ''
+    },
+    config.service
+  );
+
+  signer.addAuthorization({
+    accessKeyId: config.accessKeyId,
+    secretKey: config.secretKey,
+    sessionToken: ''
+  });
+
+  return headers;
 }
 
 function parseMaybeJson(rawText: string): unknown {
@@ -222,4 +261,22 @@ function withDefaultProjectName(payload: unknown, projectName: string): unknown 
     ...(payload as Record<string, unknown>),
     ProjectName: projectName
   };
+}
+
+function resolveSignedHost(
+  config: Pick<ServiceConfig, 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  url: URL
+): string {
+  if (isDataPlaneRequest(config.dataPlaneBaseUrl, url) && config.dataPlaneHost) {
+    return config.dataPlaneHost;
+  }
+  return url.host;
+}
+
+function isDataPlaneRequest(dataPlaneBaseUrl: string, url: URL): boolean {
+  return normalizeOrigin(dataPlaneBaseUrl) === normalizeOrigin(url);
+}
+
+function normalizeOrigin(input: string | URL): string {
+  return new URL(input).origin.replace(/\/+$/, '').toLowerCase();
 }

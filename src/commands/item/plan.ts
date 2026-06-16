@@ -3,7 +3,7 @@
 
 import { Command, Flags } from '@oclif/core';
 import { runItemPlanCommand } from '../../app/item-commands';
-import { outputFormatFlags } from '../../command-support/service-flags';
+import { extractServiceConnectionOptions, workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class ItemPlan extends Command {
   static override description =
@@ -12,11 +12,12 @@ export default class ItemPlan extends Command {
   static override examples = [
     '<%= config.bin %> item plan --file ./items.json --output-dir ./.viking/item-plan',
     '<%= config.bin %> item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app',
-    '<%= config.bin %> item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app'
+    '<%= config.bin %> item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app',
+    '<%= config.bin %> item plan --file ./items.jsonl --type item --schema-source console --project-name default'
   ];
 
   static override flags = {
-    ...outputFormatFlags,
+    ...workflowServiceFlags,
     file: Flags.string({
       required: true,
       description: 'Path to a JSON array, JSONL, or CSV file containing structured item records.'
@@ -43,12 +44,27 @@ export default class ItemPlan extends Command {
     }),
     'project-name': Flags.string({
       description: 'Optional project name carried into generated control-plane payloads.'
+    }),
+    'schema-source': Flags.string({
+      description: 'Schema inference source: auto prefers console inference when auth is available, console requires the remote chain, local keeps the legacy local-only plan path.',
+      options: ['auto', 'console', 'local'],
+      default: 'auto'
+    }),
+    language: Flags.string({
+      description: 'Language hint sent to console schema inference. Defaults to zh.'
+    }),
+    'schema-wait-timeout-ms': Flags.integer({
+      description: 'Timeout for polling remote schema inference task status.'
+    }),
+    'schema-poll-interval-ms': Flags.integer({
+      description: 'Polling interval for remote schema inference task status.'
     })
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ItemPlan);
     await runItemPlanCommand({
+      ...extractServiceConnectionOptions(flags),
       file: flags.file,
       datasetType: flags.type as 'item' | 'video',
       goal: flags.goal,
@@ -56,7 +72,11 @@ export default class ItemPlan extends Command {
       datasetName: flags['dataset-name'],
       applicationName: flags['application-name'],
       projectName: flags['project-name'],
-      skipApp: flags['skip-app']
+      skipApp: flags['skip-app'],
+      schemaSource: flags['schema-source'] as 'auto' | 'console' | 'local',
+      schemaWaitTimeoutMs: flags['schema-wait-timeout-ms'],
+      schemaPollIntervalMs: flags['schema-poll-interval-ms'],
+      language: flags.language
     });
   }
 }

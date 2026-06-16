@@ -25,9 +25,9 @@ Use this skill when a user provides structured item data and expects the agent t
 
 For `dataset-only`, there is exactly one valid schema-level user confirmation for the current draft: Stage A. That dialog must happen only after the full schema context has been rendered.
 
-1. `item profile --file <data> --type <item|video>` — first-pass profiling
+1. `item profile --file <data> --type <item|video>` — first-pass profiling and validation risk scan
 2. Confirm the requested provisioning mode: `dataset-only` or `dataset+app`; if the user did not ask for app creation, default to `dataset-only`
-3. `item plan --file <data> --type <item|video> --goal "<goal>"` — generate plan directory; add `--skip-app` when the requested mode is `dataset-only`. If execution later goes through `item provision` or `item apply`, those commands also accept `--skip-app` as an execution-time guard rail.
+3. `item plan --file <data> --type <item|video> --goal "<goal>" --schema-source console` — generate plan directory through the stable schema path: call console `GetInferDatasetSchemaUploadSignature`, upload normalized JSONL to TOS, call `AddInferDatasetSchemaTask`, poll `GetInferDatasetSchemaResult`, then continue plan generation. Add `--skip-app` when the requested mode is `dataset-only`. If execution later goes through `item provision` or `item apply`, those commands also accept `--skip-app` as an execution-time guard rail.
 4. **Stage A** — render the schema header and full schema table, verify row count, then ask exactly one dialog question (see [agent-confirmation-ux.md](references/agent-confirmation-ux.md) §A)
 5. If the requested mode is `dataset-only`, run `dataset create` + `dataset ingest` immediately after a valid Stage A answer and stop after dataset provisioning succeeds; do not issue another schema-level confirmation. Prefer creating the dataset from the full `dataset-create.json` payload so `Schema` and `DataFieldConfig.FieldDescMap` are submitted together. For `--type video`, this full-payload path is mandatory; do not use `schema.json` alone
 6. If the requested mode is `dataset+app`, run **Stage B** — bind-time field-config review (table per group + dialog, see [agent-confirmation-ux.md](references/agent-confirmation-ux.md) §B); for `--type video` apply [video-field-constraints.md](references/video-field-constraints.md) first

@@ -1838,13 +1838,14 @@ function printItemCommandHelp(action: string): void {
     plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
 
 USAGE
-  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app [output flags]
+  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--schema-source <auto|console|local>] [service flags]
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console [service flags]
 
 DESCRIPTION
   Use this command to generate the plan artifacts an agent or operator will review before provisioning.
   For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
-  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow.
+  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow. With
+  \`--schema-source console\`, the plan first runs the signed-upload + remote schema inference chain.
 
 KEY FLAGS
   --file               Source JSON array, JSONL, or CSV file.
@@ -1854,11 +1855,14 @@ KEY FLAGS
   --dataset-name       Override the generated dataset name.
   --application-name   Override the generated application name.
   --skip-app           Generate a dataset-only plan without app creation artifacts.
+  --schema-source      auto uses console inference when auth is available; console requires it; local keeps the legacy local-only schema path.
+  --project-name       Project name for the console OpenAPI chain when remote inference is used.
+  --ak --sk --region   Service auth used by remote schema inference when \`schema-source\` is auto/console.
 
 EXAMPLES
   vs item plan --file ./items.json --output-dir ./.viking/item-plan
   vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app`,
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console`,
     apply: `Compatibility wrapper around item provision / verify.
 
 USAGE
@@ -2570,6 +2574,7 @@ async function runItemCli(argv: string[]): Promise<void> {
       return;
     case 'plan':
       await runItemPlanCommand({
+        ...toStandaloneServiceOptions(values),
         file: requiredString(values.file, '--file'),
         datasetType: optionalString(values.type) as 'item' | 'video',
         goal: optionalString(values.goal),
@@ -2577,7 +2582,11 @@ async function runItemCli(argv: string[]): Promise<void> {
         datasetName: optionalString(values['dataset-name']),
         applicationName: optionalString(values['application-name']),
         projectName: optionalString(values['project-name']),
-        skipApp: optionalBoolean(values['skip-app'])
+        skipApp: optionalBoolean(values['skip-app']),
+        schemaSource: optionalString(values['schema-source']) as 'auto' | 'console' | 'local' | undefined,
+        schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
+        schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
+        language: optionalString(values.language)
       });
       return;
     case 'apply':
@@ -3094,6 +3103,9 @@ function parseStandaloneOptions(argv: string[]) {
       'wait-indexed': { type: 'boolean' },
       'run-trials': { type: 'boolean' },
       'skip-app': { type: 'boolean' },
+      'schema-source': { type: 'string' },
+      'schema-wait-timeout-ms': { type: 'string' },
+      'schema-poll-interval-ms': { type: 'string' },
       'confirm-review': { type: 'boolean' },
       'interactive-review': { type: 'boolean' },
       'confirm-recommend-entry-binding': { type: 'boolean' },

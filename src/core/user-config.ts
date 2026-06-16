@@ -37,6 +37,7 @@ const cliProfileSchema = z.object({
   baseUrl: z.string().url().optional(),
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
+  host: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   projectName: z.string().min(1).optional(),
   region: z.string().min(1).optional(),
@@ -48,6 +49,7 @@ const cliConfigSchema = z.object({
   baseUrl: z.string().url().optional(),
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
+  host: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   service: z.string().min(1).optional(),
   accessKeyId: z.string().min(1).optional(),
@@ -80,6 +82,7 @@ export interface ResolvedCliDefaults {
   baseUrl: string;
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
+  dataPlaneHost?: string;
   environmentId?: EnvironmentId;
   service: string;
   accessKeyId?: string;
@@ -108,6 +111,7 @@ const configKeySpecs = {
   'base-url': { property: 'baseUrl', type: 'string', secret: false },
   'control-plane-base-url': { property: 'controlPlaneBaseUrl', type: 'string', secret: false },
   'data-plane-base-url': { property: 'dataPlaneBaseUrl', type: 'string', secret: false },
+  host: { property: 'host', type: 'string', secret: false },
   'environment-id': { property: 'environmentId', type: 'string', secret: false },
   'project-name': { property: 'projectName', type: 'string', secret: false },
   ak: { property: 'accessKeyId', type: 'string', secret: false, visible: false, managedBy: 'auth' },
@@ -296,6 +300,7 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     baseUrl: endpoints.dataPlaneBaseUrl,
     controlPlaneBaseUrl: endpoints.controlPlaneBaseUrl,
     dataPlaneBaseUrl: endpoints.dataPlaneBaseUrl,
+    dataPlaneHost: profileConfig.host ?? stored.host,
     environmentId: endpoints.envId,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
     accessKeyId:

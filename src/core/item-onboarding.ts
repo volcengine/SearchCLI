@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { inferSchemaArtifactsWithConsole } from './console-schema-inference';
 import { ensureDir, slugify, writeJson, writeText } from './files';
 import { inferSchemaMetadataWithPrompt } from './schema-prompt-inference';
 
@@ -98,6 +99,11 @@ export interface ItemProfileResult {
 }
 
 export interface ItemPlanOptions {
+  baseUrl?: string;
+  controlPlaneBaseUrl?: string;
+  dataPlaneBaseUrl?: string;
+  accessKeyId?: string;
+  secretKey?: string;
   file: string;
   datasetType?: 'item' | 'video';
   goal?: string;
@@ -106,7 +112,13 @@ export interface ItemPlanOptions {
   applicationName?: string;
   force?: boolean;
   projectName?: string;
+  region?: string;
+  timeoutMs?: number;
   skipApp?: boolean;
+  schemaSource?: 'auto' | 'console' | 'local';
+  schemaWaitTimeoutMs?: number;
+  schemaPollIntervalMs?: number;
+  language?: string;
 }
 
 export interface ItemPlanResult {
@@ -397,15 +409,23 @@ export async function buildItemPlan(options: ItemPlanOptions): Promise<ItemPlanR
   };
 
   const normalizedItems = profile.sample.length > 0 ? await loadNormalizedItems(options.file, profile) : [];
-  const promptInference: PromptInferenceMetadata = await inferSchemaMetadataWithPrompt({
-    fields: toPromptInferenceFields(profile.fields),
-    records: normalizedItems,
-    datasetType: datasetType === 'video' ? 'video' : 'item',
-    attrPromptKey: datasetType
-  }).catch(() => ({ fieldMeanings: {} }));
+  const schemaSource = options.schemaSource ?? 'auto';
+  const consoleArtifacts = await maybeInferSchemaArtifactsWithConsole(options, normalizedItems, datasetType, schemaSource);
+  const promptInference: PromptInferenceMetadata | undefined = consoleArtifacts
+    ? undefined
+    : await inferSchemaMetadataWithPrompt({
+      fields: toPromptInferenceFields(profile.fields),
+      records: normalizedItems,
+      datasetType: datasetType === 'video' ? 'video' : 'item',
+      attrPromptKey: datasetType
+    }).catch(() => ({ fieldMeanings: {} }));
 
-  const schema = buildSchemaArtifact(profile, datasetType, promptInference.fieldMeanings, promptInference.attrFields);
-  const fieldConfig = buildFieldConfigArtifact(profile, datasetType, promptInference);
+  const schema = consoleArtifacts
+    ? normalizeSchemaForApi(consoleArtifacts.schema)
+    : buildSchemaArtifact(profile, datasetType, promptInference?.fieldMeanings, promptInference?.attrFields);
+  const fieldConfig = consoleArtifacts
+    ? normalizeFieldConfigForApi(consoleArtifacts.dataFieldConfig)
+    : buildFieldConfigArtifact(profile, datasetType, promptInference ?? { fieldMeanings: {} });
   const onlineConfig: Record<string, unknown> = {};
   const defaults = buildDefaultTrials(profile, datasetType);
   const validation = profile.validation;
@@ -422,7 +442,7 @@ export async function buildItemPlan(options: ItemPlanOptions): Promise<ItemPlanR
   const datasetCreate = {
     Name: names.dataset,
     Type: datasetType === 'video' ? 3 : 1,
-    Description: promptInference.datasetDescription ?? buildDatasetDescription(options.file, options.goal),
+    Description: extractDatasetDescription(fieldConfig) ?? promptInference?.datasetDescription ?? buildDatasetDescription(options.file, options.goal),
     Schema: schema,
     DataFieldConfig: fieldConfig
   };
@@ -676,6 +696,41 @@ async function loadNormalizedItems(sourcePath: string, profile: ItemProfileResul
   const source = await loadItemSource(sourcePath);
   const sanitized = sanitizeRecords(source.records);
   return applySyntheticPrimaryKeyIfNeeded(sanitized.records, profile.inferred.primaryKeyField, profile.inferred.syntheticPrimaryKey);
+}
+
+async function maybeInferSchemaArtifactsWithConsole(
+  options: ItemPlanOptions,
+  normalizedItems: Array<Record<string, unknown>>,
+  datasetType: 'item' | 'video',
+  schemaSource: 'auto' | 'console' | 'local'
+) {
+  if (schemaSource === 'local') {
+    return undefined;
+  }
+
+  try {
+    return await inferSchemaArtifactsWithConsole({
+      filePath: options.file,
+      normalizedItems,
+      datasetType,
+      baseUrl: options.baseUrl,
+      controlPlaneBaseUrl: options.controlPlaneBaseUrl,
+      dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+      accessKeyId: options.accessKeyId,
+      secretKey: options.secretKey,
+      projectName: options.projectName,
+      region: options.region,
+      timeoutMs: options.timeoutMs,
+      language: options.language,
+      pollIntervalMs: options.schemaPollIntervalMs,
+      waitTimeoutMs: options.schemaWaitTimeoutMs
+    });
+  } catch (error) {
+    if (schemaSource === 'auto') {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 async function loadItemSource(filePath: string): Promise<LoadedItemSource> {
@@ -1529,6 +1584,11 @@ function buildDatasetDescription(sourcePath: string, goal?: string): string {
     return `Generated from ${sourceName}. Goal: ${goal.trim()}`;
   }
   return `Generated from ${sourceName} by vs item plan.`;
+}
+
+function extractDatasetDescription(fieldConfig: Record<string, unknown>): string | undefined {
+  const value = fieldConfig.DatasetDescription;
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
 function renderPlanReport(plan: ItemPlanFile, profile: ItemProfileResult): string {

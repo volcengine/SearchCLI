@@ -29,7 +29,7 @@ export interface ItemProfileCommandOptions {
   datasetType?: 'item' | 'video';
 }
 
-export interface ItemPlanCommandOptions {
+export interface ItemPlanCommandOptions extends ServiceConfigInput {
   file: string;
   datasetType?: 'item' | 'video';
   goal?: string;
@@ -38,6 +38,10 @@ export interface ItemPlanCommandOptions {
   applicationName?: string;
   projectName?: string;
   skipApp?: boolean;
+  schemaSource?: 'auto' | 'console' | 'local';
+  schemaWaitTimeoutMs?: number;
+  schemaPollIntervalMs?: number;
+  language?: string;
 }
 
 export interface ItemReviewCommandOptions {
