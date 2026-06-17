@@ -9,6 +9,7 @@ const runtimeConfigSchema = z.object({
   controlPlaneBaseUrl: z.string().url(),
   dataPlaneBaseUrl: z.string().url(),
   dataPlaneHost: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   service: z.string().min(1),
   applicationId: z.string().min(1),
   datasetId: z.string().min(1),
@@ -33,6 +34,7 @@ export interface RuntimeConfigInput {
   controlPlaneBaseUrl?: string;
   dataPlaneBaseUrl?: string;
   dataPlaneHost?: string;
+  xTtBackend?: string;
   service?: string;
   applicationId?: string;
   datasetId?: string;
@@ -77,6 +79,7 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
     dataPlaneBaseUrl: defaults.dataPlaneBaseUrl,
     dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
+    xTtBackend: input.xTtBackend ?? defaults.xTtBackend,
     service: defaults.service,
     applicationId: input.applicationId ?? process.env.VIKING_APPLICATION_ID,
     datasetId: input.datasetId ?? process.env.VIKING_DATASET_ID,

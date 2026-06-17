@@ -421,6 +421,7 @@ export interface RuntimeConfig {
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
   dataPlaneHost?: string;
+  xTtBackend?: string;
   service: string;
   applicationId: string;
   datasetId: string;

@@ -38,6 +38,7 @@ const cliProfileSchema = z.object({
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
   host: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   projectName: z.string().min(1).optional(),
   region: z.string().min(1).optional(),
@@ -50,6 +51,7 @@ const cliConfigSchema = z.object({
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
   host: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   service: z.string().min(1).optional(),
   accessKeyId: z.string().min(1).optional(),
@@ -83,6 +85,7 @@ export interface ResolvedCliDefaults {
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
   dataPlaneHost?: string;
+  xTtBackend?: string;
   environmentId?: EnvironmentId;
   service: string;
   accessKeyId?: string;
@@ -112,6 +115,7 @@ const configKeySpecs = {
   'control-plane-base-url': { property: 'controlPlaneBaseUrl', type: 'string', secret: false },
   'data-plane-base-url': { property: 'dataPlaneBaseUrl', type: 'string', secret: false },
   host: { property: 'host', type: 'string', secret: false },
+  'x-tt-backend': { property: 'xTtBackend', type: 'string', secret: false },
   'environment-id': { property: 'environmentId', type: 'string', secret: false },
   'project-name': { property: 'projectName', type: 'string', secret: false },
   ak: { property: 'accessKeyId', type: 'string', secret: false, visible: false, managedBy: 'auth' },
@@ -174,7 +178,7 @@ export async function saveCliConfig(config: VikingCliConfig, customPath?: string
   const configPath = resolveCliConfigPath(customPath);
   const normalized = cliConfigSchema.parse(config);
   await ensureDir(path.dirname(configPath));
-  await writeJson(configPath, normalized);
+  await writeJson(configPath, serializeCliConfigShape(normalized));
   return configPath;
 }
 
@@ -301,6 +305,7 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     controlPlaneBaseUrl: endpoints.controlPlaneBaseUrl,
     dataPlaneBaseUrl: endpoints.dataPlaneBaseUrl,
     dataPlaneHost: profileConfig.host ?? stored.host,
+    xTtBackend: profileConfig.xTtBackend ?? stored.xTtBackend,
     environmentId: endpoints.envId,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
     accessKeyId:
@@ -403,7 +408,73 @@ export function parseCliConfigKey(value: string): CliConfigKey {
 function parseCliConfig(raw: string): VikingCliConfig {
   const trimmed = raw.trim();
   if (!trimmed) return {};
-  return cliConfigSchema.parse(JSON.parse(trimmed) as unknown);
+  return cliConfigSchema.parse(normalizeCliConfigShape(JSON.parse(trimmed) as unknown));
+}
+
+function normalizeCliConfigShape(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (key === 'profiles' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      normalized.profiles = Object.fromEntries(
+        Object.entries(entry as Record<string, unknown>).map(([profileName, profileValue]) => [
+          profileName,
+          normalizeXttBackendEntry(profileValue)
+        ])
+      );
+      continue;
+    }
+
+    normalized[key] = entry;
+  }
+
+  return normalizeXttBackendEntry(normalized);
+}
+
+function normalizeXttBackendEntry(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = { ...(value as Record<string, unknown>) };
+  const xttBackend = record['x-tt-backend'];
+  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0 && record.xTtBackend === undefined) {
+    record.xTtBackend = xttBackend.trim();
+  }
+  delete record['x-tt-backend'];
+  return record;
+}
+
+function serializeCliConfigShape(config: VikingCliConfig): Record<string, unknown> {
+  const serialized = serializeXttBackendEntry(config);
+  const profiles = config.profiles
+    ? Object.fromEntries(
+        Object.entries(config.profiles).map(([profileName, profileConfig]) => [
+          profileName,
+          serializeXttBackendEntry(profileConfig)
+        ])
+      )
+    : undefined;
+
+  if (profiles) {
+    serialized.profiles = profiles;
+  }
+
+  return serialized;
+}
+
+function serializeXttBackendEntry(value: Record<string, unknown>): Record<string, unknown> {
+  const record = { ...value };
+  const xttBackend = record.xTtBackend;
+  delete record.xTtBackend;
+  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0) {
+    record['x-tt-backend'] = xttBackend;
+  }
+  return record;
 }
 
 function parseCliConfigValue(key: CliConfigKey, rawValue: string): string | number {

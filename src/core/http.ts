@@ -142,9 +142,7 @@ async function buildHeaders(
   body?: string
 ): Promise<Record<string, string>> {
   const signedHost = resolveSignedHost(config, url);
-  const headers: Record<string, string> = {
-    accept: 'application/json'
-  };
+  const headers = createBaseHeaders(config);
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
   }
@@ -176,7 +174,7 @@ async function buildHeaders(
 }
 
 export function buildSignedRequestHeaders(
-  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost' | 'xTtBackend'>,
   method: SignedHttpMethod,
   url: URL,
   body?: string,
@@ -187,7 +185,7 @@ export function buildSignedRequestHeaders(
   }
 
   const headers: Record<string, string> = {
-    accept: 'application/json',
+    ...createBaseHeaders(config),
     ...initialHeaders,
     host: resolveSignedHost(config, url)
   };
@@ -209,6 +207,18 @@ export function buildSignedRequestHeaders(
     secretKey: config.secretKey,
     sessionToken: ''
   });
+
+  return headers;
+}
+
+function createBaseHeaders(config: Pick<ServiceConfig, 'xTtBackend'>): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: 'application/json'
+  };
+
+  if (config.xTtBackend) {
+    headers['x-tt-backend'] = config.xTtBackend;
+  }
 
   return headers;
 }

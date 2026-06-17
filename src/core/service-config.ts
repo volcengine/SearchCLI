@@ -9,6 +9,7 @@ export interface ServiceConfig {
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
   dataPlaneHost?: string;
+  xTtBackend?: string;
   service: string;
   accessKeyId?: string;
   secretKey?: string;
@@ -23,6 +24,7 @@ export interface ServiceConfigInput {
   controlPlaneBaseUrl?: string;
   dataPlaneBaseUrl?: string;
   dataPlaneHost?: string;
+  xTtBackend?: string;
   service?: string;
   accessKeyId?: string;
   secretKey?: string;
@@ -35,6 +37,7 @@ const serviceConfigSchema = z.object({
   controlPlaneBaseUrl: z.string().url(),
   dataPlaneBaseUrl: z.string().url(),
   dataPlaneHost: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   service: z.string().min(1),
   accessKeyId: z.string().optional(),
   secretKey: z.string().optional(),
@@ -60,6 +63,7 @@ export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
     controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
     dataPlaneBaseUrl: defaults.dataPlaneBaseUrl,
     dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
+    xTtBackend: input.xTtBackend ?? defaults.xTtBackend,
     service: defaults.service,
     accessKeyId: defaults.accessKeyId,
     secretKey: defaults.secretKey,
