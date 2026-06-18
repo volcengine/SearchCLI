@@ -1721,7 +1721,7 @@ function inferFieldType(values: unknown[]): ItemFieldType {
 }
 
 function detectObservedKinds(records: Array<Record<string, unknown>>, fieldName: string): string[] {
-  return [
+  const kinds = [
     ...new Set(
       records
         .map(record => record[fieldName])
@@ -1729,6 +1729,12 @@ function detectObservedKinds(records: Array<Record<string, unknown>>, fieldName:
         .map(observedKind)
     )
   ];
+
+  if (kinds.includes('array:unknown') && kinds.some(kind => kind.startsWith('array:') && kind !== 'array:unknown')) {
+    return kinds.filter(kind => kind !== 'array:unknown');
+  }
+
+  return kinds;
 }
 
 function observedKind(value: unknown): string {
