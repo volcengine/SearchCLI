@@ -41,7 +41,7 @@ export async function requestJson<T = unknown>(
   const pathName = pathname.startsWith('/') ? pathname : `/${pathname}`;
   const url = new URL(`${baseUrl}${pathName}`);
   appendQueryParams(url, params);
-  return sendSignedJson<T>(config, method, url, payload);
+  return sendSignedJson<T>(config, method, url, payload, false);
 }
 
 export async function postOpenApiJson<T = unknown>(
@@ -64,21 +64,22 @@ export async function requestOpenApiJson<T = unknown>(
     return requestJson<T>(config, method, pathname, payload, params);
   }
 
-  return sendSignedJson<T>(config, method, translated, withDefaultProjectName(payload, config.projectName));
+  return sendSignedJson<T>(config, method, translated, withDefaultProjectName(payload, config.projectName), true);
 }
 
 async function sendSignedJson<T = unknown>(
   config: ServiceConfig,
   method: SignedHttpMethod,
   url: URL,
-  payload?: unknown
+  payload: unknown,
+  includeControlPlaneHeaders: boolean
 ): Promise<T> {
   const body = shouldSendBody(method, payload) ? JSON.stringify(payload ?? {}) : undefined;
   const timeoutSignal = AbortSignal.timeout(config.timeoutMs);
 
   const response = await fetch(url, {
     method,
-    headers: await buildHeaders(config, method, url, body),
+    headers: await buildHeaders(config, method, url, body, includeControlPlaneHeaders),
     body,
     signal: timeoutSignal
   });
@@ -139,10 +140,14 @@ async function buildHeaders(
   config: ServiceConfig,
   method: SignedHttpMethod,
   url: URL,
-  body?: string
+  body: string | undefined,
+  includeControlPlaneHeaders: boolean
 ): Promise<Record<string, string>> {
   const signedHost = resolveSignedHost(config, url);
-  const headers = createBaseHeaders(config);
+  const headers = createBaseHeaders();
+  if (includeControlPlaneHeaders && config.xTtBackend) {
+    headers['x-tt-backend'] = config.xTtBackend;
+  }
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
   }
@@ -174,7 +179,7 @@ async function buildHeaders(
 }
 
 export function buildSignedRequestHeaders(
-  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost' | 'xTtBackend'>,
+  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
   method: SignedHttpMethod,
   url: URL,
   body?: string,
@@ -185,7 +190,7 @@ export function buildSignedRequestHeaders(
   }
 
   const headers: Record<string, string> = {
-    ...createBaseHeaders(config),
+    ...createBaseHeaders(),
     ...initialHeaders,
     host: resolveSignedHost(config, url)
   };
@@ -211,16 +216,10 @@ export function buildSignedRequestHeaders(
   return headers;
 }
 
-function createBaseHeaders(config: Pick<ServiceConfig, 'xTtBackend'>): Record<string, string> {
-  const headers: Record<string, string> = {
+function createBaseHeaders(): Record<string, string> {
+  return {
     accept: 'application/json'
   };
-
-  if (config.xTtBackend) {
-    headers['x-tt-backend'] = config.xTtBackend;
-  }
-
-  return headers;
 }
 
 function parseMaybeJson(rawText: string): unknown {
