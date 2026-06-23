@@ -78,7 +78,6 @@ const FALLBACK_COMMANDS = [
   'dataset ingest',
   'dataset list',
   'dataset schema check',
-  'dataset schema get',
   'dataset update',
   'doctor',
   'item apply',

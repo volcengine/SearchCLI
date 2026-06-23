@@ -5,7 +5,7 @@ category: app
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.1.0"
 keywords: app dataset bind, bind dataset, field config inference, index fields, filter fields, suggest fields
-commands: app dataset bind, app dataset-config get, app dataset-config list, dataset schema get, dataset get
+commands: app dataset bind, app dataset-config get, app dataset-config list, dataset get
 ---
 
 # Viking App Dataset Bind
@@ -27,7 +27,7 @@ Use this skill when the user wants to run `vs app dataset bind` and the bind ste
 
 - `app dataset bind`: bind the dataset to the application with an explicit `--field-config`
 - `app dataset-config get` / `app dataset-config list`: inspect current bound dataset config before changing it
-- `dataset schema get` / `dataset get`: inspect the dataset schema and metadata needed for field inference
+- `dataset get`: inspect the dataset schema and metadata needed for field inference
 
 ## Workflow
 

@@ -81,7 +81,6 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dataset list` | console | `POST /api/v1/ListDatasets` | [ListDatasets](./api-references/modules/dataset-management/ListDatasets.md) |
 | `dataset update` | console | `POST /api/v1/UpdateDataset` | [UpdateDataset](./api-references/modules/dataset-management/UpdateDataset.md) |
 | `dataset delete` | console | `POST /api/v1/DeleteDataset` | [DeleteDataset](./api-references/modules/dataset-management/DeleteDataset.md) |
-| `dataset schema get` | console | `POST /api/v1/GetDatasetSchema` | `GetDatasetSchema` action; no standalone copied doc in current corpus |
 | `dataset schema check` | console | `POST /api/v1/CheckDatasetSchema` | [CheckDatasetSchema](./api-references/modules/dataset-management/CheckDatasetSchema.md) |
 | `dataset ingest` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
 | `data write` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
@@ -329,16 +328,12 @@ SearchCLI sends `--data` or `{}`. The flags `--type`, `--name`, `--application-i
 | `--data` | whole request | `dataset.GetDatasetReq` | yes if `--id` absent | Full JSON object. |
 | `--id` | `DatasetID` | string | yes unless in `--data` | Dataset ID. |
 
-### `dataset schema get`, `dataset schema check`
+### `dataset schema check`
 
-- API docs: `GetDatasetSchema` action from code mapping, and [CheckDatasetSchema](./api-references/modules/dataset-management/CheckDatasetSchema.md)
+- API docs: [CheckDatasetSchema](./api-references/modules/dataset-management/CheckDatasetSchema.md)
 
 | Command | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- | --- |
-| `dataset schema get` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `dataset schema get` | `--id` | `DatasetID` | string | yes unless in `--data` | Dataset ID. |
-| `dataset schema get` | `--version` | `Version` | integer | no | Specific schema version. |
-| `dataset schema get` | `--project-name` | `ProjectName` | string | no | Project scope. |
 | `dataset schema check` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
 | `dataset schema check` | `--type` | `Type` | string/enum | yes unless in `--data` | Dataset type enum value; implementation rejects internal type codes `2` and `5`. |
 | `dataset schema check` | `--schema` | `Schema` | array/object | usually yes | JSON schema payload. |

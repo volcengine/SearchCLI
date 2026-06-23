@@ -119,11 +119,6 @@ export interface DatasetListOptions extends ServiceCommandOptions {
   full?: boolean;
 }
 
-export interface DatasetSchemaGetOptions extends ProjectScopedOptions {
-  id: string;
-  version?: number;
-}
-
 export interface DatasetSchemaCheckOptions extends ProjectScopedOptions {
   type?: string;
   schema?: string;
@@ -716,17 +711,6 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
   requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
   validateUserEventSchema(payload);
   await printResult(callOpenApi('/api/v1/CreateDataset', payload, options));
-}
-
-export async function runDatasetSchemaGetCommand(options: DatasetSchemaGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      DatasetID: options.id,
-      Version: options.version,
-      ProjectName: options.projectName
-    });
-  await printResult(callOpenApi('/api/v1/GetDatasetSchema', payload, options));
 }
 
 export async function runDatasetSchemaCheckCommand(options: DatasetSchemaCheckOptions): Promise<void> {
@@ -1503,7 +1487,7 @@ export function printProductDomainsHelp(): void {
     'vs app dataset-config get|list|update',
     'vs app online-config get|update',
     'vs dataset create|get|list|delete|update|ingest',
-    'vs dataset schema get|check',
+    'vs dataset schema check',
     'vs data write|import|delete',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
@@ -1544,7 +1528,6 @@ COMMON FLAGS
         'vs dataset get --id <dataset-id> [--full] [service flags]',
         'vs dataset update --id <dataset-id> [--version <n>] [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]',
-        'vs dataset schema get --id <dataset-id> [--version <n>] [service flags]',
         'vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document> [--schema @schema.json] [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
@@ -2482,14 +2465,6 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       return;
     case 'schema': {
       const subAction = argv[1];
-      if (subAction === 'get') {
-        await runDatasetSchemaGetCommand({
-          ...projectOptions,
-          id: requiredString(values.id, '--id'),
-          version: parseOptionalInt(optionalString(values.version))
-        });
-        return;
-      }
       if (subAction === 'check') {
         await runDatasetSchemaCheckCommand({
           ...projectOptions,
