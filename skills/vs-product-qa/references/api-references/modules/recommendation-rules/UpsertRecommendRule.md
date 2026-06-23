@@ -28,7 +28,7 @@
 | Type | string | 否 | body | required 规则类型 枚举值: - degrade: 兜底策略 - filter: 推荐过滤策略（支持动态参数，参数格式："{{Param}}" ） - 静态条件: {"op":"must","field":"region","conds":["cn","sg"]} - 动态条件: {"op":"must","field":"region","conds":"{{ParamRegions}}"} - search_filter: 搜索过滤策略，不支持动态参数 - impression: 下发&曝光去重 - suggest: 推荐话术 - userInterest: 用户兴趣召回 - itemCf: itemCf召回 - forceItem: 物品强推 | op, must, field, region, conds, cn, sg, degrade, filter, search_filter, impression, suggest, userInterest, itemCf, forceItem |
 | Description | string | 否 | body | optional 规则描述 | - |
 | DatasetID | string | 否 | body | optional 数据集ID，策略规则关联的数据集ID 部分规则策略需配合数据集字段进行定义，支持查询检索 - 兜底策略，关联行为数据集，依赖行为类型枚举 - 过滤策略，关联物品数据集，依赖物品数据集支持过滤的字段名 - 物品强推，关联物品数据集 | - |
-| Config | google.protobuf.Struct | 否 | body | optional 规则配置详情 list 接口默认不返回该字段，从详情接口获取规则配置 | - |
+| Config | object | 否 | body | optional 规则配置详情 list 接口默认不返回该字段，从详情接口获取规则配置 | - |
 | ProjectName | string | 否 | body | 项目名称 | - |
 
 ## 请求示例

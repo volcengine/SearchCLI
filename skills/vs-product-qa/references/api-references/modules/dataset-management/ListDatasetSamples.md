@@ -44,7 +44,7 @@
 
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
-| Items[] | array<google.protobuf.Struct> | 否 | body | 物品列表 | - |
+| Items[] | array<object> | 否 | body | 物品列表 | - |
 
 ## 响应示例
 

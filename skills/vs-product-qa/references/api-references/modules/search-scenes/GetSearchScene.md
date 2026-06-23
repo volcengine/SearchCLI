@@ -64,22 +64,107 @@
 | Scene.Config.SearchConfig.RetrieveConfigs[].TextWeight | number | 否 | body | 模态权重（文本） | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].Mode | search_scene.SearchMode | 否 | body | - | ModeUnknown=0, Balanced=1, SemanticPriority=2, KeywordPriority=3, UserDefined=4 |
 | Scene.Config.SearchConfig.RetrieveConfigs[].SortRules[] | array<search_scene.SortRule> | 否 | body | - | - |
-| Scene.Config.SearchConfig.RetrieveConfigs[].Synonyms[] | array<search_scene.Synonym> | 否 | body | deprecated 同义词 | - |
-| Scene.Config.SearchConfig.RetrieveConfigs[].CorrectionConfig | search_scene.CorrectionConfig | 否 | body | deprecated 纠错配置 | - |
-| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryConfig | rule.BoostBuryConfig | 否 | body | 加、降权配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].SortRules[].Field | string | 否 | body | 选中的 schema field Name | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].SortRules[].Order | string | 否 | body | asc：顺序排序，desc 倒序排序 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].SortRules[].Enable | boolean | 否 | body | 搜索结果配置-根据字段排序（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].QueryConfig | search_scene.QueryConfig | 否 | body | 图搜配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].QueryConfig.ImageInstruction | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].QueryConfig.InstructionType | string | 否 | body | 自定义、预设 | preset_image, preset_item, custom |
 | Scene.Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[] | array<dataset.DatasetFilter> | 否 | body | 辅助召回池 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Name | string | 否 | body | 数据集过滤条件名称 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Filter | object | 否 | body | 过滤条件DSL json map | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Enable | boolean | 否 | body | 搜索结果配置-重点保障召回（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig | rule.ShuffleConfig | 否 | body | 打散规则配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[] | array<rule.ShuffleRule> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ID | integer | 否 | body | 规则 ID | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].Disable | boolean | 否 | body | 打散规则是否开启；默认：开;保持存量逻辑不变 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].Name | string | 否 | body | 打散规则名 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].WindowType | string | 否 | body | 窗口类型 - SLIDE: 滑动窗口（连续打散） - TOP: TopK窗口 | SLIDE, TOP |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].WindowSize | integer | 否 | body | 窗口大小 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].MaxSize | integer | 否 | body | WindowSize 中最多展示的数量 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].FieldName | string | 否 | body | WindowSize 中最少展示的数量（预留） int64 MinSize = 7; 维度打散字段名 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ShuffleType | string | 否 | body | 打散规则类型 - dimension: 维度打散 - expression: 表达式打散 | dimension, expression |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | 表达式打散规则 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].RecallMax | integer | 否 | body | WindowSize 中最多展示的数量（待废弃，新版本使用MaxSize） | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall | search_scene.PersonalizedRecall | 否 | body | 个性化召回 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.Enable | boolean | 否 | body | 搜索结果配置-用户个性化召回 默认关闭 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.Mode | string | 否 | body | 强个性化(strong) or 弱个性化(weak) | strong, weak |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.UserInterest[] | array<search_scene.UserInterest> | 否 | body | 兴趣标签相关信息 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.UserInterest[].UserInterestId | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.UserInterest[].InterestField | string | 否 | body | 兴趣标签字段 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.UserInterest[].Filterable | boolean | 否 | body | 兴趣标签字段是否为可过滤字段 | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].EnableRerankWithHot | boolean | 否 | body | 物品热度参与排序开关 | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].RerankModel | string | 否 | body | 重排模型：gte-rerank（默认）\| doubao-rerank（多模态重排） | gte-rerank, doubao-rerank |
 | Scene.Config.SearchConfig.RetrieveConfigs[].RerankDoubaoConfig | search_scene.RerankDoubaoConfig | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].RerankDoubaoConfig.ItemFeature | string | 否 | body | doubao 重排物品特征：text \| mixed \| image | text, mixed, image |
+| Scene.Config.SearchConfig.RetrieveConfigs[].RerankDoubaoConfig.Instruction | string | 否 | body | doubao 重排指令（用户可编辑） | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].FilterConfig | search_scene.FilterConfig | 否 | body | 过滤条件 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FilterConfig.RuleID | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FilterConfig.Config | object | 否 | body | - | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig | rule.BoostBuryCondConfig | 否 | body | 加、降权配置 V2 版本 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[] | array<rule.BoostBuryCondRule> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].ID | integer | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Enable | boolean | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Name | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Boost | number | 否 | body | - | [-1, 1] |
 | Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[] | array<search_scene.ServingControl> | 否 | body | Serving Control 条件策略覆盖配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].QueryCondition | object | 否 | body | 触发条件 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].RecallWeight | search_scene.RecallWeightConfig | 否 | body | 命中后覆盖召回权重 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].RecallWeight.Mode | search_scene.SearchMode | 否 | body | - | ModeUnknown=0, Balanced=1, SemanticPriority=2, KeywordPriority=3, UserDefined=4 |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].RecallWeight.DenseWeight | number | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].RecallWeight.TextWeight | number | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].RecallWeight.UserDefinedRecallMode | search_scene.UserDefinedRecallMode | 否 | body | - | KeywordSemantic=0, KeywordOnly=1, SemanticOnly=2 |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools | search_scene.AuxiliaryPoolsConfig | 否 | body | 命中后覆盖辅助召回池；可显式传空关闭 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[] | array<dataset.DatasetFilter> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Name | string | 否 | body | 数据集过滤条件名称 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Filter | object | 否 | body | 过滤条件DSL json map | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Enable | boolean | 否 | body | 搜索结果配置-重点保障召回（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules | search_scene.SortRulesConfig | 否 | body | 命中后覆盖 Tie-breaking 排序规则；可显式传空关闭 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules.Rules[] | array<search_scene.SortRule> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules.Rules[].Field | string | 否 | body | 选中的 schema field Name | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules.Rules[].Order | string | 否 | body | asc：顺序排序，desc 倒序排序 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules.Rules[].Enable | boolean | 否 | body | 搜索结果配置-根据字段排序（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig | rule.ShuffleConfig | 否 | body | 命中后覆盖打散配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[] | array<rule.ShuffleRule> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ID | integer | 否 | body | 规则 ID | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].Disable | boolean | 否 | body | 打散规则是否开启；默认：开;保持存量逻辑不变 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].Name | string | 否 | body | 打散规则名 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].WindowType | string | 否 | body | 窗口类型 - SLIDE: 滑动窗口（连续打散） - TOP: TopK窗口 | SLIDE, TOP |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].WindowSize | integer | 否 | body | 窗口大小 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].MaxSize | integer | 否 | body | WindowSize 中最多展示的数量 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].FieldName | string | 否 | body | WindowSize 中最少展示的数量（预留） int64 MinSize = 7; 维度打散字段名 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ShuffleType | string | 否 | body | 打散规则类型 - dimension: 维度打散 - expression: 表达式打散 | dimension, expression |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | 表达式打散规则 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].RecallMax | integer | 否 | body | WindowSize 中最多展示的数量（待废弃，新版本使用MaxSize） | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig | search_scene.FilterConfig | 否 | body | 命中后覆盖过滤条件 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig.RuleID | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig.Config | object | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig | rule.BoostBuryCondConfig | 否 | body | 命中后覆盖加、降权配置 V2 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[] | array<rule.BoostBuryCondRule> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].ID | integer | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Enable | boolean | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Name | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Boost | number | 否 | body | - | [-1, 1] |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].Name | string | 否 | body | 规则名，仅供前端读写展示 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].Enable | boolean | 否 | body | 是否启用该规则；默认：开 (新建后默认开启) | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].ServingControls[].QueryKeywordMatchPercent | number | 否 | body | 命中后覆盖关键词匹配度阈值 qkmp，取值 (0,1] | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].UserDefinedRecallMode | search_scene.UserDefinedRecallMode | 否 | body | 自定义模式下的召回路径选择 | KeywordSemantic=0, KeywordOnly=1, SemanticOnly=2 |
 | Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig | search_scene.FacetConfig | 否 | body | 分面聚合 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Enable | boolean | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[] | array<search_scene.Facet> | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].Name | string | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].Field | string | 否 | body | 分面聚合字段完整路径 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].MaxFacetBuckets | integer | 否 | body | 枚举类聚合，返回的聚合枚举数量上限。默认 10，下限1，上限 50。 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[] | array<search_scene.NumberRange> | 否 | body | 数值类聚合，定义数值区间，至少有一个合法的区间，eg：[10.5, 100) { "Gte": 10.5, "Lt": 100 } | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Lt | number | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Lte | number | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Gt | number | 否 | body | - | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Gte | number | 否 | body | - | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].SynonymConfig | search_scene.SynonymConfig | 否 | body | 同义词配置 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].SynonymConfig.Dicts[] | array<search_scene.RelatedDict> | 否 | body | 同义词词库 | - |
+| Scene.Config.SearchConfig.RetrieveConfigs[].SynonymConfig.Dicts[].DictID | string | 否 | body | - | - |
 | Scene.Config.SearchConfig.RetrieveConfigs[].QueryKeywordMatchPercent | number | 否 | body | 关键词匹配度阈值 qkmp，取值 (0,1]；不传由在线侧兜底 | - |
 | Scene.Config.QueryCompletionConfig | search_scene.QueryCompletionConfig | 否 | body | query 补全配置 | - |
 | Scene.Config.QueryCompletionConfig.SugMaxRecallNum | integer | 否 | body | 搜索补全最大召回数 | - |

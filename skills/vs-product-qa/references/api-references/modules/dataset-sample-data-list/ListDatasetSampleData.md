@@ -27,7 +27,7 @@
 | ItemPKID | string | 否 | body | optional 物品主键ID，预览指定主键的物品 传了该字段时，优先按主键查找；Size 不生效（最多返回 1 条） | - |
 | Random | boolean | 否 | body | optional 随机返回数据 | - |
 | Size | integer | 否 | body | optional 返回条数 | - |
-| ItemFilterCond | google.protobuf.Struct | 否 | body | optional 过滤条件 | - |
+| ItemFilterCond | object | 否 | body | optional 过滤条件 | - |
 | ProjectName | string | 否 | body | 项目名称 | - |
 
 ## 请求示例
@@ -50,7 +50,7 @@
 
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
-| Samples[] | array<google.protobuf.Struct> | 否 | body | 样例数据列表；为空表示数据库里目前没数据 | - |
+| Samples[] | array<object> | 否 | body | 样例数据列表；为空表示数据库里目前没数据 | - |
 
 ## 响应示例
 

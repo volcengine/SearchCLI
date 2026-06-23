@@ -24,8 +24,8 @@
 | --- | --- | --- | --- | --- | --- |
 | DataSourceID | string | 否 | body | - | - |
 | Name | string | 否 | body | - | - |
-| SourceConfig[] | array<google.protobuf.Struct> | 否 | body | - | - |
-| TransformConfig[] | array<google.protobuf.Struct> | 否 | body | - | - |
+| SourceConfig[] | array<object> | 否 | body | - | - |
+| TransformConfig[] | array<object> | 否 | body | - | - |
 | Schedule | string | 否 | body | - | - |
 | ProjectName | string | 否 | body | - | - |
 

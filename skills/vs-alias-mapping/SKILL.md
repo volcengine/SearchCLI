@@ -33,6 +33,7 @@ Invoke this skill when the user refers to the CLI tool as "Search CLI" or "searc
 - If the skills and the packaged CLI still do not provide enough information to proceed safely, stop and ask the user instead of searching source code.
 
 ## Constraints
+- Before executing any mapped concrete `vs ...` command, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Never execute a command literally named `search_cli`.
 - Always use the `vs` prefix and `VIKING_` environment variables.
 - If alias resolution or mapped CLI execution fails and the user asks a product concept, capability, API field, console UI path, purchase, billing, or general troubleshooting question outside alias mapping, temporarily hand off to `vs-product-qa`; return to this workflow only after the grounded product answer is complete.

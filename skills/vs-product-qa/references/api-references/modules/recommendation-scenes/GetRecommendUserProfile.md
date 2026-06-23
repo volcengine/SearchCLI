@@ -43,8 +43,8 @@
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
 | UserID | string | 否 | body | required 用户ID | - |
-| BaseInfo | google.protobuf.Struct | 否 | body | optional 基础信息, eg: { "昵称":"小九", "生日":"9月20日" } | - |
-| Interest | google.protobuf.Struct | 否 | body | optional 兴趣, eg: { "音乐": { "talor的新专辑": -2, "邓紫棋最近翻唱的《唯一》": 1 }, "艺术": { "前往巴黎参观卢浮宫": 2, } } | - |
+| BaseInfo | object | 否 | body | optional 基础信息, eg: { "昵称":"小九", "生日":"9月20日" } | - |
+| Interest | object | 否 | body | optional 兴趣, eg: { "音乐": { "talor的新专辑": -2, "邓紫棋最近翻唱的《唯一》": 1 }, "艺术": { "前往巴黎参观卢浮宫": 2, } } | - |
 
 ## 响应示例
 

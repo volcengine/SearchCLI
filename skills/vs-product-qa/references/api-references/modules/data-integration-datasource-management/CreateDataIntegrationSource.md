@@ -23,8 +23,8 @@
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
 | Name | string | 否 | body | - | - |
-| SourceConfig[] | array<google.protobuf.Struct> | 否 | body | - | - |
-| TransformConfig[] | array<google.protobuf.Struct> | 否 | body | - | - |
+| SourceConfig[] | array<object> | 否 | body | - | - |
+| TransformConfig[] | array<object> | 否 | body | - | - |
 | Schedule | string | 否 | body | - | - |
 | ProjectName | string | 否 | body | - | - |
 

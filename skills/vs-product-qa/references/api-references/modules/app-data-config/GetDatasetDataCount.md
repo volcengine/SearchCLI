@@ -23,7 +23,7 @@
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
 | DatasetID | string | 否 | body | - | - |
-| ItemFilterCond | google.protobuf.Struct | 否 | body | optional 过滤条件 | - |
+| ItemFilterCond | object | 否 | body | optional 过滤条件 | - |
 | ProjectName | string | 否 | body | - | - |
 
 ## 请求示例

@@ -46,6 +46,7 @@ Use this skill for recommendation runtime checks, recommend scene management, an
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this recommend workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Start with the scene when debugging recommendation behavior; do not jump to raw API calls first
 - If the user only needs a first-pass conclusion, prefer `recommend run`
 - Do not create or update a recommend scene until the user has confirmed the target page / module and `BhvSceneTypes`

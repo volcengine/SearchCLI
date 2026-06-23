@@ -38,7 +38,7 @@
 | --- | --- | --- | --- | --- | --- |
 | OnboardingStatus | string | 否 | body | 用户onboarding状态，枚举值包括"done"、"undone"，默认为"undone" | done, undone |
 | HomepageOnboardingStatus | string | 否 | body | 用户onboarding状态，枚举值包括"done"、"undone"，默认为"undone" | done, undone |
-| UserCustomConfig | google.protobuf.Struct | 否 | body | 子用户自定义配置 | - |
+| UserCustomConfig | object | 否 | body | 子用户自定义配置 | - |
 
 ## 响应示例
 

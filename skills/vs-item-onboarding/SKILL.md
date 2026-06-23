@@ -56,6 +56,7 @@ The high-level 8-step flow is listed above under **High-level Flow**. The full b
 
 The enforceable rules are organized in two layers:
 
+- Before executing any concrete `vs ...` command in this onboarding workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - **Hard Rules (MUST / MUST NOT)** — listed below; violating any one stops the workflow.
 - **Pre-apply Checklist** — listed below; a mechanical gate that the agent MUST verify before running `vs item apply --plan-dir <dir> --confirm-review`.
 - **Additional MUST / Guidance** — lower-priority MUST rules and quality guidance live in [workflow.md](references/workflow.md) under *Extended Constraints*.

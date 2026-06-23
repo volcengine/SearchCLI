@@ -102,6 +102,7 @@ See the authoritative reference at `vs-item-onboarding/references/video-field-co
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this bind workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Do not run `app dataset bind` with a guessed or empty bind-time `field-config` when searchable/filter/suggest/image/video fields are part of the user request
 - Do not start bind-time inference until schema and dataset-side field attributes have been explicitly reconfirmed with the user
 - Do not skip user confirmation for `IndexFields`, `FilterFields`, `SuggestFields`, `ImageIndexFields`, or `VideoIndexFields`

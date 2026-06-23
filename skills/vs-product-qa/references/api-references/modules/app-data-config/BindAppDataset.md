@@ -48,7 +48,7 @@
 | BacktrackReq.IsAll | boolean | 否 | body | 是否全量回溯 | - |
 | BacktrackReq.StartDate | string | 否 | body | 开始日期 | - |
 | BacktrackReq.EndDate | string | 否 | body | 结束日期 | - |
-| ItemFilterCond | google.protobuf.Struct | 否 | body | optional 物品池条件 | - |
+| ItemFilterCond | object | 否 | body | optional 物品池条件 | - |
 | ProjectName | string | 否 | body | 项目名称 | - |
 
 ## 请求示例
@@ -252,7 +252,7 @@
 | Configs[].LastUpdatedTimestamp | string | 否 | body | 最近更新时间, ISO8601 格式 | - |
 | Configs[].ItemFilterConfigVersion | integer | 否 | body | 物品池过滤条件版本 | - |
 | Configs[].VideoIndexFields[] | array<string> | 否 | body | 视频索引字段,采用 list 以保持扩展性 | - |
-| Configs[].ItemFilterCond | google.protobuf.Struct | 否 | body | optional 过滤条件 | - |
+| Configs[].ItemFilterCond | object | 否 | body | optional 过滤条件 | - |
 
 ## 响应示例
 

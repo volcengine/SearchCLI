@@ -241,7 +241,7 @@
 | Config.LastUpdatedTimestamp | string | 否 | body | 最近更新时间, ISO8601 格式 | - |
 | Config.ItemFilterConfigVersion | integer | 否 | body | 物品池过滤条件版本 | - |
 | Config.VideoIndexFields[] | array<string> | 否 | body | 视频索引字段,采用 list 以保持扩展性 | - |
-| Config.ItemFilterCond | google.protobuf.Struct | 否 | body | optional 过滤条件 | - |
+| Config.ItemFilterCond | object | 否 | body | optional 过滤条件 | - |
 
 ## 响应示例
 

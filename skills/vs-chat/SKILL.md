@@ -43,6 +43,7 @@ Use this skill for conversational search requests, session continuity, multi-tur
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this chat workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - `vs chat ...` is the conversational search runtime surface
 - When debugging parsing issues, inspect the raw JSON response first instead of adding an extra line-oriented parser
 - If a command failure or user follow-up turns into a product concept, capability, API field, console UI path, purchase, billing, or general troubleshooting question outside this chat workflow, temporarily hand off to `vs-product-qa`; return to this workflow only after the grounded product answer is complete.

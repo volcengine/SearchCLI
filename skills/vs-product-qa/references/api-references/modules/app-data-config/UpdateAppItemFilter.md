@@ -24,7 +24,7 @@
 | --- | --- | --- | --- | --- | --- |
 | AppID | string | 是 | body | - | len($)>0; msg:sprintf('berror(AppNotFound, \"%v\")', $) |
 | DatasetID | string | 是 | body | - | len($)>0; msg:sprintf('berror(DatasetNotFound, \"%v\")', $) |
-| ItemFilterCond | google.protobuf.Struct | 否 | body | optional 物品池过滤条件 | - |
+| ItemFilterCond | object | 否 | body | optional 物品池过滤条件 | - |
 | ProjectName | string | 否 | body | - | - |
 
 ## 请求示例

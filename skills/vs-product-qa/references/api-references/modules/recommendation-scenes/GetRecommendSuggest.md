@@ -27,7 +27,7 @@
 | UserID | string | 否 | body | required 用户ID | - |
 | ContextItemID | string | 否 | body | optional 测试物品ID | - |
 | RequestID | string | 否 | body | required 请求ID | - |
-| Items[] | array<google.protobuf.Struct> | 否 | body | optional 物品列表 | - |
+| Items[] | array<object> | 否 | body | optional 物品列表 | - |
 | SuggestConfig | recommend.SuggestConfig | 否 | body | optional 推荐话术原始prompt配置 | - |
 | SuggestConfig.SuggestRawPrompt | string | 否 | body | required 推荐话术原始prompt配置 | - |
 | ProjectName | string | 否 | body | 项目名称 | - |

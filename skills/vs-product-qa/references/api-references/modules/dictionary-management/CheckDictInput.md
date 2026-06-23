@@ -56,7 +56,7 @@
 | 字段路径 | 类型 | 必填 | 位置 | 描述 | 校验/枚举 |
 | --- | --- | --- | --- | --- | --- |
 | BatchEntryCount | integer | 否 | body | - | - |
-| Errors | google.protobuf.Struct | 否 | body | - | - |
+| Errors | object | 否 | body | - | - |
 
 ## 响应示例
 

@@ -48,7 +48,7 @@ Classify the question before choosing a source.
 
 | Question type | Primary source | Example |
 |---|---|---|
-| CLI command / flag / usage | `vs <cmd> --help` | "How do I use `vs item apply`" |
+| CLI command / flag / usage | `references/api-references/` and `references/command-console-api-mapping.md` first; then `vs <cmd> --help` to confirm installed CLI surface | "How do I use `vs item apply`" |
 | Local authentication / credential | `vs auth status` / `vs doctor` | "Why does `vs auth status` say invalid" |
 | Local CLI error / stack trace | the error's own recovery output | "I see `ERR_AUTH_REQUIRED`; what now" |
 | Product concept | official docs via the bundled documentation helper | "What is a scene in Viking AI Search" |
@@ -73,7 +73,9 @@ Allowed CLI checks include:
 - `vs skill search <query>`
 - `vs skill show <name>`
 
-Before recommending any command or flag, verify that it exists through `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
+For command-related questions, first read [references/api-references/README.md](references/api-references/README.md) and [references/command-console-api-mapping.md](references/command-console-api-mapping.md). Use them as the primary source for parameter shape, payload fields, input format, allowed values, and command-to-backend mapping. Then use `vs <domain> --help` or `vs <cmd> --help` to confirm the installed CLI surface and flag names on the current machine.
+
+Before recommending any command or flag, verify that it exists through the copied API references plus `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
 
 For SearchCLI product commands that map to backend APIs, this skill also includes an internal code-grounded command mapping file under [references/command-console-api-mapping.md](references/command-console-api-mapping.md) and the copied console API corpus under [references/api-references/README.md](references/api-references/README.md). Use them to explain which backend action a command maps to and how uploaded command arguments are encoded into request payload fields.
 
@@ -133,7 +135,7 @@ These may be used later only if they become publicly available and are actually 
 
 1. Classify the question using **Question Routing**.
 2. Pick the source:
-   - CLI usage -> run the relevant `vs ... --help`
+   - CLI usage -> read `references/api-references/` and `references/command-console-api-mapping.md` first, then run the relevant `vs ... --help`
    - local auth / environment -> use `vs auth status`, `vs doctor`, or `vs llm status`
    - local CLI error -> use the recovery output from this turn first; only run more CLI checks if needed
    - product docs -> use the bundled documentation helper privately, with the hard `Universal AI Search` + `docs/85296` restriction
@@ -168,6 +170,7 @@ Rules:
 3. **No fabricated URLs**: sub-page URLs must come from routing actually performed in this turn. Do not guess paths.
 4. **No CLI hallucination**: do not recommend commands or flags that do not exist.
 5. **CLI overrides docs**: when CLI help and documentation conflict, trust the installed CLI and say the docs may be stale.
+5a. **Command questions check local API references first**: when the user asks about a concrete command, its parameters, payload shape, or backend mapping, first consult [references/api-references/README.md](references/api-references/README.md) and [references/command-console-api-mapping.md](references/command-console-api-mapping.md), then confirm the installed CLI surface with `vs ... --help`.
 6. **No silent execution**: do not run write commands such as `apply`, `update`, `create`, or `bind` on the user's behalf.
 7. **AK/SK notice required**: whenever credentials or `vs auth import-env` are involved, append the AK/SK security notice.
 8. **Honest unknowns**: if available sources cannot answer, say `unknown`, explain what source was checked, and suggest escalation.
