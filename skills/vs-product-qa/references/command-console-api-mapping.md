@@ -95,6 +95,10 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `recommend scene get` | console | `POST /api/v1/GetRecommendScene` | [GetRecommendScene](./api-references/modules/recommendation-scenes/GetRecommendScene.md) |
 | `recommend scene update` | console | `POST /api/v1/OnlineRecommendScene` | [OnlineRecommendScene](./api-references/modules/recommendation-scenes/OnlineRecommendScene.md) |
 | `recommend scene delete` | console | `POST /api/v1/DeleteRecommendScene` | [DeleteRecommendScene](./api-references/modules/recommendation-scenes/DeleteRecommendScene.md) |
+| `recommend rule list` | console | `POST /api/v1/ListRecommendRule` | [ListRecommendRule](./api-references/modules/recommendation-rules/ListRecommendRule.md) |
+| `recommend rule get` | console | `POST /api/v1/GetRecommendRule` | [GetRecommendRule](./api-references/modules/recommendation-rules/GetRecommendRule.md) |
+| `recommend rule upsert` | console | `POST /api/v1/UpsertRecommendRule` | [UpsertRecommendRule](./api-references/modules/recommendation-rules/UpsertRecommendRule.md) |
+| `recommend rule delete` | console | `POST /api/v1/DeleteRecommendRule` | [DeleteRecommendRule](./api-references/modules/recommendation-rules/DeleteRecommendRule.md) |
 | `search run` | mixed | runtime `POST /api/v1/application/{app}/search/{scene}`; may call console `GetApplication` + `ListAppDataConfigs` to infer `dataset_id` | none; runtime payload derived from CLI |
 | `recommend run` | runtime | `POST /api/v1/application/{app}/{scene}` | none; runtime payload derived from CLI |
 | `chat run` | runtime | `POST /api/v1/application/{app}/chat_search` | none; runtime payload derived from CLI |
@@ -476,6 +480,52 @@ If `--config` is absent, SearchCLI synthesizes `Config` from the granular config
 | `--impression-config` | `Config.ImpressionConfig` | object | no | JSON object. |
 | `--suggest-config` | `Config.SuggestConfig` | object | no | JSON object. |
 | `--confirm-entry-binding` | local precondition | boolean | yes for real writes | Must be true; otherwise CLI blocks the write locally. |
+
+### `recommend rule list`, `recommend rule get`, `recommend rule upsert`, `recommend rule delete`
+
+- API kind: `console`
+- Actions: `ListRecommendRule`, `GetRecommendRule`, `UpsertRecommendRule`, `DeleteRecommendRule`
+- API docs: [ListRecommendRule](./api-references/modules/recommendation-rules/ListRecommendRule.md), [GetRecommendRule](./api-references/modules/recommendation-rules/GetRecommendRule.md), [UpsertRecommendRule](./api-references/modules/recommendation-rules/UpsertRecommendRule.md), [DeleteRecommendRule](./api-references/modules/recommendation-rules/DeleteRecommendRule.md)
+
+#### `recommend rule list`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+| `--types` | `Types` | string[] | no | Comma-separated or JSON array. Allowed values: `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `userInterest`, `itemCf`, `forceItem`. |
+| `--dataset-id` | `DatasetID` | string | no | Dataset ID filter. For rules with both behavior and item datasets, this is the behavior dataset ID. |
+| `--invert-item-dataset-id` | `InvertItemDatasetID` | string | no | Inverted item dataset ID. For inverted-index rule queries, this is the item dataset ID. |
+
+#### `recommend rule get`, `recommend rule delete`
+
+| Command | CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- | --- |
+| `recommend rule get` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `recommend rule get` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `recommend rule get` | `--rule-id` | `RuleID` | string | yes unless in `--data` | Rule ID. |
+| `recommend rule get` | `--project-name` | `ProjectName` | string | no | Project scope. |
+| `recommend rule delete` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `recommend rule delete` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `recommend rule delete` | `--rule-id` | `RuleID` | string | yes unless in `--data` | Rule ID. |
+| `recommend rule delete` | `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `recommend rule upsert`
+
+Create (omit `--rule-id`) or update (provide `--rule-id`) a recommend rule.
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `--rule-id` | `RuleID` | string | no | Omit to create; provide to update. Response returns the RuleID. |
+| `--name` | `Name` | string | yes for create | Rule name. |
+| `--type` | `Type` | string | yes for create | Rule type. Allowed values: `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `userInterest`, `itemCf`, `forceItem`. |
+| `--description` | `Description` | string | no | Rule description. |
+| `--dataset-id` | `DatasetID` | string | no | Dataset ID associated with the rule. |
+| `--config` | `Config` | object | no | Rule config JSON. For `search_filter` / `filter` rules, this is a recursive rule tree (group nodes with `and`/`or`, leaf nodes with `must`/`must_not`/`range`/`time_range`). See [UpsertRecommendRule Config 结构说明](./api-references/modules/recommendation-rules/UpsertRecommendRule.md#L34-L104). |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
 
 ### `search run`
 

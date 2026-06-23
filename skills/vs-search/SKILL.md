@@ -75,6 +75,7 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 ## Constraints
 
 - Before executing any concrete `vs ...` command in this search workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
+- **Field name case sensitivity**: All dataset field names (used in `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPools[].Filter.field`, etc.) are **case-sensitive**. Never infer or normalize field name casing from the user's natural-language description. Before writing any field name into a config, first look up the exact field name from the dataset schema or data-config via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy the field name exactly as it appears there (case-for-case). If the field name you have doesn't match any field in the schema, stop and ask the user to confirm which field they mean instead of guessing.
 - When an app is bound to exactly one dataset, the CLI can infer `dataset-id`
 - For fresh apps, treat readiness as the first hypothesis before blaming the query
 - Prefer public `vs search ...` commands over bypassing the CLI and calling lower-level APIs directly

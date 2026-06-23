@@ -1167,6 +1167,59 @@ export async function runRecommendSceneDeleteCommand(options: RecommendSceneGetO
   await printResult(callOpenApi('/api/v1/DeleteRecommendScene', payload, options));
 }
 
+export async function runRecommendRuleListCommand(options: RecommendRuleListOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      ProjectName: options.projectName,
+      Types: await loadOptionalStringArray(options.types),
+      DatasetID: options.datasetId,
+      InvertItemDatasetID: options.invertItemDatasetId
+    });
+  await printResult(callOpenApi('/api/v1/ListRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleGetCommand(options: RecommendRuleGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      ProjectName: options.projectName
+    });
+  await printResult(callOpenApi('/api/v1/GetRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleUpsertCommand(options: RecommendRuleUpsertOptions): Promise<void> {
+  const configPayload = await loadJsonInput(options.config);
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      Name: options.name,
+      Type: options.type,
+      Description: options.description,
+      DatasetID: options.datasetId,
+      Config: configPayload,
+      ProjectName: options.projectName
+    });
+  requireNonEmptyObject(payload, 'Need --data or rule fields for recommend rule upsert.');
+  await printResult(callOpenApi('/api/v1/UpsertRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleDeleteCommand(options: RecommendRuleGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      ProjectName: options.projectName
+    });
+  await printResult(callOpenApi('/api/v1/DeleteRecommendRule', payload, options));
+}
+
 export async function runChatSearchRunCommand(options: ChatSearchRunOptions): Promise<void> {
   const payload = ensureChatSearchSessionId(
     (await loadJsonInput(options.data)) ??
@@ -1611,7 +1664,11 @@ SEARCH SCENE ENUMS
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
         'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]',
-        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]'
+        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]',
+        'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [service flags]',
+        'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
+        'vs recommend rule upsert --application-id <id> [--rule-id <id>] --name <name> --type <type> [--description <text>] [--dataset-id <id>] --config @rule.json [service flags]',
+        'vs recommend rule delete --application-id <id> --rule-id <id> [service flags]'
       ]
     )}
 
@@ -2277,6 +2334,10 @@ async function runAppCli(argv: string[]): Promise<void> {
     printAppCommandHelp(action, argv[1]);
     return;
   }
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('app');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
@@ -2514,6 +2575,10 @@ async function runDatasetCli(argv: string[]): Promise<void> {
 
 async function runDataCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('data');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const datasetId = requiredString(values['dataset-id'], '--dataset-id');
@@ -2534,8 +2599,12 @@ async function runDataCli(argv: string[]): Promise<void> {
 
 async function runItemCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (hasHelpFlag(argv.slice(1)) && ['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
-    printItemCommandHelp(action);
+  if (hasHelpFlag(argv.slice(1))) {
+    if (['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
+      printItemCommandHelp(action);
+    } else {
+      printDomainHelp('item');
+    }
     return;
   }
   const values = parseStandaloneOptions(argv.slice(1));
@@ -2843,6 +2912,10 @@ async function runSearchCli(argv: string[]): Promise<void> {
 
 async function runRecommendCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (isDomainHelpRequest(argv) || hasHelpFlag(argv)) {
+    printDomainHelp('recommend');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
@@ -2925,11 +2998,59 @@ async function runRecommendCli(argv: string[]): Promise<void> {
     }
   }
 
+  if (action === 'rule') {
+    const subAction = argv[1];
+    switch (subAction) {
+      case 'list':
+        await runRecommendRuleListCommand({
+          ...projectOptions,
+          applicationId,
+          types: optionalString(values.types),
+          datasetId: optionalString(values['dataset-id']),
+          invertItemDatasetId: optionalString(values['invert-item-dataset-id']),
+          projectName: optionalString(values['project-name'])
+        });
+        return;
+      case 'get':
+        await runRecommendRuleGetCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: requiredString(values['rule-id'], '--rule-id')
+        });
+        return;
+      case 'upsert':
+        await runRecommendRuleUpsertCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: optionalString(values['rule-id']),
+          name: optionalString(values.name),
+          type: optionalString(values.type),
+          description: optionalString(values.description),
+          datasetId: optionalString(values['dataset-id']),
+          config: optionalString(values.config)
+        });
+        return;
+      case 'delete':
+        await runRecommendRuleDeleteCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: requiredString(values['rule-id'], '--rule-id')
+        });
+        return;
+      default:
+        throw new Error(`Unknown recommend rule subcommand: ${subAction}`);
+    }
+  }
+
   throw new Error(`Unknown recommend subcommand: ${action}`);
 }
 
 async function runChatSearchCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('chat');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   if (action !== 'run') {
@@ -2950,15 +3071,15 @@ async function runChatSearchCli(argv: string[]): Promise<void> {
 async function runPurchaseCli(argv: string[]): Promise<void> {
   const action = argv[0];
   const subAction = argv[1];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('purchase');
+    return;
+  }
   if (action === 'link') {
     const values = parseStandaloneOptions(argv.slice(1));
     await runPurchaseLinkCommand({
       environmentId: optionalString(values['environment-id'])
     });
-    return;
-  }
-  if (action === 'order' && hasHelpFlag(argv.slice(2))) {
-    printDomainHelp('purchase');
     return;
   }
   if (action !== 'order') {
@@ -3113,6 +3234,8 @@ function parseStandaloneOptions(argv: string[]) {
       'impression-config': { type: 'string' },
       'suggest-config': { type: 'string' },
       'degrade-rule-id': { type: 'string' },
+      'rule-id': { type: 'string' },
+      'invert-item-dataset-id': { type: 'string' },
       'search-config': { type: 'string' },
       'query-completion-config': { type: 'string' },
       'want-to-search-config': { type: 'string' },

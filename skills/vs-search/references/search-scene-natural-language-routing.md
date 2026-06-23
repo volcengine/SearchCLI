@@ -31,11 +31,11 @@ This is a workflow-oriented routing guide, not an API reference. Exact payload s
 
 If the target is FilterConfig, use this workflow:
 
-1. Run `recommend rule upsert`, save the filter configuration as a separate rule resource, and capture the returned `RuleID`.
-2. Run `recommend rule get`, fetch that rule again by `RuleID`, and verify that the stored configuration is correct.
+1. Run `recommend rule upsert` with `--type search_filter`, save the filter configuration as a separate rule resource, and capture the returned `RuleID` from the response.
+2. Run `recommend rule get --rule-id <id>` to fetch that rule again and verify that the stored `Config` is correct.
 3. If the rule was written correctly, run `search scene update` and write both `RuleID` and `Config` into the corresponding scene `FilterConfig` object:
    - `Config.SearchConfig.RetrieveConfigs[].FilterConfig.RuleID` — the rule reference ID
-   - `Config.SearchConfig.RetrieveConfigs[].FilterConfig.Config` — the full filter rule body (same structure as the rule's `Config` field returned by `recommend rule get`)
+   - `Config.SearchConfig.RetrieveConfigs[].FilterConfig.Config` — the full filter rule body (same structure as the rule's `Config` field returned by the rule-get API/command)
    - Also applies to `Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig` when the target is a serving-control override
 
 Interpretation:
@@ -51,3 +51,5 @@ Use this file as a routing layer only. For command execution:
 2. consult `vs-product-qa`,
 3. run the concrete command workflow,
 4. read the scene back after mutation.
+
+**Field name case sensitivity**: For any config area that references dataset field names (e.g. `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPools[].Filter.field`), field names are **case-sensitive**. Never infer casing from the user's natural-language description. Before writing a field name into config, first look up the exact field name from the dataset schema via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy it exactly as it appears. If the field name doesn't match any schema field, stop and ask the user to confirm instead of guessing.
