@@ -49,19 +49,19 @@
 | Config.SearchConfig.RetrieveConfigs[].QueryConfig.InstructionType | string | 否 | body | 自定义、预设 | preset_image, preset_item, custom |
 | Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[] | array<dataset.DatasetFilter> | 否 | body | 辅助召回池 | - |
 | Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Name | string | 否 | body | 数据集过滤条件名称 | - |
-| Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Filter | object | 否 | body | 过滤条件DSL json map | - |
+| Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Filter | object | 否 | body | Configuration object. Use only these fields: `field: string` (dataset field name), `op: string` (allowed values: `must`, `must_not`; semantics: belong to / do not belong to), and `conds: array<any>` (list of concrete match values). Meaning: when an item field satisfies this filter, the item can enter the auxiliary recall pool. Only pass these three fields; do not add other DSL keys. | - |
 | Config.SearchConfig.RetrieveConfigs[].AuxiliaryPools[].Enable | boolean | 否 | body | 搜索结果配置-重点保障召回（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig | rule.ShuffleConfig | 否 | body | 打散规则配置 | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[] | array<rule.ShuffleRule> | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ID | integer | 否 | body | 规则 ID | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].Disable | boolean | 否 | body | 打散规则是否开启；默认：开;保持存量逻辑不变 | - |
-| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].Name | string | 否 | body | 打散规则名 | - |
+| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].Name | string | 否 | body | User-defined shuffle rule name. Frontend requires this field to be non-empty. | non-empty |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].WindowType | string | 否 | body | 窗口类型 - SLIDE: 滑动窗口（连续打散） - TOP: TopK窗口 | SLIDE, TOP |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].WindowSize | integer | 否 | body | 窗口大小 | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].MaxSize | integer | 否 | body | WindowSize 中最多展示的数量 | - |
-| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].FieldName | string | 否 | body | WindowSize 中最少展示的数量（预留） int64 MinSize = 7; 维度打散字段名 | - |
+| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].FieldName | string | 否 | body | Dataset field selected by the user for diversity evaluation. In `dimension` shuffle, it is the field whose values are diversified within the window. In `expression` shuffle, it is the field used to initialize and bind `ShuffleExpr`. Frontend requires this field to be non-empty and chosen from the dataset field selector. | non-empty |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ShuffleType | string | 否 | body | 打散规则类型 - dimension: 维度打散 - expression: 表达式打散 | dimension, expression |
-| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | 表达式打散规则 | - |
+| Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | Single shuffle-expression object. Use `field: string` to specify the dataset field, and `op: string` to specify the expression type. Allowed stored `op` values are `must`, `must_not`, and `range`. For `must` / `must_not`, pass `conds: array<string \| number \| boolean>` as the match-value list. For `range`, pass one or more of `gt`, `gte`, `lt`, `lte`. Frontend behavior by field type: string and array fields map to `must` / `must_not`; int32/int64 fields support `must`, `must_not`, or `range` with `gt` / `gte` / `lt` / `lte`; float fields support `range` only; bool fields are stored as `must` / `must_not` with `conds: [true]` or `conds: [false]`. This object is a single expression, not a recursive rule tree. | - |
 | Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[].RecallMax | integer | 否 | body | WindowSize 中最多展示的数量（待废弃，新版本使用MaxSize） | - |
 | Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall | search_scene.PersonalizedRecall | 否 | body | 个性化召回 | - |
 | Config.SearchConfig.RetrieveConfigs[].PersonalizedRecall.Enable | boolean | 否 | body | 搜索结果配置-用户个性化召回 默认关闭 | - |
@@ -83,7 +83,7 @@
 | Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].ID | integer | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Enable | boolean | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Name | string | 否 | body | - | - |
-| Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | - | - |
+| Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | Recursive rule object. Two shapes are valid. `Group node`: `{ op: "and" \| "or", conds: Rule[] }`, where `conds` is a non-empty array of child rules. `Leaf node`: `{ field: string, op: string, conds: array<any> }`, where `op` allows `must`, `must_not`, or `partial_match`. Leaf semantics: `must` = contains, `must_not` = does not contain, `partial_match` = partial match. Additional constraint: when `op = partial_match`, `conds` must be `array<string>`. Meaning: when the full rule tree evaluates to true, the current boost/bury rule is triggered. A single-condition rule may be stored either directly as a leaf node or as a one-child group normalized back to a leaf. | - |
 | Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[].Boost | number | 否 | body | - | [-1, 1] |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[] | array<search_scene.ServingControl> | 否 | body | Serving Control 条件策略覆盖配置 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].QueryCondition | object | 否 | body | 触发条件 | - |
@@ -95,7 +95,7 @@
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools | search_scene.AuxiliaryPoolsConfig | 否 | body | 命中后覆盖辅助召回池；可显式传空关闭 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[] | array<dataset.DatasetFilter> | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Name | string | 否 | body | 数据集过滤条件名称 | - |
-| Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Filter | object | 否 | body | 过滤条件DSL json map | - |
+| Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Filter | object | 否 | body | Configuration object. Use only these fields: `field: string` (dataset field name), `op: string` (allowed values: `must`, `must_not`; semantics: belong to / do not belong to), and `conds: array<any>` (list of concrete match values). Meaning: after the request hits the current Serving Control, this filter overrides the auxiliary recall pool configuration. Only pass these three fields; do not add other DSL keys. | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].AuxiliaryPools.Pools[].Enable | boolean | 否 | body | 搜索结果配置-重点保障召回（规则粒度支持开关）；默认：开 (新建后默认开启) | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules | search_scene.SortRulesConfig | 否 | body | 命中后覆盖 Tie-breaking 排序规则；可显式传空关闭 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].SortRules.Rules[] | array<search_scene.SortRule> | 否 | body | - | - |
@@ -106,13 +106,13 @@
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[] | array<rule.ShuffleRule> | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ID | integer | 否 | body | 规则 ID | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].Disable | boolean | 否 | body | 打散规则是否开启；默认：开;保持存量逻辑不变 | - |
-| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].Name | string | 否 | body | 打散规则名 | - |
+| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].Name | string | 否 | body | User-defined shuffle rule name. Frontend requires this field to be non-empty. | non-empty |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].WindowType | string | 否 | body | 窗口类型 - SLIDE: 滑动窗口（连续打散） - TOP: TopK窗口 | SLIDE, TOP |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].WindowSize | integer | 否 | body | 窗口大小 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].MaxSize | integer | 否 | body | WindowSize 中最多展示的数量 | - |
-| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].FieldName | string | 否 | body | WindowSize 中最少展示的数量（预留） int64 MinSize = 7; 维度打散字段名 | - |
+| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].FieldName | string | 否 | body | Dataset field selected by the user for diversity evaluation. In `dimension` shuffle, it is the field whose values are diversified within the window. In `expression` shuffle, it is the field used to initialize and bind `ShuffleExpr`. Frontend requires this field to be non-empty and chosen from the dataset field selector. | non-empty |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ShuffleType | string | 否 | body | 打散规则类型 - dimension: 维度打散 - expression: 表达式打散 | dimension, expression |
-| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | 表达式打散规则 | - |
+| Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].ShuffleExpr | object | 否 | body | Single shuffle-expression object. Use `field: string` to specify the dataset field, and `op: string` to specify the expression type. Allowed stored `op` values are `must`, `must_not`, and `range`. For `must` / `must_not`, pass `conds: array<string \| number \| boolean>` as the match-value list. For `range`, pass one or more of `gt`, `gte`, `lt`, `lte`. Frontend behavior by field type: string and array fields map to `must` / `must_not`; int32/int64 fields support `must`, `must_not`, or `range` with `gt` / `gte` / `lt` / `lte`; float fields support `range` only; bool fields are stored as `must` / `must_not` with `conds: [true]` or `conds: [false]`. This object is a single expression, not a recursive rule tree. | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].ShuffleConfig.Rules[].RecallMax | integer | 否 | body | WindowSize 中最多展示的数量（待废弃，新版本使用MaxSize） | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig | search_scene.FilterConfig | 否 | body | 命中后覆盖过滤条件 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].FilterConfig.RuleID | string | 否 | body | - | - |
@@ -122,7 +122,7 @@
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].ID | integer | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Enable | boolean | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Name | string | 否 | body | - | - |
-| Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | - | - |
+| Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Config | object | 否 | body | Recursive rule object. Two shapes are valid. `Group node`: `{ op: "and" \| "or", conds: Rule[] }`, where `conds` is a non-empty array of child rules. `Leaf node`: `{ field: string, op: string, conds: array<any> }`, where `op` allows `must`, `must_not`, or `partial_match`. Leaf semantics: `must` = contains, `must_not` = does not contain, `partial_match` = partial match. Additional constraint: when `op = partial_match`, `conds` must be `array<string>`. Meaning: after the request hits the current Serving Control, this rule tree overrides the boost/bury rule. A single-condition rule may be stored either directly as a leaf node or as a one-child group normalized back to a leaf. | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].BoostBuryCondConfig.Rules[].Boost | number | 否 | body | - | [-1, 1] |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].Name | string | 否 | body | 规则名，仅供前端读写展示 | - |
 | Config.SearchConfig.RetrieveConfigs[].ServingControls[].Enable | boolean | 否 | body | 是否启用该规则；默认：开 (新建后默认开启) | - |

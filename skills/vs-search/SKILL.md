@@ -60,6 +60,10 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 7. Only after readiness is clear should you focus on recall quality or scene configuration.
 8. If the command behavior conflicts with the skill text or `--help`, trust the installed CLI behavior first, and only then inspect repository code when needed to explain or fix the gap.
 
+## References
+
+- `references/search-scene-natural-language-routing.md`: workflow-oriented mapping from natural-language search-scene requests to the first config area or workflow you should inspect
+
 ## Customer Environment Principle
 
 - In customer environments, assume repository source code is unavailable.
@@ -75,6 +79,7 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 - For fresh apps, treat readiness as the first hypothesis before blaming the query
 - Prefer public `vs search ...` commands over bypassing the CLI and calling lower-level APIs directly
 - Use `search scene update` for persistent search behavior and do not invent low-level API mappings inside this skill
+- For natural-language scene-change requests, use `references/search-scene-natural-language-routing.md` as the routing layer; if the target is a rule-resource workflow such as filter-item-scope, do not reduce it to a single inline scene field edit
 - Do not assume `--help`, skill text, and the installed command implementation are perfectly aligned; verify the actual command behavior before making high-risk scene changes
 - For scene updates, prefer a readback check after mutation instead of assuming the write succeeded
 - If a scene update unexpectedly fails or appears to no-op, verify the accepted command behavior and parameter requirements before retrying
