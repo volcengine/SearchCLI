@@ -75,6 +75,8 @@ Allowed CLI checks include:
 
 Before recommending any command or flag, verify that it exists through `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
 
+For SearchCLI product commands that map to backend APIs, this skill also includes an internal code-grounded command mapping file under [references/command-console-api-mapping.md](references/command-console-api-mapping.md) and the copied console API corpus under [references/api-references/README.md](references/api-references/README.md). Use them to explain which backend action a command maps to and how uploaded command arguments are encoded into request payload fields.
+
 ### Documentation source
 
 This skill includes a private bundled documentation helper under [references/volcengine-documentation/SKILL.md](references/volcengine-documentation/SKILL.md). Use it only as an internal sub-workflow of `vs-product-qa`. Do not expose it as a separate skill, and do not ask the user to install, trigger, or switch to it.
@@ -221,3 +223,5 @@ Answer: "This is covered by `vs-user-onboarding` because it is a sign-up, purcha
 - AK/SK security notice: [references/aksk-notice.md](references/aksk-notice.md)
 - Delegation matrix: [references/delegation.md](references/delegation.md)
 - Bundled documentation helper: [references/volcengine-documentation/SKILL.md](references/volcengine-documentation/SKILL.md)
+- Command to console API mapping: [references/command-console-api-mapping.md](references/command-console-api-mapping.md)
+- Copied console API references: [references/api-references/README.md](references/api-references/README.md)
