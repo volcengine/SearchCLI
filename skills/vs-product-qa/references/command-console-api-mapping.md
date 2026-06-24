@@ -609,13 +609,15 @@ Create (omit `--rule-id`) or update (provide `--rule-id`) a recommend rule.
 - Execution modes:
   1. `--file`: internal workflow `GetPresignedImportUrlV2` -> HTTP PUT upload -> data-plane `POST /api/v1/dict/{dictId}/write_terms`
   2. `--entries`: direct data-plane `POST /api/v1/dict/{dictId}/write_terms`
-- The presigned import response and uploaded object key are internal implementation details when `--file` is used. They are not exposed as command flags.
+- SearchCLI first calls `GetDict` to resolve the dictionary `Type`, then sends that type as data-plane field `term_type`.
+- File-import mode uses DonaldTrump-compatible payload shape: `{ "term_type": "<dict-type>", "items": [], "_data_tos_link": "<FileKey>" }`.
+- Non-file mode uses DonaldTrump-compatible payload shape: `{ "term_type": "<dict-type>", "items": [...] }`, where each item is a write-item object with `_last_data` and `_current_data`.
 
 | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- |
 | `--dict-id` | path param | string | yes | Target dictionary ID (in URL path). |
-| `--file` | internal upload source | local file path | no (use with `--entries`) | Local CSV file. CLI uploads it internally, then sends returned `FileKey` as the data-plane `TosKey`. |
-| `--entries` | `Entries` | object[] | no | Inline JSON / `@file` / JSON file path. Entry shape: `[{ "Fields": ["..."] }]`. Use this for direct inline term writes instead of TOS file import. |
+| `--file` | `items=[]`, `_data_tos_link`, `term_type` | local file path | no (use with `--entries`) | Local CSV file. CLI uploads it internally, then sends the returned `FileKey` as `_data_tos_link`. |
+| `--entries` | `items`, `term_type` | object[] | no | Inline JSON / `@file` / JSON file path for `items[]`. Entry shape: `[{ "_last_data": {...}, "_current_data": {...} }]`. |
 | `--project-name` | n/a | n/a | no | Not sent to data-plane API (kept for CLI config consistency). |
 
 ### `search run`

@@ -82,7 +82,7 @@ Then branch based on whether the user provides a CSV/term file or an existing `D
 
 1. Run `dict create --name <name> --type <type>` to create the dictionary resource, and capture the returned `DictId`. Select `--type` from the table above based on which config area the user is targeting.
 2. Run `dict get --dict-id <id>` to confirm the dictionary was created successfully.
-3. Run `dict write-terms --dict-id <id> --file <file-path>` (data plane API: `POST /api/v1/dict/{dict_id}/write_terms`) to batch write/update dictionary terms from the uploaded file. The CLI fetches the upload signature and uploads the file internally; do not call the upload-signature API as a separate user-facing step. If terms are provided as inline JSON instead of a file, use `--entries @entries.json`.
+3. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
 4. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json` to bind the dictionary to the target application scenes. For synonyms and correction dictionaries, include `DatasetId` in each scene entry (`{"AppId":"...","SceneId":"...","DatasetId":"..."}`).
 
 **Path B — User directly provides an existing `DictId`:**

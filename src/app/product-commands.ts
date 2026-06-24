@@ -1358,6 +1358,20 @@ export async function runDictWriteTermsCommand(options: DictWriteTermsOptions): 
     throw new Error('Use either --file or --entries for dict write-terms, not both.');
   }
 
+  const dictId = options.dictId;
+  if (!dictId) {
+    throw new Error('--dict-id is required for dict write-terms.');
+  }
+  const dictResponse = await callOpenApi('/api/v1/GetDict', compactObject({
+    ProjectName: options.projectName,
+    DictId: dictId
+  }), options);
+  const dictPayload = extractOpenApiResult(dictResponse);
+  const dictType = optionalString((dictPayload as Record<string, unknown> | undefined)?.Type);
+  if (!dictType) {
+    throw new Error(`Could not resolve dictionary type for ${dictId}.`);
+  }
+
   let payload: Record<string, unknown>;
   if (options.file) {
     const resolvedFilePath = path.resolve(options.file);
@@ -1369,21 +1383,19 @@ export async function runDictWriteTermsCommand(options: DictWriteTermsOptions): 
       projectName: options.projectName,
       filePath: resolvedFilePath
     });
-    payload = compactObject({
-      TosBucket: upload.tosBucket,
-      TosKey: upload.fileKey
-    });
+    payload = {
+      term_type: dictType,
+      items: [],
+      _data_tos_link: upload.fileKey
+    };
   } else {
-    payload = compactObject({
-      Entries: await loadJsonInput(options.entries)
-    });
+    payload = {
+      term_type: dictType,
+      items: await loadJsonInput(options.entries)
+    };
   }
 
   requireNonEmptyObject(payload, 'Need --file or --entries for dict write-terms.');
-  const dictId = options.dictId;
-  if (!dictId) {
-    throw new Error('--dict-id is required for dict write-terms.');
-  }
   await printResult(callDataPlane(`/api/v1/dict/${encodeURIComponent(dictId)}/write_terms`, payload, options));
 }
 
@@ -2066,7 +2078,7 @@ KEY FLAGS
 
 EXAMPLES
   vs dict bind-scenes --dict-id dict_xxx --scenes @scenes.json`,
-    'write-terms': `Write or update dictionary terms from a CSV file or inline entries.
+    'write-terms': `Write or update dictionary terms from a CSV file or inline write-items.
 
 USAGE
   vs dict write-terms --dict-id <id> [--file ./terms.csv | --entries @entries.json] [service flags]
@@ -2075,10 +2087,9 @@ KEY FLAGS
   --dict-id      Target dictionary ID.
   --file         Local \`.csv\` source file path only.
                  The CLI obtains the upload signature, uploads the file, and submits the
-                 write_terms request internally. TOS URLs and TOS coordinates are not exposed
-                 as user-facing flags.
-  --entries      Inline JSON / @file / JSON file path for Entries[]. Example:
-                 [{"Fields":["nike","耐克"]}]
+                 write_terms request internally using file-import payload fields.
+  --entries      Inline JSON / @file / JSON file path for \`items[]\`. Example:
+                 [{"_last_data":{},"_current_data":{"query":"nike","query_count":10}}]
 
 EXAMPLES
   vs dict write-terms --dict-id dict_xxx --file ./terms.csv
