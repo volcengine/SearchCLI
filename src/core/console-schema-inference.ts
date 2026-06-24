@@ -1,8 +1,8 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { uploadFileWithConsoleSignature } from './console-file-upload';
 import { VikingOpenApiClient } from './openapi-client';
 import { resolveServiceConfig, type ServiceConfigInput } from './service-config';
 
@@ -37,19 +37,15 @@ export async function inferSchemaArtifactsWithConsole(
 ): Promise<ConsoleSchemaArtifactsResult> {
   const config = resolveServiceConfig(options);
   const openapi = new VikingOpenApiClient(config);
-  const fileName = toUploadFileName(options.filePath);
-
-  const signatureResponse = unwrapResultEnvelope(
-    await openapi.post('/api/v1/GetInferDatasetSchemaUploadSignature', {
-      FileName: fileName,
-      ProjectName: options.projectName ?? config.projectName
-    })
-  );
-  const fileUrl = requiredStringField(signatureResponse, ['FileUrl', 'UploadUrl', 'SignedUrl']);
-  const fileKey = requiredStringField(signatureResponse, ['FileKey', 'TosKey', 'Key']);
-  const tosBucket = optionalStringField(signatureResponse, ['TosBucket', 'Bucket']);
-
-  await uploadJsonlToTos(fileUrl, toJsonlPayload(options.normalizedItems));
+  const uploadResult = await uploadFileWithConsoleSignature({
+    ...options,
+    fileName: toUploadFileName(options.filePath),
+    contentType: 'application/x-ndjson',
+    fileContent: toJsonlPayload(options.normalizedItems)
+  });
+  const fileUrl = uploadResult.fileUrl;
+  const fileKey = uploadResult.fileKey;
+  const tosBucket = uploadResult.tosBucket;
 
   const addTaskResponse = unwrapResultEnvelope(
     await openapi.post('/api/v1/AddInferDatasetSchemaTask', compactObject({
@@ -82,8 +78,8 @@ export async function inferSchemaArtifactsWithConsole(
           fileUrl,
           fileKey,
           tosBucket,
-          httpMethod: optionalStringField(signatureResponse, ['HttpMethod']),
-          expiresInSeconds: optionalNumberField(signatureResponse, ['ExpiresInSeconds'])
+          httpMethod: uploadResult.httpMethod,
+          expiresInSeconds: uploadResult.expiresInSeconds
         }
       };
     }
@@ -100,8 +96,8 @@ export async function inferSchemaArtifactsWithConsole(
 }
 
 function toUploadFileName(filePath: string): string {
-  const parsed = path.parse(filePath);
-  const stem = sanitizeFileNamePart(parsed.name || 'items');
+  const fileName = filePath.split(/[\\/]/).pop() ?? 'items';
+  const stem = sanitizeFileNamePart(fileName.replace(/\.[^.]*$/, ''));
   return `${stem || 'items'}.jsonl`;
 }
 
@@ -116,24 +112,6 @@ function sanitizeFileNamePart(value: string): string {
 function toJsonlPayload(items: Array<Record<string, unknown>>): string {
   if (items.length === 0) return '';
   return `${items.map(item => JSON.stringify(item)).join('\n')}\n`;
-}
-
-async function uploadJsonlToTos(fileUrl: string, payload: string): Promise<void> {
-  const response = await fetch(fileUrl, {
-    method: 'PUT',
-    headers: {
-      'content-type': 'application/x-ndjson'
-    },
-    body: payload
-  });
-  if (response.ok) {
-    return;
-  }
-
-  const body = await response.text().catch(() => '');
-  throw new Error(
-    `Uploading normalized JSONL to TOS failed: ${response.status} ${response.statusText}${body ? ` - ${body}` : ''}`
-  );
 }
 
 function unwrapResultEnvelope(value: unknown): Record<string, unknown> {

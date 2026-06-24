@@ -85,6 +85,15 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dataset ingest` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
 | `data write` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
 | `data import` | runtime shortcut | `POST /api/v1/dataset/{datasetId}/write` | none; wraps `data write` |
+| `dict create` | console | `POST /api/v1/CreateDict` | [CreateDict](./api-references/modules/dictionary-management/CreateDict.md) |
+| `dict update` | console | `POST /api/v1/UpdateDict` | [UpdateDict](./api-references/modules/dictionary-management/UpdateDict.md) |
+| `dict get` | console | `POST /api/v1/GetDict` | [GetDict](./api-references/modules/dictionary-management/GetDict.md) |
+| `dict delete` | console | `POST /api/v1/DeleteDict` | [DeleteDict](./api-references/modules/dictionary-management/DeleteDict.md) |
+| `dict list` | console | `POST /api/v1/ListDicts` | [ListDicts](./api-references/modules/dictionary-management/ListDicts.md) |
+| `dict check-input` | console | `POST /api/v1/CheckDictInput` | [CheckDictInput](./api-references/modules/dictionary-management/CheckDictInput.md) |
+| `dict bind-scenes` | console | `POST /api/v1/BindDictToScenes` | [BindDictToScenes](./api-references/modules/dictionary-management/BindDictToScenes.md) |
+| `dict write-terms` | workflow over console + data plane | `GetInferDatasetSchemaUploadSignature` -> HTTP PUT -> `POST /api/v1/dict/{dictId}/write_terms` | none; file upload is internal when `--file` is used |
+| `dataset upload-signature get` | console | `POST /api/v1/GetInferDatasetSchemaUploadSignature` | none; returns TOS presigned upload URL |
 | `search scene create` | console | `POST /api/v1/CreateSearchScene` | [CreateSearchScene](./api-references/modules/search-scenes/CreateSearchScene.md) |
 | `search scene list` | console | `POST /api/v1/ListSearchScene` | [ListSearchScene](./api-references/modules/search-scenes/ListSearchScene.md) |
 | `search scene get` | console | `POST /api/v1/GetSearchScene` | [GetSearchScene](./api-references/modules/search-scenes/GetSearchScene.md) |
@@ -525,6 +534,102 @@ Create (omit `--rule-id`) or update (provide `--rule-id`) a recommend rule.
 | `--description` | `Description` | string | no | Rule description. |
 | `--dataset-id` | `DatasetID` | string | no | Dataset ID associated with the rule. |
 | `--config` | `Config` | object | no | Rule config JSON. For `search_filter` / `filter` rules, this is a recursive rule tree (group nodes with `and`/`or`, leaf nodes with `must`/`must_not`/`range`/`time_range`). See [UpsertRecommendRule Config 结构说明](./api-references/modules/recommendation-rules/UpsertRecommendRule.md#L34-L104). |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+### `dict create`, `dict update`, `dict get`, `dict delete`, `dict list`, `dict check-input`, `dict bind-scenes`, `dict write-terms`
+
+- API kind: `console` for create/update/get/delete/list/check-input/bind-scenes; `workflow over console + data plane` for write-terms
+- Actions: `CreateDict`, `UpdateDict`, `GetDict`, `DeleteDict`, `ListDicts`, `CheckDictInput`, `BindDictToScenes`, `WriteTerms`
+- API docs: [CreateDict](./api-references/modules/dictionary-management/CreateDict.md), [UpdateDict](./api-references/modules/dictionary-management/UpdateDict.md), [GetDict](./api-references/modules/dictionary-management/GetDict.md), [DeleteDict](./api-references/modules/dictionary-management/DeleteDict.md), [ListDicts](./api-references/modules/dictionary-management/ListDicts.md), [CheckDictInput](./api-references/modules/dictionary-management/CheckDictInput.md), [BindDictToScenes](./api-references/modules/dictionary-management/BindDictToScenes.md)
+
+#### `dict create`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--name` | `Name` | string | yes unless present in `--data` | Dictionary name. |
+| `--type` | `Type` | string | yes unless present in `--data` | Allowed values: `query_recommendation`, `query_completion`, `query_correction_exemption`, `bidirection_synonyms`, `unidirection_synonyms`. |
+| `--description` | `Description` | string | no | Dictionary description. |
+| `--enable-idempotent` | `EnableIdempotent` | boolean | no | When `true`, backend returns the existing same-name dictionary instead of failing. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict update`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--dict-id` | `DictId` | string | yes unless present in `--data` | Dictionary ID. |
+| `--name` | `Name` | string | yes unless present in `--data` | Updated dictionary name. Backend performs a full update and re-validates `Name` length (1-100). |
+| `--description` | `Description` | string | no | Updated dictionary description. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict get`, `dict delete`
+
+| Command | CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- | --- |
+| `dict get` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `dict get` | `--dict-id` | `DictId` | string | yes unless present in `--data` | Dictionary ID. |
+| `dict get` | `--project-name` | `ProjectName` | string | no | Project scope. |
+| `dict delete` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `dict delete` | `--dict-id` | `DictId` | string | yes unless present in `--data` | Dictionary ID. |
+| `dict delete` | `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict list`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--dict-ids` | `DictIds` | string[] | no | Comma-separated or JSON array of dictionary IDs. |
+| `--types` | `Types` | string[] | no | Comma-separated or JSON array. Allowed values: `query_recommendation`, `query_completion`, `query_correction_exemption`, `bidirection_synonyms`, `unidirection_synonyms`. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict check-input`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--dict-id` | `DictId` | string | no | Existing dictionary ID. When provided, backend ignores uploaded `Type` and validates against the existing dictionary. |
+| `--language` | `Language` | string | no | Allowed values: `zh`, `en`, `ja`. |
+| `--type` | `Type` | string | no | Dictionary type when validating pre-create entries. |
+| `--tos-bucket` | `TosBucket` | string | no | TOS bucket for source-file validation. |
+| `--tos-key` | `TosKey` | string | no | TOS object key for source-file validation. |
+| `--entries` | `Entries` | object[] | no | Inline JSON / `@file` / JSON file path. Entry shape: `[{ "Fields": ["..."] }]`. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict bind-scenes`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--dict-id` | `DictId` | string | yes unless present in `--data` | Dictionary ID. |
+| `--scenes` | `Scenes` | object[] | yes unless present in `--data` | Inline JSON / `@file` / JSON file path. Scene shape: `[{ "AppId": "...", "SceneId": "...", "DatasetId": "..." }]`. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dict write-terms`
+
+- Execution modes:
+  1. `--file`: internal workflow `GetInferDatasetSchemaUploadSignature` -> HTTP PUT upload -> data-plane `POST /api/v1/dict/{dictId}/write_terms`
+  2. `--entries`: direct data-plane `POST /api/v1/dict/{dictId}/write_terms`
+- The TOS signature response and TOS object coordinates are internal implementation details when `--file` is used. They are not exposed as command flags.
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--dict-id` | path param | string | yes | Target dictionary ID (in URL path). |
+| `--file` | internal upload source | local file path | no (use with `--entries`) | Local CSV / JSONL / text file. CLI uploads it internally, then sends returned `TosBucket` / `TosKey` to the data-plane API. |
+| `--entries` | `Entries` | object[] | no | Inline JSON / `@file` / JSON file path. Entry shape: `[{ "Fields": ["..."] }]`. Use this for direct inline term writes instead of TOS file import. |
+| `--project-name` | n/a | n/a | no | Not sent to data-plane API (kept for CLI config consistency). |
+
+### `dataset upload-signature get`
+
+- API kind: `console`
+- Action: `GetInferDatasetSchemaUploadSignature`
+- Console path: `POST /api/v1/GetInferDatasetSchemaUploadSignature`
+- Returns a presigned TOS PUT URL used for uploading term files (or any JSONL/CSV) before calling data-plane write endpoints.
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
+| `--file-name` | `FileName` | string | no (defaults to `dict-terms.jsonl`) | Upload file name. Must be `.jsonl` for this endpoint. |
 | `--project-name` | `ProjectName` | string | no | Project scope. |
 
 ### `search run`

@@ -139,6 +139,12 @@
 | Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Lte | number | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Gt | number | 否 | body | - | - |
 | Config.SearchConfig.RetrieveConfigs[].FacetConfig.Facets[].NumberRanges[].Gte | number | 否 | body | - | - |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig | search_scene.CorrectionConfig | 否 | body | 搜索词纠错配置 | - |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig.Enable | boolean | 否 | body | 是否开启搜索词纠错 | - |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig.Mode | string | 否 | body | 纠错模式 | auto, suggestion_only |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig.Dicts[] | array<search_scene.RelatedDict> | 否 | body | 搜索词纠错词库 | - |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig.Dicts[].DictID | string | 否 | body | - | - |
+| Config.SearchConfig.RetrieveConfigs[].CorrectionConfig.MatchMode | string | 否 | body | 纠错匹配模式 | exact, partial |
 | Config.SearchConfig.RetrieveConfigs[].SynonymConfig | search_scene.SynonymConfig | 否 | body | 同义词配置 | - |
 | Config.SearchConfig.RetrieveConfigs[].SynonymConfig.Dicts[] | array<search_scene.RelatedDict> | 否 | body | 同义词词库 | - |
 | Config.SearchConfig.RetrieveConfigs[].SynonymConfig.Dicts[].DictID | string | 否 | body | - | - |

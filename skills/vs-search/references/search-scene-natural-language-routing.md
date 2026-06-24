@@ -25,7 +25,12 @@ This is a workflow-oriented routing guide, not an API reference. Exact payload s
 | boost, bury, promote, suppress, weight up, weight down | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].BoostBuryCondConfig.Rules[]` |
 | sort by field, field-based ranking | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].SortRules[]` |
 | diversify results, avoid too many similar items, shuffle results | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].ShuffleConfig.Rules[]` |
-| synonyms, equivalent words, alternate query words | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].SynonymConfig.Dicts[]` |
+| synonyms, equivalent words, alternate query words, 同义词 | If the request involves binding/uploading/importing a synonym dictionary, use the Dictionary Binding Workflow below; otherwise run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].SynonymConfig` |
+| guess-you-want-to-search, suggested queries, search suggestions, 猜你想搜 | If the request involves binding/uploading/importing a suggestion dictionary, use the Dictionary Binding Workflow below; otherwise run `search scene update` and modify `Config.WantToSearchConfig` |
+| query completion, autocomplete, typeahead, 搜索补全 | If the request involves binding/uploading/importing a completion dictionary, use the Dictionary Binding Workflow below; otherwise run `search scene update` and modify `Config.QueryCompletionConfig` |
+| search-term correction, spell correction, typo correction, 搜索词纠错 | If the request involves binding/uploading/importing a correction-exemption dictionary, use the Dictionary Binding Workflow below; otherwise run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].CorrectionConfig` |
+| search result facet stats, facet aggregation, 搜索结果分类统计 | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].FacetConfig` |
+| trigger summary, search overview, 触发摘要 | Run `search scene update` and modify `Config.OverviewConfig` |
 
 ## FilterConfig Workflow
 
@@ -42,6 +47,38 @@ Interpretation:
 
 - FilterConfig is a rule-resource workflow, not just an inline scene payload edit.
 - The scene stores a `RuleID` reference rather than the full filter rule body.
+
+## Dictionary Binding Workflow
+
+If the request involves associating/uploading/importing/binding a dictionary (词库/词典/关联词库) for synonyms, query recommendation, query completion, or search-term correction, use this workflow.
+
+First, determine the dictionary `Type` from the target config area:
+
+| Target config area | Dict Type |
+| --- | --- |
+| SynonymConfig (同义词) | `bidirection_synonyms` or `unidirection_synonyms` |
+| WantToSearchConfig (猜你想搜) | `query_recommendation` |
+| QueryCompletionConfig (搜索补全) | `query_completion` |
+| CorrectionConfig (搜索词纠错) | `query_correction_exemption` |
+
+Then branch based on whether the user provides a CSV/term file or an existing `DictId`:
+
+**Path A — User provides a CSV/term file (new dictionary):**
+
+1. Run `dict create --name <name> --type <type>` to create the dictionary resource, and capture the returned `DictId`. Select `--type` from the table above based on which config area the user is targeting.
+2. Run `dict get --dict-id <id>` to confirm the dictionary was created successfully.
+3. Run `dict write-terms --dict-id <id> --file <file-path>` (data plane API: `POST /api/v1/dict/{dict_id}/write_terms`) to batch write/update dictionary terms from the uploaded file. The CLI fetches the upload signature and uploads the file internally; do not call the upload-signature API as a separate user-facing step. If terms are provided as inline JSON instead of a file, use `--entries @entries.json`.
+4. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json` to bind the dictionary to the target application scenes. For synonyms and correction dictionaries, include `DatasetId` in each scene entry (`{"AppId":"...","SceneId":"...","DatasetId":"..."}`).
+
+**Path B — User directly provides an existing `DictId`:**
+
+1. Skip steps 1–4. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json` directly to bind the existing dictionary to target scenes.
+
+Interpretation:
+
+- Dictionary binding is a multi-step resource workflow: create dict → verify → `dict write-terms --file ...` (internal signature + upload) → bind to scenes.
+- Do not reduce this to a single inline `search scene update` payload edit when the user mentions uploading a file, creating a dictionary, importing a word list, or associating a new dictionary.
+- When the user only wants to toggle a feature on/off or adjust numeric parameters (e.g. suggestion count, min prefix length, correction mode) without touching the dictionary itself, use the direct `search scene update` path instead.
 
 ## Usage Note
 
