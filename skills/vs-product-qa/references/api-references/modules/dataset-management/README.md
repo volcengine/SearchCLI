@@ -26,7 +26,7 @@ This directory contains all currently retained APIs for the `Dataset Management`
 | GetDatasetSummary | `POST` | `/api/v1/GetDatasetSummary` | DashboardService | [Doc](./GetDatasetSummary.md) |
 | GetInferDatasetProfileResult | `POST` | `/api/v1/GetInferDatasetProfileResult` | DashboardService | [Doc](./GetInferDatasetProfileResult.md) |
 | GetInferDatasetSchemaResult | `POST` | `/api/v1/GetInferDatasetSchemaResult` | DashboardService | [Doc](./GetInferDatasetSchemaResult.md) |
-| GetInferDatasetSchemaUploadSignature | `POST` | `/api/v1/GetInferDatasetSchemaUploadSignature` | DashboardService | [Doc](./GetInferDatasetSchemaUploadSignature.md) |
+| GetPresignedImportUrlV2 | `POST` | `/open/GetPresignedImportUrlV2` | DashboardServiceV2 | [Doc](./GetPresignedImportUrlV2.md) |
 | GetInferSourceFieldsResult | `POST` | `/api/v1/GetInferSourceFieldsResult` | DashboardService | [Doc](./GetInferSourceFieldsResult.md) |
 | GetUploadDataResult | `POST` | `/api/v1/GetUploadDataResult` | DashboardService | [Doc](./GetUploadDataResult.md) |
 | InferDatasetSchema | `POST` | `/api/v1/InferDatasetSchema` | DashboardService | [Doc](./InferDatasetSchema.md) |

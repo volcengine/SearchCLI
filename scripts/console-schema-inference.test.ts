@@ -17,7 +17,7 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
 ): Promise<T> {
   callOrder.push(pathname);
 
-  if (pathname === '/api/v1/GetInferDatasetSchemaUploadSignature') {
+  if (pathname === '/open/GetPresignedImportUrlV2') {
     assert.deepEqual(payload, {
       FileName: 'sample-items.jsonl',
       ProjectName: 'demo-project'
@@ -25,18 +25,14 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
     return {
       Result: {
         FileUrl: 'https://example.com/upload',
-        FileKey: 'schema-infer/2103180626/20260616/sample-items.jsonl',
-        TosBucket: 'bucket-a',
-        HttpMethod: 'PUT',
-        ExpiresInSeconds: 600
+        FileKey: 'dataset-import/2103180626/sample-items-abcd1234efgh5678'
       }
     } as T;
   }
 
   if (pathname === '/api/v1/AddInferDatasetSchemaTask') {
     assert.deepEqual(payload, {
-      TosBucket: 'bucket-a',
-      TosKey: 'schema-infer/2103180626/20260616/sample-items.jsonl',
+      TosKey: 'dataset-import/2103180626/sample-items-abcd1234efgh5678',
       Type: 1,
       Language: 'zh',
       ProjectName: 'demo-project'
@@ -120,8 +116,8 @@ async function main(): Promise<void> {
   });
 
   assert.equal(result.taskId, 'task-123');
-  assert.equal(result.upload.fileKey, 'schema-infer/2103180626/20260616/sample-items.jsonl');
-  assert.equal(result.upload.tosBucket, 'bucket-a');
+  assert.equal(result.upload.fileKey, 'dataset-import/2103180626/sample-items-abcd1234efgh5678');
+  assert.equal(result.upload.tosBucket, undefined);
   assert.deepEqual(result.schema, [
     { Name: 'item_id', Type: 1, BizAttr: 11 },
     { Name: 'title', Type: 1 }
@@ -131,7 +127,7 @@ async function main(): Promise<void> {
     FilterFields: ['item_id']
   });
   assert.deepEqual(callOrder, [
-    '/api/v1/GetInferDatasetSchemaUploadSignature',
+    '/open/GetPresignedImportUrlV2',
     'UPLOAD',
     '/api/v1/AddInferDatasetSchemaTask',
     '/api/v1/GetInferDatasetSchemaResult',

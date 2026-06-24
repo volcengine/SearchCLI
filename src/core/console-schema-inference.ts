@@ -41,7 +41,8 @@ export async function inferSchemaArtifactsWithConsole(
     ...options,
     fileName: toUploadFileName(options.filePath),
     contentType: 'application/x-ndjson',
-    fileContent: toJsonlPayload(options.normalizedItems)
+    fileContent: toJsonlPayload(options.normalizedItems),
+    signatureFileExtension: '.jsonl'
   });
   const fileUrl = uploadResult.fileUrl;
   const fileKey = uploadResult.fileKey;

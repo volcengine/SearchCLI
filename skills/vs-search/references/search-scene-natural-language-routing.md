@@ -31,6 +31,21 @@ This is a workflow-oriented routing guide, not an API reference. Exact payload s
 | search-term correction, spell correction, typo correction, 搜索词纠错 | If the request involves binding/uploading/importing a correction-exemption dictionary, use the Dictionary Binding Workflow below; otherwise run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].CorrectionConfig` |
 | search result facet stats, facet aggregation, 搜索结果分类统计 | Run `search scene update` and modify `Config.SearchConfig.RetrieveConfigs[].FacetConfig` |
 | trigger summary, search overview, 触发摘要 | Run `search scene update` and modify `Config.OverviewConfig` |
+| fine-grained operations, query-specific search rules, specific-query rules, 指定搜索词的搜索规则, 精细化运营 | Use the dedicated ServingControls Workflow below instead of treating this as a direct inline scene-field edit |
+
+## ServingControls Workflow
+
+If the target is `ServingControls[]`, use this workflow:
+
+1. First configure `QueryCondition` for the serving-control rule, because `ServingControls[]` is a conditional override workflow rather than a plain inline config block.
+2. Then inspect the user's requested override area and map it back to the matching intent in the **Intent Routing** table above.
+3. If that matched intent already has a dedicated workflow, reuse that workflow, but write the final config under `Config.SearchConfig.RetrieveConfigs[].ServingControls[]` instead of the top-level retrieve-config path.
+4. If that matched intent is a direct inline config edit, keep the same payload shape and field semantics as the top-level config area, but change the final write target to the corresponding nested field under `ServingControls[]`.
+
+Interpretation:
+
+- `ServingControls[]` should be handled as “configure trigger condition first, then apply an override”, not as a flat bag of unrelated fields.
+- Nested fields inside `ServingControls[]` do not define a new config language; they reuse the same config meaning and workflow as the corresponding top-level areas, with only the final write path changed.
 
 ## FilterConfig Workflow
 

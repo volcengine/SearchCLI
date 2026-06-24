@@ -92,8 +92,7 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dict list` | console | `POST /api/v1/ListDicts` | [ListDicts](./api-references/modules/dictionary-management/ListDicts.md) |
 | `dict check-input` | console | `POST /api/v1/CheckDictInput` | [CheckDictInput](./api-references/modules/dictionary-management/CheckDictInput.md) |
 | `dict bind-scenes` | console | `POST /api/v1/BindDictToScenes` | [BindDictToScenes](./api-references/modules/dictionary-management/BindDictToScenes.md) |
-| `dict write-terms` | workflow over console + data plane | `GetInferDatasetSchemaUploadSignature` -> HTTP PUT -> `POST /api/v1/dict/{dictId}/write_terms` | none; file upload is internal when `--file` is used |
-| `dataset upload-signature get` | console | `POST /api/v1/GetInferDatasetSchemaUploadSignature` | none; returns TOS presigned upload URL |
+| `dict write-terms` | workflow over console + data plane | `GetPresignedImportUrlV2` -> HTTP PUT -> `POST /api/v1/dict/{dictId}/write_terms` | none; file upload is internal when `--file` is used |
 | `search scene create` | console | `POST /api/v1/CreateSearchScene` | [CreateSearchScene](./api-references/modules/search-scenes/CreateSearchScene.md) |
 | `search scene list` | console | `POST /api/v1/ListSearchScene` | [ListSearchScene](./api-references/modules/search-scenes/ListSearchScene.md) |
 | `search scene get` | console | `POST /api/v1/GetSearchScene` | [GetSearchScene](./api-references/modules/search-scenes/GetSearchScene.md) |
@@ -608,29 +607,16 @@ Create (omit `--rule-id`) or update (provide `--rule-id`) a recommend rule.
 #### `dict write-terms`
 
 - Execution modes:
-  1. `--file`: internal workflow `GetInferDatasetSchemaUploadSignature` -> HTTP PUT upload -> data-plane `POST /api/v1/dict/{dictId}/write_terms`
+  1. `--file`: internal workflow `GetPresignedImportUrlV2` -> HTTP PUT upload -> data-plane `POST /api/v1/dict/{dictId}/write_terms`
   2. `--entries`: direct data-plane `POST /api/v1/dict/{dictId}/write_terms`
-- The TOS signature response and TOS object coordinates are internal implementation details when `--file` is used. They are not exposed as command flags.
+- The presigned import response and uploaded object key are internal implementation details when `--file` is used. They are not exposed as command flags.
 
 | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- |
 | `--dict-id` | path param | string | yes | Target dictionary ID (in URL path). |
-| `--file` | internal upload source | local file path | no (use with `--entries`) | Local CSV / JSONL / text file. CLI uploads it internally, then sends returned `TosBucket` / `TosKey` to the data-plane API. |
+| `--file` | internal upload source | local file path | no (use with `--entries`) | Local CSV file. CLI uploads it internally, then sends returned `FileKey` as the data-plane `TosKey`. |
 | `--entries` | `Entries` | object[] | no | Inline JSON / `@file` / JSON file path. Entry shape: `[{ "Fields": ["..."] }]`. Use this for direct inline term writes instead of TOS file import. |
 | `--project-name` | n/a | n/a | no | Not sent to data-plane API (kept for CLI config consistency). |
-
-### `dataset upload-signature get`
-
-- API kind: `console`
-- Action: `GetInferDatasetSchemaUploadSignature`
-- Console path: `POST /api/v1/GetInferDatasetSchemaUploadSignature`
-- Returns a presigned TOS PUT URL used for uploading term files (or any JSONL/CSV) before calling data-plane write endpoints.
-
-| CLI flag | Request field | API type | Required | Format / range |
-| --- | --- | --- | --- | --- |
-| `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `--file-name` | `FileName` | string | no (defaults to `dict-terms.jsonl`) | Upload file name. Must be `.jsonl` for this endpoint. |
-| `--project-name` | `ProjectName` | string | no | Project scope. |
 
 ### `search run`
 

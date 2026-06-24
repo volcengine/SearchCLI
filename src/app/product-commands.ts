@@ -488,10 +488,6 @@ export interface DictWriteTermsOptions extends ProjectScopedOptions {
   entries?: string;
 }
 
-export interface DatasetUploadSignatureOptions extends ProjectScopedOptions {
-  fileName?: string;
-}
-
 export interface RecommendUserProfileOptions extends ProjectScopedOptions {
   applicationId: string;
   useRandomUser?: boolean;
@@ -1391,18 +1387,6 @@ export async function runDictWriteTermsCommand(options: DictWriteTermsOptions): 
   await printResult(callDataPlane(`/api/v1/dict/${encodeURIComponent(dictId)}/write_terms`, payload, options));
 }
 
-export async function runDatasetUploadSignatureGetCommand(options: DatasetUploadSignatureOptions): Promise<void> {
-  const fileName = options.fileName ?? 'dict-terms.jsonl';
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      FileName: fileName
-    });
-  requireNonEmptyObject(payload, 'Need --data or --file-name for dataset upload-signature get.');
-  await printResult(callOpenApi('/api/v1/GetInferDatasetSchemaUploadSignature', payload, options));
-}
-
 export async function runChatSearchRunCommand(options: ChatSearchRunOptions): Promise<void> {
   const payload = ensureChatSearchSessionId(
     (await loadJsonInput(options.data)) ??
@@ -1772,7 +1756,6 @@ COMMON FLAGS
         'vs dataset update --id <dataset-id> [--version <n>] [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]',
         'vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document> [--schema @schema.json] [service flags]',
-        'vs dataset upload-signature get [--file-name <name>] [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
       ]
@@ -1978,18 +1961,6 @@ KEY FLAGS
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
   vs dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json`,
-    'upload-signature': `Get a TOS upload signature for file import.
-
-USAGE
-  vs dataset upload-signature get [--file-name <name>] [service flags]
-  vs dataset upload-signature get --data @payload.json [service flags]
-
-KEY FLAGS
-  --file-name   Upload file name. Defaults to dict-terms.jsonl.
-
-EXAMPLES
-  vs dataset upload-signature get --file-name terms.csv
-  vs dataset upload-signature get`
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
@@ -2876,17 +2847,6 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       }
       throw new Error(`Unknown dataset schema subcommand: ${subAction}`);
     }
-    case 'upload-signature': {
-      const subAction = argv[1];
-      if (subAction === 'get') {
-        await runDatasetUploadSignatureGetCommand({
-          ...projectOptions,
-          fileName: optionalString(values['file-name'])
-        });
-        return;
-      }
-      throw new Error(`Unknown dataset upload-signature subcommand: ${subAction}`);
-    }
     case 'update':
       await runDatasetUpdateCommand({
         ...projectOptions,
@@ -3677,7 +3637,6 @@ function parseStandaloneOptions(argv: string[]) {
       'tos-key': { type: 'string' },
       entries: { type: 'string' },
       scenes: { type: 'string' },
-      'file-name': { type: 'string' },
       'search-config': { type: 'string' },
       'query-completion-config': { type: 'string' },
       'want-to-search-config': { type: 'string' },

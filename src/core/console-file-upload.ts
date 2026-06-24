@@ -11,6 +11,7 @@ export interface ConsoleFileUploadOptions extends ServiceConfigInput {
   fileName?: string;
   contentType?: string;
   fileContent?: string | Buffer;
+  signatureFileExtension?: string;
 }
 
 export interface ConsoleFileUploadResult {
@@ -26,10 +27,15 @@ export async function uploadFileWithConsoleSignature(
 ): Promise<ConsoleFileUploadResult> {
   const config = resolveServiceConfig(options);
   const openapi = new VikingOpenApiClient(config);
-  const fileName = options.fileName ?? path.basename(options.filePath ?? 'upload.bin');
+  const fallbackExtension =
+    path.extname(options.fileName ?? options.filePath ?? 'upload.bin') || '.jsonl';
+  const fileName = normalizeConsoleUploadFileName(
+    options.fileName ?? path.basename(options.filePath ?? 'upload.bin'),
+    options.signatureFileExtension ?? fallbackExtension
+  );
 
   const signatureResponse = unwrapResultEnvelope(
-    await openapi.post('/api/v1/GetInferDatasetSchemaUploadSignature', {
+    await openapi.post('/open/GetPresignedImportUrlV2', {
       FileName: fileName,
       ProjectName: options.projectName ?? config.projectName
     })
@@ -64,6 +70,23 @@ export function detectUploadContentType(fileName: string): string {
   if (extension === '.json') return 'application/json';
   if (extension === '.txt') return 'text/plain';
   return 'application/octet-stream';
+}
+
+export function normalizeConsoleUploadFileName(rawFileName: string, extension?: string): string {
+  const sourceName = rawFileName.trim() || 'upload';
+  const normalizedExtensionSource = extension ?? (path.extname(sourceName) || '.jsonl');
+  const normalizedExtension = normalizedExtensionSource.startsWith('.')
+    ? normalizedExtensionSource.toLowerCase()
+    : `.${normalizedExtensionSource.toLowerCase()}`;
+  const baseName = path.basename(sourceName);
+  const nameWithoutExt = baseName.replace(/\.[^.]*$/, '');
+  const sanitizedStem = nameWithoutExt
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^[_\.]+|[_\.]+$/g, '')
+    .slice(0, Math.max(1, 128 - normalizedExtension.length));
+  return `${sanitizedStem || 'upload'}${normalizedExtension}`;
 }
 
 async function uploadFileToTos(

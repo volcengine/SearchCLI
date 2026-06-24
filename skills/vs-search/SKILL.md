@@ -4,7 +4,7 @@ description: "Search runtime and scene management: verify queries, inspect scene
 category: search
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.1.0"
-keywords: search debug, search run, query run, search scene, search diagnosis, recall issue, online strategy, boost bury, rerank, synonym, diversity
+keywords: search debug, search run, query run, search scene, search diagnosis, recall issue, online strategy, boost bury, rerank, synonym, diversity, serving controls, fine-grained operations, query-specific rules
 commands: search run, search scene create, search scene list, search scene get, search scene update, app status, app diagnose
 ---
 
@@ -19,6 +19,7 @@ Use this skill for:
 - online result checks
 - recall or ranking issue diagnosis
 - separating persistent scene config from request-only runtime parameters
+- fine-grained operations / serving-controls updates, including query-specific search rules
 
 If the user wants automated batch evaluation or similarity tuning across many queries and strategies, use `vs-search-tuning` instead.
 

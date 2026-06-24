@@ -828,15 +828,15 @@
           "doc": "modules/dataset-management/GetInferDatasetSchemaResult.md"
         },
         {
-          "name": "GetInferDatasetSchemaUploadSignature",
-          "service": "DashboardService",
+          "name": "GetPresignedImportUrlV2",
+          "service": "DashboardServiceV2",
           "method": "POST",
-          "path": "/api/v1/GetInferDatasetSchemaUploadSignature",
-          "requestType": "dataset.GetInferDatasetSchemaUploadSignatureReq",
-          "responseType": "dataset.GetInferDatasetSchemaUploadSignatureResp",
-          "topAction": "GetInferDatasetSchemaUploadSignature",
+          "path": "/open/GetPresignedImportUrlV2",
+          "requestType": "dataset_v2.GetPresignedImportUrlReqV2",
+          "responseType": "dataset_v2.GetPresignedImportUrlRespV2",
+          "topAction": "GetPresignedImportUrlV2",
           "topVersion": "2025-03-01",
-          "doc": "modules/dataset-management/GetInferDatasetSchemaUploadSignature.md"
+          "doc": "modules/dataset-management/GetPresignedImportUrlV2.md"
         },
         {
           "name": "GetInferSourceFieldsResult",
