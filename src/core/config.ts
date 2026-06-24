@@ -8,6 +8,7 @@ import { resolveCliDefaults } from './user-config';
 const runtimeConfigSchema = z.object({
   controlPlaneBaseUrl: z.string().url(),
   dataPlaneBaseUrl: z.string().url(),
+  dataPlaneHost: z.string().min(1).optional(),
   service: z.string().min(1),
   applicationId: z.string().min(1),
   datasetId: z.string().min(1),
@@ -31,6 +32,7 @@ export interface RuntimeConfigInput {
   baseUrl?: string;
   controlPlaneBaseUrl?: string;
   dataPlaneBaseUrl?: string;
+  dataPlaneHost?: string;
   service?: string;
   applicationId?: string;
   datasetId?: string;
@@ -74,6 +76,7 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
   return runtimeConfigSchema.parse({
     controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
     dataPlaneBaseUrl: defaults.dataPlaneBaseUrl,
+    dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
     service: defaults.service,
     applicationId: input.applicationId ?? process.env.VIKING_APPLICATION_ID,
     datasetId: input.datasetId ?? process.env.VIKING_DATASET_ID,

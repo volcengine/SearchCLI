@@ -197,6 +197,7 @@ Tell the user that authentication is complete and they can continue with `vs-ite
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this onboarding and purchase workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Always start with `vs auth status --json`; if it reports authenticated and `vs doctor --json` passes, early-exit to Step 8.
 - Do not create an order programmatically; the user must purchase through the console page.
 - Registration, real-name verification, payment, and key creation are always human checkpoints. The agent must wait for explicit user confirmation before moving past each checkpoint.

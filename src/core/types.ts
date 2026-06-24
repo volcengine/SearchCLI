@@ -420,6 +420,7 @@ export function buildEventTypeEnumerateMeta(customValues?: string[]): UserEventE
 export interface RuntimeConfig {
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
+  dataPlaneHost?: string;
   service: string;
   applicationId: string;
   datasetId: string;

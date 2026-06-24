@@ -5,7 +5,7 @@ category: app
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.1.0"
 keywords: app dataset bind, bind dataset, field config inference, index fields, filter fields, suggest fields
-commands: app dataset bind, app dataset-config get, app dataset-config list, dataset schema get, dataset get
+commands: app dataset bind, app dataset-config get, app dataset-config list, dataset get
 ---
 
 # Viking App Dataset Bind
@@ -27,7 +27,7 @@ Use this skill when the user wants to run `vs app dataset bind` and the bind ste
 
 - `app dataset bind`: bind the dataset to the application with an explicit `--field-config`
 - `app dataset-config get` / `app dataset-config list`: inspect current bound dataset config before changing it
-- `dataset schema get` / `dataset get`: inspect the dataset schema and metadata needed for field inference
+- `dataset get`: inspect the dataset schema and metadata needed for field inference
 
 ## Workflow
 
@@ -102,6 +102,7 @@ See the authoritative reference at `vs-item-onboarding/references/video-field-co
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this bind workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Do not run `app dataset bind` with a guessed or empty bind-time `field-config` when searchable/filter/suggest/image/video fields are part of the user request
 - Do not start bind-time inference until schema and dataset-side field attributes have been explicitly reconfirmed with the user
 - Do not skip user confirmation for `IndexFields`, `FilterFields`, `SuggestFields`, `ImageIndexFields`, or `VideoIndexFields`

@@ -37,6 +37,7 @@ const cliProfileSchema = z.object({
   baseUrl: z.string().url().optional(),
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
+  host: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   projectName: z.string().min(1).optional(),
   region: z.string().min(1).optional(),
@@ -48,6 +49,8 @@ const cliConfigSchema = z.object({
   baseUrl: z.string().url().optional(),
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
+  host: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   service: z.string().min(1).optional(),
   accessKeyId: z.string().min(1).optional(),
@@ -80,6 +83,8 @@ export interface ResolvedCliDefaults {
   baseUrl: string;
   controlPlaneBaseUrl: string;
   dataPlaneBaseUrl: string;
+  dataPlaneHost?: string;
+  xTtBackend?: string;
   environmentId?: EnvironmentId;
   service: string;
   accessKeyId?: string;
@@ -108,6 +113,8 @@ const configKeySpecs = {
   'base-url': { property: 'baseUrl', type: 'string', secret: false },
   'control-plane-base-url': { property: 'controlPlaneBaseUrl', type: 'string', secret: false },
   'data-plane-base-url': { property: 'dataPlaneBaseUrl', type: 'string', secret: false },
+  host: { property: 'host', type: 'string', secret: false, visible: false },
+  'x-tt-backend': { property: 'xTtBackend', type: 'string', secret: false, visible: false },
   'environment-id': { property: 'environmentId', type: 'string', secret: false },
   'project-name': { property: 'projectName', type: 'string', secret: false },
   ak: { property: 'accessKeyId', type: 'string', secret: false, visible: false, managedBy: 'auth' },
@@ -170,7 +177,7 @@ export async function saveCliConfig(config: VikingCliConfig, customPath?: string
   const configPath = resolveCliConfigPath(customPath);
   const normalized = cliConfigSchema.parse(config);
   await ensureDir(path.dirname(configPath));
-  await writeJson(configPath, normalized);
+  await writeJson(configPath, serializeCliConfigShape(normalized));
   return configPath;
 }
 
@@ -296,6 +303,8 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     baseUrl: endpoints.dataPlaneBaseUrl,
     controlPlaneBaseUrl: endpoints.controlPlaneBaseUrl,
     dataPlaneBaseUrl: endpoints.dataPlaneBaseUrl,
+    dataPlaneHost: profileConfig.host ?? stored.host,
+    xTtBackend: stored.xTtBackend,
     environmentId: endpoints.envId,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
     accessKeyId:
@@ -390,15 +399,92 @@ export function upsertCliProfile(
 export function parseCliConfigKey(value: string): CliConfigKey {
   const normalized = normalizeCliConfigKey(value);
   if (normalized in configKeySpecs) {
-    return normalized as CliConfigKey;
+    const key = normalized as CliConfigKey;
+    const spec = configKeySpecs[key];
+    if (!('visible' in spec) || spec.visible !== false) {
+      return key;
+    }
   }
   throw new Error(`Unknown config key: ${value}. Use one of: ${listCliConfigKeys().join(', ')}`);
+}
+
+export function sanitizeCliConfigForDisplay<T extends Record<string, unknown>>(config: T): Partial<T> {
+  const hiddenProperties = new Set<string>(
+    Object.values(configKeySpecs)
+      .filter(spec => 'visible' in spec && spec.visible === false)
+      .map(spec => spec.property)
+  );
+
+  return Object.fromEntries(
+    Object.entries(config).filter(([key]) => !hiddenProperties.has(key))
+  ) as Partial<T>;
 }
 
 function parseCliConfig(raw: string): VikingCliConfig {
   const trimmed = raw.trim();
   if (!trimmed) return {};
-  return cliConfigSchema.parse(JSON.parse(trimmed) as unknown);
+  return cliConfigSchema.parse(normalizeCliConfigShape(JSON.parse(trimmed) as unknown));
+}
+
+function normalizeCliConfigShape(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (key === 'profiles' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      normalized.profiles = entry;
+      continue;
+    }
+
+    normalized[key] = entry;
+  }
+
+  return normalizeXttBackendEntry(normalized);
+}
+
+function normalizeXttBackendEntry(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = { ...(value as Record<string, unknown>) };
+  const xttBackend = record['x-tt-backend'];
+  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0 && record.xTtBackend === undefined) {
+    record.xTtBackend = xttBackend.trim();
+  }
+  delete record['x-tt-backend'];
+  return record;
+}
+
+function serializeCliConfigShape(config: VikingCliConfig): Record<string, unknown> {
+  const serialized = serializeXttBackendEntry(config);
+  const profiles = config.profiles
+    ? Object.fromEntries(
+        Object.entries(config.profiles).map(([profileName, profileConfig]) => [
+          profileName,
+          serializeXttBackendEntry(profileConfig)
+        ])
+      )
+    : undefined;
+
+  if (profiles) {
+    serialized.profiles = profiles;
+  }
+
+  return serialized;
+}
+
+function serializeXttBackendEntry(value: Record<string, unknown>): Record<string, unknown> {
+  const record = { ...value };
+  const xttBackend = record.xTtBackend;
+  delete record.xTtBackend;
+  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0) {
+    record['x-tt-backend'] = xttBackend;
+  }
+  return record;
 }
 
 function parseCliConfigValue(key: CliConfigKey, rawValue: string): string | number {

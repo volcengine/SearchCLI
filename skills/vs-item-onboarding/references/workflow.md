@@ -5,7 +5,7 @@ This reference holds the full, detailed workflow and constraint list for `vs-ite
 ## Commands
 
 - `item profile`: first-pass profiling for field shape, primary-key candidates, title candidates, cleanup, and validation risk
-- `item plan`: generate a reviewable first-pass draft that contains `schema.json`, `online-config.json`, `validation.json`, and search/recommend templates. It may also emit draft dataset-side config artifacts such as `field-config.json` or `dataset-create.json` with `DataFieldConfig`; treat these as execution inputs, not as user-confirmed bind config. Add `--skip-app` when the requested outcome is dataset-only.
+- `item plan`: generate a reviewable first-pass draft that contains `schema.json`, `online-config.json`, `validation.json`, and search/recommend templates. The preferred path is `--schema-source console`: get a signed upload URL from console, upload normalized JSONL to TOS, call `AddInferDatasetSchemaTask`, then poll `GetInferDatasetSchemaResult` for the stable schema. It may also emit draft dataset-side config artifacts such as `field-config.json` or `dataset-create.json` with `DataFieldConfig`; treat these as execution inputs, not as user-confirmed bind config. Add `--skip-app` when the requested outcome is dataset-only.
 - `item provision` / `item apply`: both commands also accept `--skip-app`. Use it as an execution-time guard rail when you need to enforce dataset-only behavior from an existing plan or when the plan was generated before the boundary was finalized.
 - `dataset create` / `dataset ingest`: the preferred dataset-only provisioning path after Stage A confirms the schema; prefer `dataset-create.json` so `Schema` and `DataFieldConfig.FieldDescMap` travel together
 - `item apply`: stable executor for the `dataset+app` branch: `validation gate -> schema check -> create dataset -> ingest -> create app -> bind dataset -> optional smoke checks`
@@ -33,7 +33,7 @@ After the dataset type is clear, the agent MUST decide the requested provisionin
 Rules:
 
 - If the user did not ask for app creation or app-level setup, default to `dataset-only`.
-- For `dataset-only`, prefer `item plan --skip-app`, then run `dataset create --data @dataset-create.json` and `dataset ingest` after Stage A so the dataset-side `FieldDescMap` is submitted together with the schema. Fall back to `--schema @schema.json` only when the full payload is missing or clearly unsuitable for the current plan. If execution later goes through `item provision` or `item apply`, pass `--skip-app` again as a guard rail. Stop there.
+- For `dataset-only`, prefer `item plan --skip-app --schema-source console`, then run `dataset create --data @dataset-create.json` and `dataset ingest` after Stage A so the dataset-side `FieldDescMap` is submitted together with the schema. Fall back to `--schema @schema.json` only when the full payload is missing or clearly unsuitable for the current plan. If execution later goes through `item provision` or `item apply`, pass `--skip-app` again as a guard rail. Stop there.
 - For `dataset+app`, run the full Stage A -> Stage B -> `item apply --confirm-review` path.
 - Do not create or bind an application "just in case". App creation is an explicit branch decision, not a default side effect.
 
@@ -42,11 +42,11 @@ Examples:
 ```bash
 # Generic item / catalog / card-style dataset
 vs item profile --file ./items.json --type item --pretty
-vs item plan --file ./items.json --type item --goal "Build item search"
+vs item plan --file ./items.json --type item --goal "Build item search" --schema-source console
 
 # Video dataset
 vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
+vs item plan --file ./videos.jsonl --type video --goal "Build video search" --schema-source console
 ```
 
 Before provisioning anything, do not ask for a blind yes/no. Show the user the schema field-by-field (see [agent-confirmation-ux.md](agent-confirmation-ux.md) §A):
@@ -77,7 +77,7 @@ Each step below annotates which Hard Rules in `SKILL.md` constrain it, so the ag
 2. Determine the dataset type (`item` or `video`) using the rules above. **(Hard Rule #1)**
 3. Determine the provisioning mode (`dataset-only` or `dataset+app`) using the rules above. If the user did not ask for app creation, default to `dataset-only`. **(Hard Rule #2)**
 4. Skim a few raw rows, then run `item profile --file <data> --type <item|video>` for first-pass profiling. **(Hard Rule #1)**
-5. Run `item plan --file <data> --type <item|video> --goal "<business goal>"` to generate the plan directory. Add `--skip-app` when the requested path is `dataset-only`. If execution later goes through `item provision` or `item apply`, those commands also accept `--skip-app` as an execution-time guard rail. **(Hard Rules #1, #2, #6)**
+5. Run `item plan --file <data> --type <item|video> --goal "<business goal>" --schema-source console` to generate the plan directory through the remote stable-schema chain. Add `--skip-app` when the requested path is `dataset-only`. If execution later goes through `item provision` or `item apply`, those commands also accept `--skip-app` as an execution-time guard rail. **(Hard Rules #1, #2, #6)**
 6. Review `schema.json`, `online-config.json`, `validation.json` with [review-checklist.md](review-checklist.md). If `item plan` also emitted `field-config.json` or embedded `DataFieldConfig` in `dataset-create.json`, treat them as draft artifacts only; bind-time confirmation is still deferred to Stage B. **(Hard Rule #6)**
 7. Stage A: explicitly ask the user for approval of the generated `schema.json` draft (name, type, attributes such as `PK` / `Required` / `BizAttr`, intended meaning). For `--type video`, explicitly show whether the semantic slots `content_id`, `content_type`, `video_url`, `parent_content_id`, and `sequence_index` are present and how they map to BizAttr. Do not treat first-pass plan generation as approval. Do not ask the user to confirm dataset-side field groups at this stage. The Stage A dialog may be issued only after the full schema context has been rendered. **(Hard Rules #3, #4; UX contract in [agent-confirmation-ux.md §A](agent-confirmation-ux.md))**
 8. Verify that schema `Meaning` values came from prompt-based inference grounded in source data and business goal. If meanings are wrong, or if any required video semantic slot is missing or ambiguously mapped, fix `schema.json` before continuing. If the plan emitted `FieldDescMap` or other draft field-group config, do not treat it as confirmed until the appropriate review stage. **(Hard Rules #4, #6; "Additional MUST" below)**

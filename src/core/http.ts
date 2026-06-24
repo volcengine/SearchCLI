@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
+import { Signer } from '@volcengine/openapi';
 import { formatMissingVikingAuthMessage } from './auth-errors';
 import type { ServiceConfig } from './service-config';
 
@@ -40,7 +41,7 @@ export async function requestJson<T = unknown>(
   const pathName = pathname.startsWith('/') ? pathname : `/${pathname}`;
   const url = new URL(`${baseUrl}${pathName}`);
   appendQueryParams(url, params);
-  return sendSignedJson<T>(config, method, url, payload);
+  return sendSignedJson<T>(config, method, url, payload, false);
 }
 
 export async function postOpenApiJson<T = unknown>(
@@ -63,21 +64,22 @@ export async function requestOpenApiJson<T = unknown>(
     return requestJson<T>(config, method, pathname, payload, params);
   }
 
-  return sendSignedJson<T>(config, method, translated, withDefaultProjectName(payload, config.projectName));
+  return sendSignedJson<T>(config, method, translated, withDefaultProjectName(payload, config.projectName), true);
 }
 
 async function sendSignedJson<T = unknown>(
   config: ServiceConfig,
   method: SignedHttpMethod,
   url: URL,
-  payload?: unknown
+  payload: unknown,
+  includeControlPlaneHeaders: boolean
 ): Promise<T> {
   const body = shouldSendBody(method, payload) ? JSON.stringify(payload ?? {}) : undefined;
   const timeoutSignal = AbortSignal.timeout(config.timeoutMs);
 
   const response = await fetch(url, {
     method,
-    headers: await buildHeaders(config, method, url, body),
+    headers: await buildHeaders(config, method, url, body, includeControlPlaneHeaders),
     body,
     signal: timeoutSignal
   });
@@ -138,18 +140,20 @@ async function buildHeaders(
   config: ServiceConfig,
   method: SignedHttpMethod,
   url: URL,
-  body?: string
+  body: string | undefined,
+  includeControlPlaneHeaders: boolean
 ): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    accept: 'application/json'
-  };
+  const signedHost = resolveSignedHost(config, url);
+  const headers = createBaseHeaders();
+  if (includeControlPlaneHeaders && config.xTtBackend) {
+    headers['x-tt-backend'] = config.xTtBackend;
+  }
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
   }
 
   if (config.accessKeyId && config.secretKey) {
-    const { Signer } = await import('@volcengine/openapi');
-    headers.host = url.host;
+    headers.host = signedHost;
     const signer = new Signer(
       {
         region: config.region,
@@ -172,6 +176,50 @@ async function buildHeaders(
   }
 
   throw new Error(formatMissingVikingAuthMessage());
+}
+
+export function buildSignedRequestHeaders(
+  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  method: SignedHttpMethod,
+  url: URL,
+  body?: string,
+  initialHeaders?: Record<string, string>
+): Record<string, string> {
+  if (!config.accessKeyId || !config.secretKey) {
+    throw new Error(formatMissingVikingAuthMessage());
+  }
+
+  const headers: Record<string, string> = {
+    ...createBaseHeaders(),
+    ...initialHeaders,
+    host: resolveSignedHost(config, url)
+  };
+
+  const signer = new Signer(
+    {
+      region: config.region,
+      method,
+      pathname: url.pathname,
+      params: Object.fromEntries(url.searchParams.entries()),
+      headers,
+      body: body ?? ''
+    },
+    config.service
+  );
+
+  signer.addAuthorization({
+    accessKeyId: config.accessKeyId,
+    secretKey: config.secretKey,
+    sessionToken: ''
+  });
+
+  return headers;
+}
+
+function createBaseHeaders(): Record<string, string> {
+  return {
+    accept: 'application/json'
+  };
 }
 
 function parseMaybeJson(rawText: string): unknown {
@@ -222,4 +270,22 @@ function withDefaultProjectName(payload: unknown, projectName: string): unknown 
     ...(payload as Record<string, unknown>),
     ProjectName: projectName
   };
+}
+
+function resolveSignedHost(
+  config: Pick<ServiceConfig, 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  url: URL
+): string {
+  if (isDataPlaneRequest(config.dataPlaneBaseUrl, url) && config.dataPlaneHost) {
+    return config.dataPlaneHost;
+  }
+  return url.host;
+}
+
+function isDataPlaneRequest(dataPlaneBaseUrl: string, url: URL): boolean {
+  return normalizeOrigin(dataPlaneBaseUrl) === normalizeOrigin(url);
+}
+
+function normalizeOrigin(input: string | URL): string {
+  return new URL(input).origin.replace(/\/+$/, '').toLowerCase();
 }

@@ -105,6 +105,7 @@ This first version is for similarity tuning. It defaults to text-query/text-item
 
 ## Constraints
 
+- Before executing any concrete `vs ...` command in this tuning workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Do not run tuning before asking the user whether they have a query set.
 - Do not run tuning before `search tune validate` has checked the accepted query file, unless the user explicitly asks to skip validation.
 - Do not run tuning before `search tune plan` has been shown and summarized.

@@ -1,16 +1,18 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { loadJsonInput, loadOptionalStringArray, parseBooleanString } from '../core/json-input';
 import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-status';
+import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
 import { resolvePurchasePageUrl, type EnvironmentId } from '../core/environment';
 import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
-import { ApiRequestError } from '../core/http';
+import { ApiRequestError, postJson } from '../core/http';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
@@ -117,11 +119,6 @@ export interface DatasetListOptions extends ServiceCommandOptions {
   name?: string;
   applicationId?: string;
   full?: boolean;
-}
-
-export interface DatasetSchemaGetOptions extends ProjectScopedOptions {
-  id: string;
-  version?: number;
 }
 
 export interface DatasetSchemaCheckOptions extends ProjectScopedOptions {
@@ -449,6 +446,48 @@ export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
   config?: string;
 }
 
+export interface DictCreateOptions extends ProjectScopedOptions {
+  name?: string;
+  type?: string;
+  description?: string;
+  enableIdempotent?: boolean;
+}
+
+export interface DictGetOptions extends ProjectScopedOptions {
+  dictId?: string;
+}
+
+export interface DictListOptions extends ProjectScopedOptions {
+  dictIds?: string;
+  types?: string;
+}
+
+export interface DictUpdateOptions extends ProjectScopedOptions {
+  dictId?: string;
+  name?: string;
+  description?: string;
+}
+
+export interface DictCheckInputOptions extends ProjectScopedOptions {
+  dictId?: string;
+  language?: string;
+  type?: string;
+  tosBucket?: string;
+  tosKey?: string;
+  entries?: string;
+}
+
+export interface DictBindScenesOptions extends ProjectScopedOptions {
+  dictId?: string;
+  scenes?: string;
+}
+
+export interface DictWriteTermsOptions extends ProjectScopedOptions {
+  dictId?: string;
+  file?: string;
+  entries?: string;
+}
+
 export interface RecommendUserProfileOptions extends ProjectScopedOptions {
   applicationId: string;
   useRandomUser?: boolean;
@@ -716,17 +755,6 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
   requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
   validateUserEventSchema(payload);
   await printResult(callOpenApi('/api/v1/CreateDataset', payload, options));
-}
-
-export async function runDatasetSchemaGetCommand(options: DatasetSchemaGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      DatasetID: options.id,
-      Version: options.version,
-      ProjectName: options.projectName
-    });
-  await printResult(callOpenApi('/api/v1/GetDatasetSchema', payload, options));
 }
 
 export async function runDatasetSchemaCheckCommand(options: DatasetSchemaCheckOptions): Promise<void> {
@@ -1183,6 +1211,194 @@ export async function runRecommendSceneDeleteCommand(options: RecommendSceneGetO
   await printResult(callOpenApi('/api/v1/DeleteRecommendScene', payload, options));
 }
 
+export async function runRecommendRuleListCommand(options: RecommendRuleListOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      ProjectName: options.projectName,
+      Types: await loadOptionalStringArray(options.types),
+      DatasetID: options.datasetId,
+      InvertItemDatasetID: options.invertItemDatasetId
+    });
+  await printResult(callOpenApi('/api/v1/ListRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleGetCommand(options: RecommendRuleGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      ProjectName: options.projectName
+    });
+  await printResult(callOpenApi('/api/v1/GetRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleUpsertCommand(options: RecommendRuleUpsertOptions): Promise<void> {
+  const configPayload = await loadJsonInput(options.config);
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      Name: options.name,
+      Type: options.type,
+      Description: options.description,
+      DatasetID: options.datasetId,
+      Config: configPayload,
+      ProjectName: options.projectName
+    });
+  requireNonEmptyObject(payload, 'Need --data or rule fields for recommend rule upsert.');
+  await printResult(callOpenApi('/api/v1/UpsertRecommendRule', payload, options));
+}
+
+export async function runRecommendRuleDeleteCommand(options: RecommendRuleGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      RuleID: options.ruleId,
+      ProjectName: options.projectName
+    });
+  await printResult(callOpenApi('/api/v1/DeleteRecommendRule', payload, options));
+}
+
+export async function runDictCreateCommand(options: DictCreateOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      Name: options.name,
+      Type: options.type,
+      Description: options.description,
+      EnableIdempotent: options.enableIdempotent
+    });
+  requireNonEmptyObject(payload, 'Need --data or dict create fields.');
+  await printResult(callOpenApi('/api/v1/CreateDict', payload, options));
+}
+
+export async function runDictUpdateCommand(options: DictUpdateOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictId: options.dictId,
+      Name: options.name,
+      Description: options.description
+    });
+  requireNonEmptyObject(payload, 'Need --data or dict update fields.');
+  await printResult(callOpenApi('/api/v1/UpdateDict', payload, options));
+}
+
+export async function runDictGetCommand(options: DictGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictId: options.dictId
+    });
+  await printResult(callOpenApi('/api/v1/GetDict', payload, options));
+}
+
+export async function runDictDeleteCommand(options: DictGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictId: options.dictId
+    });
+  await printResult(callOpenApi('/api/v1/DeleteDict', payload, options));
+}
+
+export async function runDictListCommand(options: DictListOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictIds: await loadOptionalStringArray(options.dictIds),
+      Types: await loadOptionalStringArray(options.types)
+    });
+  await printResult(callOpenApi('/api/v1/ListDicts', payload, options));
+}
+
+export async function runDictCheckInputCommand(options: DictCheckInputOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictId: options.dictId,
+      Language: options.language,
+      Type: options.type,
+      TosBucket: options.tosBucket,
+      TosKey: options.tosKey,
+      Entries: await loadJsonInput(options.entries)
+    });
+  requireNonEmptyObject(payload, 'Need --data or dict input-check fields.');
+  await printResult(callOpenApi('/api/v1/CheckDictInput', payload, options));
+}
+
+export async function runDictBindScenesCommand(options: DictBindScenesOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName,
+      DictId: options.dictId,
+      Scenes: await loadJsonInput(options.scenes)
+    });
+  requireNonEmptyObject(payload, 'Need --data or --dict-id/--scenes for dict bind-scenes.');
+  await printResult(callOpenApi('/api/v1/BindDictToScenes', payload, options));
+}
+
+export async function runDictWriteTermsCommand(options: DictWriteTermsOptions): Promise<void> {
+  if (options.data) {
+    throw new Error('--data is not supported for dict write-terms. Use --file or --entries.');
+  }
+  if (options.file && options.entries) {
+    throw new Error('Use either --file or --entries for dict write-terms, not both.');
+  }
+
+  const dictId = options.dictId;
+  if (!dictId) {
+    throw new Error('--dict-id is required for dict write-terms.');
+  }
+  const dictResponse = await callOpenApi('/api/v1/GetDict', compactObject({
+    ProjectName: options.projectName,
+    DictId: dictId
+  }), options);
+  const dictPayload = extractOpenApiResult(dictResponse);
+  const dictType = optionalString((dictPayload as Record<string, unknown> | undefined)?.Type);
+  if (!dictType) {
+    throw new Error(`Could not resolve dictionary type for ${dictId}.`);
+  }
+
+  let payload: Record<string, unknown>;
+  if (options.file) {
+    const resolvedFilePath = path.resolve(options.file);
+    if (path.extname(resolvedFilePath).toLowerCase() !== '.csv') {
+      throw new Error('--file for dict write-terms only supports .csv files.');
+    }
+    const upload = await uploadFileWithConsoleSignature({
+      ...toServiceConfigInput(options),
+      projectName: options.projectName,
+      filePath: resolvedFilePath
+    });
+    payload = {
+      term_type: dictType,
+      items: [],
+      _data_tos_link: upload.fileKey
+    };
+  } else {
+    payload = {
+      term_type: dictType,
+      items: await loadJsonInput(options.entries)
+    };
+  }
+
+  requireNonEmptyObject(payload, 'Need --file or --entries for dict write-terms.');
+  await printResult(callDataPlane(`/api/v1/dict/${encodeURIComponent(dictId)}/write_terms`, payload, options));
+}
+
 export async function runChatSearchRunCommand(options: ChatSearchRunOptions): Promise<void> {
   const payload = ensureChatSearchSessionId(
     (await loadJsonInput(options.data)) ??
@@ -1455,6 +1671,13 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
+    case 'dict':
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runDictCli(argv);
+      return true;
     case 'search':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -1503,7 +1726,7 @@ export function printProductDomainsHelp(): void {
     'vs app dataset-config get|list|update',
     'vs app online-config get|update',
     'vs dataset create|get|list|delete|update|ingest',
-    'vs dataset schema get|check',
+    'vs dataset schema check',
     'vs data write|import|delete',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
@@ -1544,7 +1767,6 @@ COMMON FLAGS
         'vs dataset get --id <dataset-id> [--full] [service flags]',
         'vs dataset update --id <dataset-id> [--version <n>] [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]',
-        'vs dataset schema get --id <dataset-id> [--version <n>] [service flags]',
         'vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document> [--schema @schema.json] [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
@@ -1563,6 +1785,21 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+    dict: `${renderUsageBlock(
+      [
+        'vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]',
+        'vs dict update --dict-id <id> --name <name> [--description <text>] [service flags]',
+        'vs dict get --dict-id <id> [service flags]',
+        'vs dict list [--dict-ids <id1,id2>] [--types <type1,type2>] [service flags]',
+        'vs dict delete --dict-id <id> [service flags]',
+        'vs dict check-input [--dict-id <id>] [--language <zh|en|ja>] [--type <type>] [--tos-bucket <bucket> --tos-key <key> | --entries @entries.json] [service flags]',
+        'vs dict write-terms --dict-id <id> [--file ./terms.csv | --entries @entries.json] [service flags]',
+        'vs dict bind-scenes --dict-id <id> --scenes @scenes.json [service flags]'
+      ]
+    )}
+
+COMMON FLAGS
+  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     item: `${renderUsageBlock(
       [
         'vs item profile --file ./items.json [--type <item|video>] [output flags]',
@@ -1628,7 +1865,11 @@ SEARCH SCENE ENUMS
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
         'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]',
-        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]'
+        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]',
+        'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [service flags]',
+        'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
+        'vs recommend rule upsert --application-id <id> [--rule-id <id>] --name <name> --type <type> [--description <text>] [--dataset-id <id>] --config @rule.json [service flags]',
+        'vs recommend rule delete --application-id <id> --rule-id <id> [service flags]'
       ]
     )}
 
@@ -1731,10 +1972,131 @@ KEY FLAGS
 
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
-  vs dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json`
+  vs dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json`,
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
+}
+
+function printDictCommandHelp(action: string): void {
+  const helpByAction: Record<string, string> = {
+    create: `Create a console dictionary.
+
+USAGE
+  vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]
+  vs dict create --data @dict-create.json [service flags]
+
+KEY FLAGS
+  --name               Dictionary name.
+  --type               Dictionary type. Allowed values: query_recommendation, query_completion,
+                       query_correction_exemption, bidirection_synonyms, unidirection_synonyms.
+  --description        Optional dictionary description.
+  --enable-idempotent  When true, return the existing same-name dictionary instead of failing.
+
+EXAMPLES
+  vs dict create --name query-completion-demo --type query_completion
+  vs dict create --name synonym-demo --type bidirection_synonyms --enable-idempotent`,
+    update: `Update a console dictionary.
+
+USAGE
+  vs dict update --dict-id <id> --name <name> [--description <text>] [service flags]
+  vs dict update --data @dict-update.json [service flags]
+
+KEY FLAGS
+  --dict-id       Target dictionary ID.
+  --name          Required. Backend performs a full update and validates Name again.
+  --description   New description.
+
+EXAMPLES
+  vs dict update --dict-id dict_xxx --name updated-name
+  vs dict update --dict-id dict_xxx --name updated-name --description "new description"`,
+    get: `Get one console dictionary.
+
+USAGE
+  vs dict get --dict-id <id> [service flags]
+  vs dict get --data @dict-get.json [service flags]
+
+KEY FLAGS
+  --dict-id   Target dictionary ID.
+
+EXAMPLES
+  vs dict get --dict-id dict_xxx`,
+    delete: `Delete one console dictionary.
+
+USAGE
+  vs dict delete --dict-id <id> [service flags]
+  vs dict delete --data @dict-delete.json [service flags]
+
+KEY FLAGS
+  --dict-id   Target dictionary ID.
+
+EXAMPLES
+  vs dict delete --dict-id dict_xxx`,
+    list: `List console dictionaries.
+
+USAGE
+  vs dict list [--dict-ids <id1,id2>] [--types <type1,type2>] [service flags]
+  vs dict list --data @dict-list.json [service flags]
+
+KEY FLAGS
+  --dict-ids   Optional dictionary ID filter. Comma-separated or JSON array.
+  --types      Optional type filter. Comma-separated or JSON array.
+
+EXAMPLES
+  vs dict list
+  vs dict list --types query_completion,bidirection_synonyms
+  vs dict list --dict-ids dict_a,dict_b`,
+    'check-input': `Validate dictionary entries before upload or append.
+
+USAGE
+  vs dict check-input [--dict-id <id>] [--language <zh|en|ja>] [--type <type>] [--tos-bucket <bucket> --tos-key <key> | --entries @entries.json] [service flags]
+  vs dict check-input --data @dict-check.json [service flags]
+
+KEY FLAGS
+  --dict-id      Existing dictionary ID. When provided, backend ignores --type and validates
+                 against the existing dictionary type and accumulated entry count.
+  --language     Allowed values: zh, en, ja.
+  --type         Dictionary type when validating entries before creation.
+  --entries      Inline JSON / @file / JSON file path for Entries[]. Example:
+                 [{"Fields":["nike","耐克"]}]
+  --tos-bucket   TOS bucket when validating by uploaded source file.
+  --tos-key      TOS key when validating by uploaded source file.
+
+EXAMPLES
+  vs dict check-input --language zh --type bidirection_synonyms --entries @entries.json
+  vs dict check-input --dict-id dict_xxx --entries @more-entries.json`,
+    'bind-scenes': `Bind a dictionary to search scenes.
+
+USAGE
+  vs dict bind-scenes --dict-id <id> --scenes @scenes.json [service flags]
+  vs dict bind-scenes --data @dict-bind-scenes.json [service flags]
+
+KEY FLAGS
+  --dict-id   Dictionary ID.
+  --scenes    Inline JSON / @file / JSON file path for Scenes[]. Example:
+              [{"AppId":"app_xxx","SceneId":"scene_xxx","DatasetId":"dataset_xxx"}]
+
+EXAMPLES
+  vs dict bind-scenes --dict-id dict_xxx --scenes @scenes.json`,
+    'write-terms': `Write or update dictionary terms from a CSV file or inline write-items.
+
+USAGE
+  vs dict write-terms --dict-id <id> [--file ./terms.csv | --entries @entries.json] [service flags]
+
+KEY FLAGS
+  --dict-id      Target dictionary ID.
+  --file         Local \`.csv\` source file path only.
+                 The CLI obtains the upload signature, uploads the file, and submits the
+                 write_terms request internally using file-import payload fields.
+  --entries      Inline JSON / @file / JSON file path for \`items[]\`. Example:
+                 [{"_last_data":{},"_current_data":{"query":"nike","query_count":10}}]
+
+EXAMPLES
+  vs dict write-terms --dict-id dict_xxx --file ./terms.csv
+  vs dict write-terms --dict-id dict_xxx --entries @entries.json`
+  };
+
+  console.log(helpByAction[action] ?? `Unknown dict subcommand: ${action}`);
 }
 
 function printAppCommandHelp(action: string, subAction?: string): void {
@@ -1838,13 +2200,14 @@ function printItemCommandHelp(action: string): void {
     plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
 
 USAGE
-  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app [output flags]
+  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--schema-source <auto|console|local>] [service flags]
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console [service flags]
 
 DESCRIPTION
   Use this command to generate the plan artifacts an agent or operator will review before provisioning.
   For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
-  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow.
+  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow. With
+  \`--schema-source console\`, the plan first runs the signed-upload + remote schema inference chain.
 
 KEY FLAGS
   --file               Source JSON array, JSONL, or CSV file.
@@ -1854,11 +2217,14 @@ KEY FLAGS
   --dataset-name       Override the generated dataset name.
   --application-name   Override the generated application name.
   --skip-app           Generate a dataset-only plan without app creation artifacts.
+  --schema-source      auto uses console inference when auth is available; console requires it; local keeps the legacy local-only schema path.
+  --project-name       Project name for the console OpenAPI chain when remote inference is used.
+  --ak --sk --region   Service auth used by remote schema inference when \`schema-source\` is auto/console.
 
 EXAMPLES
   vs item plan --file ./items.json --output-dir ./.viking/item-plan
   vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app`,
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console`,
     apply: `Compatibility wrapper around item provision / verify.
 
 USAGE
@@ -2290,6 +2656,10 @@ async function runAppCli(argv: string[]): Promise<void> {
     printAppCommandHelp(action, argv[1]);
     return;
   }
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('app');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
@@ -2478,14 +2848,6 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       return;
     case 'schema': {
       const subAction = argv[1];
-      if (subAction === 'get') {
-        await runDatasetSchemaGetCommand({
-          ...projectOptions,
-          id: requiredString(values.id, '--id'),
-          version: parseOptionalInt(optionalString(values.version))
-        });
-        return;
-      }
       if (subAction === 'check') {
         await runDatasetSchemaCheckCommand({
           ...projectOptions,
@@ -2535,6 +2897,10 @@ async function runDatasetCli(argv: string[]): Promise<void> {
 
 async function runDataCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('data');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const datasetId = requiredString(values['dataset-id'], '--dataset-id');
@@ -2553,10 +2919,97 @@ async function runDataCli(argv: string[]): Promise<void> {
   }
 }
 
+async function runDictCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDictCommandHelp(action);
+    return;
+  }
+  const values = parseStandaloneOptions(argv.slice(1));
+  const options = toProjectScopedOptions(values);
+
+  switch (action) {
+    case 'create':
+      await runDictCreateCommand({
+        ...options,
+        name: optionalString(values.name),
+        type: optionalString(values.type),
+        description: optionalString(values.description),
+        enableIdempotent: optionalBoolean(values['enable-idempotent'])
+      });
+      return;
+    case 'update':
+      await runDictUpdateCommand({
+        ...options,
+        dictId: requiredString(values['dict-id'], '--dict-id'),
+        name: requiredString(values.name, '--name'),
+        description: optionalString(values.description)
+      });
+      return;
+    case 'get':
+      await runDictGetCommand({
+        ...options,
+        dictId: requiredString(values['dict-id'], '--dict-id')
+      });
+      return;
+    case 'delete':
+      await runDictDeleteCommand({
+        ...options,
+        dictId: requiredString(values['dict-id'], '--dict-id')
+      });
+      return;
+    case 'list':
+      await runDictListCommand({
+        ...options,
+        dictIds: optionalString(values['dict-ids']),
+        types: optionalString(values.types)
+      });
+      return;
+    case 'check-input':
+      await runDictCheckInputCommand({
+        ...options,
+        dictId: optionalString(values['dict-id']),
+        language: optionalString(values.language),
+        type: optionalString(values.type),
+        tosBucket: optionalString(values['tos-bucket']),
+        tosKey: optionalString(values['tos-key']),
+        entries: optionalString(values.entries)
+      });
+      return;
+    case 'bind-scenes':
+      await runDictBindScenesCommand({
+        ...options,
+        dictId: requiredString(values['dict-id'], '--dict-id'),
+        scenes: requiredString(values.scenes, '--scenes')
+      });
+      return;
+    case 'write-terms':
+      if (optionalString(values.data)) {
+        throw new Error('--data is not supported for dict write-terms. Use --file or --entries.');
+      }
+      if (optionalString(values['tos-bucket']) || optionalString(values['tos-key'])) {
+        throw new Error('--tos-bucket/--tos-key are not supported for dict write-terms. Use --file instead.');
+      }
+      await runDictWriteTermsCommand({
+        ...options,
+        dictId: requiredString(values['dict-id'], '--dict-id'),
+        file: optionalString(values.file),
+        entries: optionalString(values.entries)
+      });
+      return;
+    default:
+      throw new Error(`Unknown dict subcommand: ${action}`);
+  }
+}
+
 async function runItemCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (hasHelpFlag(argv.slice(1)) && ['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
-    printItemCommandHelp(action);
+  if (hasHelpFlag(argv.slice(1))) {
+    if (['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
+      printItemCommandHelp(action);
+    } else {
+      printDomainHelp('item');
+    }
     return;
   }
   const values = parseStandaloneOptions(argv.slice(1));
@@ -2570,6 +3023,7 @@ async function runItemCli(argv: string[]): Promise<void> {
       return;
     case 'plan':
       await runItemPlanCommand({
+        ...toStandaloneServiceOptions(values),
         file: requiredString(values.file, '--file'),
         datasetType: optionalString(values.type) as 'item' | 'video',
         goal: optionalString(values.goal),
@@ -2577,7 +3031,11 @@ async function runItemCli(argv: string[]): Promise<void> {
         datasetName: optionalString(values['dataset-name']),
         applicationName: optionalString(values['application-name']),
         projectName: optionalString(values['project-name']),
-        skipApp: optionalBoolean(values['skip-app'])
+        skipApp: optionalBoolean(values['skip-app']),
+        schemaSource: optionalString(values['schema-source']) as 'auto' | 'console' | 'local' | undefined,
+        schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
+        schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
+        language: optionalString(values.language)
       });
       return;
     case 'apply':
@@ -2859,6 +3317,10 @@ async function runSearchCli(argv: string[]): Promise<void> {
 
 async function runRecommendCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (isDomainHelpRequest(argv) || hasHelpFlag(argv)) {
+    printDomainHelp('recommend');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
@@ -2941,11 +3403,59 @@ async function runRecommendCli(argv: string[]): Promise<void> {
     }
   }
 
+  if (action === 'rule') {
+    const subAction = argv[1];
+    switch (subAction) {
+      case 'list':
+        await runRecommendRuleListCommand({
+          ...projectOptions,
+          applicationId,
+          types: optionalString(values.types),
+          datasetId: optionalString(values['dataset-id']),
+          invertItemDatasetId: optionalString(values['invert-item-dataset-id']),
+          projectName: optionalString(values['project-name'])
+        });
+        return;
+      case 'get':
+        await runRecommendRuleGetCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: requiredString(values['rule-id'], '--rule-id')
+        });
+        return;
+      case 'upsert':
+        await runRecommendRuleUpsertCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: optionalString(values['rule-id']),
+          name: optionalString(values.name),
+          type: optionalString(values.type),
+          description: optionalString(values.description),
+          datasetId: optionalString(values['dataset-id']),
+          config: optionalString(values.config)
+        });
+        return;
+      case 'delete':
+        await runRecommendRuleDeleteCommand({
+          ...projectOptions,
+          applicationId,
+          ruleId: requiredString(values['rule-id'], '--rule-id')
+        });
+        return;
+      default:
+        throw new Error(`Unknown recommend rule subcommand: ${subAction}`);
+    }
+  }
+
   throw new Error(`Unknown recommend subcommand: ${action}`);
 }
 
 async function runChatSearchCli(argv: string[]): Promise<void> {
   const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('chat');
+    return;
+  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   if (action !== 'run') {
@@ -2966,15 +3476,15 @@ async function runChatSearchCli(argv: string[]): Promise<void> {
 async function runPurchaseCli(argv: string[]): Promise<void> {
   const action = argv[0];
   const subAction = argv[1];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('purchase');
+    return;
+  }
   if (action === 'link') {
     const values = parseStandaloneOptions(argv.slice(1));
     await runPurchaseLinkCommand({
       environmentId: optionalString(values['environment-id'])
     });
-    return;
-  }
-  if (action === 'order' && hasHelpFlag(argv.slice(2))) {
-    printDomainHelp('purchase');
     return;
   }
   if (action !== 'order') {
@@ -3094,6 +3604,9 @@ function parseStandaloneOptions(argv: string[]) {
       'wait-indexed': { type: 'boolean' },
       'run-trials': { type: 'boolean' },
       'skip-app': { type: 'boolean' },
+      'schema-source': { type: 'string' },
+      'schema-wait-timeout-ms': { type: 'string' },
+      'schema-poll-interval-ms': { type: 'string' },
       'confirm-review': { type: 'boolean' },
       'interactive-review': { type: 'boolean' },
       'confirm-recommend-entry-binding': { type: 'boolean' },
@@ -3126,6 +3639,15 @@ function parseStandaloneOptions(argv: string[]) {
       'impression-config': { type: 'string' },
       'suggest-config': { type: 'string' },
       'degrade-rule-id': { type: 'string' },
+      'rule-id': { type: 'string' },
+      'dict-id': { type: 'string' },
+      'dict-ids': { type: 'string' },
+      'invert-item-dataset-id': { type: 'string' },
+      'enable-idempotent': { type: 'boolean' },
+      'tos-bucket': { type: 'string' },
+      'tos-key': { type: 'string' },
+      entries: { type: 'string' },
+      scenes: { type: 'string' },
       'search-config': { type: 'string' },
       'query-completion-config': { type: 'string' },
       'want-to-search-config': { type: 'string' },
@@ -3162,6 +3684,11 @@ function toProjectScopedOptions(values: StandaloneValues): ProjectScopedOptions 
 async function callOpenApi(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
   const config = resolveServiceConfig(toServiceConfigInput(options));
   return new VikingOpenApiClient(config).post(pathname, withProjectName(payload, config.projectName));
+}
+
+async function callDataPlane(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
+  const config = resolveServiceConfig(toServiceConfigInput(options));
+  return postJson(config, pathname, payload);
 }
 
 async function callConsoleTopAction(action: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {

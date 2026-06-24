@@ -2,22 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Command, Flags } from '@oclif/core';
-import { runDatasetSchemaGetCommand } from '../../../app/product-commands';
-import { serviceFlags } from '../../../command-support/service-flags';
+import { runDictGetCommand } from '../../app/product-commands';
+import { serviceFlags } from '../../command-support/service-flags';
 
-export default class DatasetSchemaGet extends Command {
-  static override description = 'Get dataset schema.';
+export default class DictGet extends Command {
+  static override description = 'Get one console dictionary.';
+
+  static override examples = ['<%= config.bin %> dict get --dict-id dict_xxx'];
 
   static override flags = {
     ...serviceFlags,
-    id: Flags.string({ required: true, description: 'Viking dataset ID.' }),
-    version: Flags.integer({ description: 'Optional specific schema version.' }),
+    'dict-id': Flags.string({ required: true, description: 'Dictionary ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' })
   };
 
   async run(): Promise<void> {
-    const { flags } = await this.parse(DatasetSchemaGet);
-    await runDatasetSchemaGetCommand({
+    const { flags } = await this.parse(DictGet);
+    await runDictGetCommand({
       baseUrl: flags['base-url'],
       controlPlaneBaseUrl: flags['control-plane-base-url'],
       dataPlaneBaseUrl: flags['data-plane-base-url'],
@@ -27,8 +28,7 @@ export default class DatasetSchemaGet extends Command {
       timeoutMs: flags['timeout-ms'],
       data: flags.data,
       projectName: flags['project-name'],
-      id: flags.id,
-      version: flags.version
+      dictId: flags['dict-id']
     });
   }
 }

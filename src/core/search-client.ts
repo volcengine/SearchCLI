@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
-import { Signer } from '@volcengine/openapi';
 import type { RuntimeConfig, SearchCase, SearchDynamic, SearchResponseShape, SearchResultItem } from './types';
 import {
   describeSearchModeOptions,
@@ -11,6 +10,7 @@ import {
   normalizeUserDefinedRecallMode
 } from './search-mode';
 import { formatMissingVikingAuthMessage } from './auth-errors';
+import { buildSignedRequestHeaders } from './http';
 
 export class VikingSearchClient {
   constructor(private readonly config: RuntimeConfig) {}
@@ -73,31 +73,9 @@ export class VikingSearchClient {
     }
 
     const url = new URL(urlString);
-    const headers: Record<string, string> = {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      host: url.host
-    };
-
-    const signer = new Signer(
-      {
-        region: this.config.region,
-        method: 'POST',
-        pathname: url.pathname,
-        params: Object.fromEntries(url.searchParams.entries()),
-        headers,
-        body
-      },
-      this.config.service
-    );
-
-    signer.addAuthorization({
-      accessKeyId: this.config.accessKeyId,
-      secretKey: this.config.secretKey,
-      sessionToken: ''
+    return buildSignedRequestHeaders(this.config, 'POST', url, body, {
+      'content-type': 'application/json'
     });
-
-    return headers;
   }
 
   private toApiSearchDynamic(input: SearchDynamic): Record<string, unknown> {
