@@ -4,7 +4,7 @@ description: "V2 item-level onboarding driven entirely by the V2 OpenAPI: GetPre
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: item onboarding v2, dataset onboarding v2, V2 OpenAPI, presigned upload, AddInferDatasetSchemaTaskV2, GetInferDatasetSchemaResultV2, CreateDatasetV2, AttachDatasetToApplicationV2, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, Stage A confirmation
+keywords: item onboarding v2, dataset onboarding v2, V2 OpenAPI, presigned upload, AddInferDatasetSchemaTaskV2, GetInferDatasetSchemaResultV2, CreateDatasetV2, AttachDatasetToApplicationV2, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, schema confirmation, vs-schema-confirm
 commands: dataset import-url, dataset infer-schema, dataset infer-result, dataset create, dataset ingest, data write, app create, app attach-dataset
 ---
 
@@ -38,7 +38,7 @@ Do not use this skill when:
 | Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--dry-run]` | Optional, only when the user asks for app-level setup |
 | Attach dataset | `vs app attach-dataset --data @attach.json [--dry-run]` | Optional, links a created dataset to an application. The `DataConfig` block is the `DataFieldConfig` straight out of the persisted infer artifact |
 
-The "All-in-one" shortcut `vs dataset ingest --file <path> --type <type> --industry <industry> [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Stage A confirmation. In agent mode you should still drive each step individually so you can pause at Stage A.
+The "All-in-one" shortcut `vs dataset ingest --file <path> --type <type> --industry <industry> [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Schema Confirmation pause. In agent mode you should still drive each step individually so you can pause at step 5 (Schema Confirmation).
 
 ## Workflow
 
@@ -54,12 +54,12 @@ Run strictly in order. Each step depends on output from the previous one; an inf
      "Status": "Success",
      "Schema":  [ { "Name": "id", "Type": "int64", "BizAttr": "ImagePK", "IsPK": false, "Required": false, "Fields": [], "EnumerateMeta": [] }, ... ],
      "DataFieldConfig": {
-       "IndexFields":      ["..."],            // 文本检索字段
-       "FilterFields":     ["..."],            // 过滤字段
-       "SuggestFields":    ["..."],            // suggest 字段
-       "ImageIndexFields": ["..."],            // 图搜字段（可空）
-       "VideoIndexFields": ["..."],            // 视频搜索字段（可空）
-       "ChatFields":       ["..."],            // 对话/问答字段
+       "IndexFields":      ["..."],            // text search fields
+       "FilterFields":     ["..."],            // filter fields
+       "SuggestFields":    ["..."],            // suggest fields
+       "ImageIndexFields": ["..."],            // image search fields (nullable)
+       "VideoIndexFields": ["..."],            // video search fields (nullable)
+       "ChatFields":       ["..."],            // chat / QA fields
        "FilterFieldsMap":  { "enum": {"Fields": [...]}, "id": {...}, "num": {...} },
        "FieldDescMap":     { "id": "...", "name": "...", ... }
      },
@@ -70,20 +70,36 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
    This single artifact is the source-of-truth for every subsequent step. Do **not** regenerate it; do **not** edit `BizAttr` (those drive PK / title / URL detection on the backend). If the user requests semantic edits (e.g. tweak a `FieldDescMap` description, reorder `IndexFields`), edit this file in place and reuse it.
 
-5. **Stage A — Confirmation (mandatory)** — render the persisted artifact for the user **using the CLI's deterministic renderer**, not by hand-assembling markdown from the JSON:
+5. **Schema Confirmation (mandatory)** — show the persisted artifact to the user **using the CLI's deterministic renderer**, then surface it verbatim. _(Historically called "Stage A".)_
 
    ```bash
    vs dataset infer-result --task-id <TaskID> --render-schema
    ```
 
-   This emits a fixed Stage-A block (Summary / Fields table / Field Roles / Warnings) that tolerates `Name`/`FieldName`, `Type`/`FieldType`, missing `Required`/`BizAttr`/`Description`, and missing or incomplete `DataFieldConfig`. The output is byte-stable: re-running the same task always produces the exact same table, so the user-visible schema view never drifts between renders.
+   The CLI emits a fixed four-section block (Metadata / Fields / Field Roles / Warnings) wrapped between `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->` markers. It uses a real markdown table for fields (with backticked types like `` `array<string>` `` so chat UIs do not eat the angle brackets), and fenced code blocks for the other three sections. The output tolerates `Name`/`FieldName`, `Type`/`FieldType`, missing `Required`/`BizAttr`/`Description`, and missing or incomplete `DataFieldConfig`. The output is byte-stable: re-running the same task always produces identical bytes.
 
-   - Dataset name (proposed), industry, language, type — print these once above the CLI block.
-   - The CLI's `Fields` table has columns `name | type | BizAttr | required | description`.
-   - The CLI's `Field Roles` block lists `IndexFields` (text search), `FilterFields`, `SuggestFields`, `ImageIndexFields`, `VideoIndexFields`, `ChatFields`, and `FilterFieldsMap` enum/id/num buckets.
-   - The CLI's `Warnings` block flags: missing `FieldDescMap` entries, no PK-class `BizAttr`, empty `IndexFields`, and any role field that references a name absent from the schema.
+   **Your message to the user MUST be exactly this template** (BEGIN/END markers included, three parts only):
 
-   Ask exactly one question, e.g. *"以上 schema 与字段角色配置是否符合预期？回复 `yes` 继续，或回复需要修改的字段。"* Only proceed to step 6 after a positive confirmation. If the user requests changes, edit the persisted artifact in place — do not re-run inference, and do not re-format the table yourself. Re-run `vs dataset infer-result --task-id <id> --render-schema` (or feed the edited artifact via `--data @infer-result.json --render-schema`) so the user keeps seeing the same deterministic view.
+   ````
+   Dataset <Name> · type=<Type> · industry=<Industry>
+
+   <verbatim CLI stdout from the BEGIN marker through the END marker, character-for-character>
+
+   This is the Schema Confirmation block. Reply `yes` to continue, or describe which fields to adjust (e.g. "make `description` searchable", "add `brand` to SuggestFields").
+   ````
+
+   **You MUST**:
+   - Copy the CLI stdout between (and including) the `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->` markers character-for-character.
+   - Surface the **one-line metadata header above**, the **verbatim CLI block in the middle**, and the **one-line confirmation prompt at the bottom** — exactly three parts, in that order.
+   - Wrap type values in backticks if you ever need to mention them outside the CLI block (e.g. `` `array<string>` ``). Chat UIs treat unwrapped `<…>` as HTML and silently drop them.
+
+   **You MUST NOT**:
+   - Re-render the field table yourself (no hand-typed markdown table, no bullet list of fields).
+   - Replace the CLI block with a summary like "see CLI output above" / "tool result has full details". Tool-call output is collapsed by default in most chat clients — the user only sees what is in your own message.
+   - Add extra commentary, bullet lists, "key fields are …" highlights, or any interpretation between the BEGIN/END markers.
+   - Drop or trim the `**Warnings (N)**` section even when N is 0; deterministic structure beats brevity.
+
+   Wait for an explicit positive confirmation (`yes` or equivalent) before moving to step 6. If the user requests changes, edit the persisted `infer-result.json` in place (do **not** re-run inference) and re-run `vs dataset infer-result --data @infer-result.json --render-schema`, then re-emit the same three-part template so the user sees the same deterministic structure.
 
 6. **Dry-run create** — build `dataset-create.json` directly from the persisted artifact: copy `Schema` as-is (do **not** flip `IsPK`; the backend derives PK from `BizAttr`), copy `DataFieldConfig.FieldDescMap` as `FieldDescMap`, fill in `Name` / `Type` / `Industry` / `Language` / `Description`, set `DryRun: true`. Run `vs dataset create --data @dataset-create.json --dry-run`. Surface any validation errors and pause for correction. Useful payload shape:
 
@@ -134,16 +150,37 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
     Same shape on BytePlus, with the byteplus URL pattern. The agent must surface this block as the final output of the workflow; do not omit it even if the user has not asked. If only the dataset was created (no app branch), still print the dataset link and the readiness reminder (chat / search will require attaching to an app afterwards).
 
-## Stage A — Confirmation Checklist
+## Schema Confirmation — Output Contract
 
-Before asking the user to confirm:
+Step 5 is the only step where the agent's chat message _is_ the user experience. The CLI does the rendering; the agent only frames the question. Your message MUST follow the three-part template below — exactly three parts, in this order:
 
-1. Print dataset metadata: `Name`, `Type`, `Industry`, `Language`.
-2. Print the field table: `name | type | BizAttr | description | required`.
-3. Print the `DataFieldConfig` field-role summary side by side: text-search fields, image-search fields, video-search fields, filter fields (and `FilterFieldsMap` enum / id / num buckets), suggest fields, chat fields.
-4. Flag anomalies: empty `FieldDescMap` entries, no field with `BizAttr: ImagePK` / `VideoContentID` / `QueryPK` / `MultiModalID` (means backend has no PK to derive), empty `IndexFields`, or empty image/video index fields when the user's goal is image/video search.
+1. **One-line metadata header** (above the CLI block):
 
-Ask exactly one question and wait for `yes` (or per-field corrections). On corrections, edit the persisted `infer-result.json` in place and re-render — do not re-run inference.
+   ```
+   Dataset <Name> · type=<Type> · industry=<Industry>
+   ```
+
+2. **Verbatim CLI block** between `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->`. Copy character-for-character from the stdout of `vs dataset infer-result --task-id <id> --render-schema` (or `--data @infer-result.json --render-schema` after edits). The CLI produces a four-section block: `**Metadata**` / `**Fields (N)**` / `**Field Roles**` / `**Warnings (N)**`, with the field table rendered as a real markdown table and types wrapped in backticks (e.g. `` `array<string>` ``) so chat UIs do not strip the angle brackets.
+
+3. **One-line confirmation prompt** (below the CLI block):
+
+   ```
+   This is the Schema Confirmation block. Reply `yes` to continue, or describe which fields to adjust (e.g. "make `description` searchable", "add `brand` to SuggestFields").
+   ```
+
+### Do
+
+- Surface the metadata header, the verbatim CLI block, and the confirmation prompt — nothing else, in that order.
+- Wrap any type or field reference you mention outside the CLI block in backticks; chat UIs render unwrapped `<…>` as HTML and silently drop them.
+- Wait for an explicit positive confirmation (`yes` or equivalent) before moving to step 6.
+- On user-requested corrections, edit the persisted `infer-result.json` in place and re-run `vs dataset infer-result --data @infer-result.json --render-schema` — do not re-run inference, do not patch the table by hand.
+
+### Do not
+
+- Re-render the field table yourself or replace it with a bullet list, condensed summary, "key fields are …" highlights, or any other paraphrase.
+- Write phrases like "see CLI output above" / "tool result has the full table" / "full details in the tool call". Tool-call output is collapsed by default in trae-cn / cursor / claude-code, so the user only sees what is in your own message.
+- Drop the `**Warnings (N)**` section even when N is 0 — deterministic structure beats brevity.
+- Touch `IsPK` or strip `BizAttr` when the user asks you to "fix" a field; explain that backend derives PK from `BizAttr` and only allow edits to `FieldDescMap` / role arrays in `DataFieldConfig`.
 
 ## V2 Enum Reference
 
@@ -169,7 +206,7 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 
 - Forward the inferred `Schema` to `CreateDatasetV2` verbatim. `IsPK` can stay `false` everywhere.
 - Never strip / rewrite `BizAttr`. Doing so will cause the backend's `pkCount==1` check to fail.
-- If inference returned no field with a PK-class `BizAttr` (very rare; usually means the input file has no obvious identifier column), surface that to the user in Stage A — they likely need to fix the source data, not patch the schema by hand.
+- If inference returned no field with a PK-class `BizAttr` (very rare; usually means the input file has no obvious identifier column), surface that to the user in the Schema Confirmation block (the CLI's `**Warnings (N)**` section already calls it out) — they likely need to fix the source data, not patch the schema by hand.
 
 ## V2 API Surface (reference)
 
@@ -193,7 +230,7 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 
 1. **Persist the inference artifact.** Write the entire `Result` from `dataset infer-result` to a local file in step 4 and re-read it in steps 6, 7, and 10. Do not pass field roles inline from memory; always source them from the persisted file so create + attach stay consistent.
 2. **Never flip `IsPK`.** Backend derives PK from `BizAttr`. Modifying `IsPK` (or stripping `BizAttr`) on the wire is a code smell and can fail validation.
-3. **Never skip Stage A.** Schema persistence (step 6 onward) requires an explicit human "yes" on the inferred schema and field roles.
+3. **Never skip Schema Confirmation (step 5).** Schema persistence (step 6 onward) requires an explicit human "yes" on the inferred schema and field roles.
 4. **Always dry-run once.** Run `dataset create --dry-run` before the real create. Surface backend validation errors to the user before retrying.
 5. **String enums only.** Pass `Type` and `Industry` as their string values (PascalCase alias accepted on input, snake_case is what the backend expects on wire). Numeric codes will be rejected.
 6. **No backtrack flags.** `attach-dataset` (V2) does not accept `BacktrackReq`. If the user needs historical backtrack, treat it as a separate workflow.
@@ -234,7 +271,7 @@ TASK_ID=$(jq -r '.Result.TaskId' $WORK/02_infer_schema.json)
 vs dataset infer-result --task-id "$TASK_ID" > $WORK/03_infer_result.json
 jq '.Result' $WORK/03_infer_result.json > $WORK/infer-result.json  # ← persistent source of truth
 
-# 5. Stage A: render & confirm (agent renders the table from $WORK/infer-result.json)
+# 5. Schema Confirmation: render & confirm (agent must surface `vs dataset infer-result --task-id <id> --render-schema` verbatim and wait for user `yes`)
 
 # 6. Build dataset-create.json from the persisted artifact and dry-run
 #    NB: Industry must be the wire value "e_commerce", not "ecommerce".

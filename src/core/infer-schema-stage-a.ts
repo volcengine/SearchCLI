@@ -253,51 +253,98 @@ function lowerFirst(value: string): string {
 
 export function renderInferSchemaStageAText(stageA: InferSchemaStageA): string {
   const lines: string[] = [];
-  lines.push('Stage A — Schema Confirmation');
+  lines.push('<!-- vs-schema-confirm: BEGIN (verbatim — do not paraphrase) -->');
+  lines.push('**Metadata**');
+  lines.push('');
+  lines.push('```');
   lines.push(`Status: ${stageA.summary.status}`);
   lines.push(`Field count: ${stageA.summary.fieldCount}`);
-  lines.push(`Primary key: ${stageA.summary.primaryKey ?? '(none)'} ${stageA.summary.primaryKeyBizAttr ? `(${stageA.summary.primaryKeyBizAttr})` : ''}`.trimEnd());
+  lines.push(`Primary key: ${formatPrimaryKey(stageA.summary)}`);
+  lines.push('```');
   lines.push('');
-  lines.push('Fields');
-  lines.push(renderTable(
-    ['name', 'type', 'BizAttr', 'required', 'description'],
-    stageA.fields.map(field => [field.name, field.type, field.bizAttr || '-', field.required, field.description || '-'])
-  ));
+  lines.push(`**Fields (${stageA.fields.length})**`);
   lines.push('');
-  lines.push('Field Roles');
-  lines.push(`- IndexFields:      ${formatList(stageA.roles.index)}`);
-  lines.push(`- FilterFields:     ${formatList(stageA.roles.filter)}`);
-  lines.push(`- SuggestFields:    ${formatList(stageA.roles.suggest)}`);
-  lines.push(`- ImageIndexFields: ${formatList(stageA.roles.imageIndex)}`);
-  lines.push(`- VideoIndexFields: ${formatList(stageA.roles.videoIndex)}`);
-  lines.push(`- ChatFields:       ${formatList(stageA.roles.chat)}`);
-  if (stageA.roles.filterTypes.length > 0) {
-    lines.push(`- FilterFieldsMap:  ${stageA.roles.filterTypes.map(entry => `${entry.field}:${entry.type}`).join(', ')}`);
-  }
-  if (stageA.warnings.length > 0) {
-    lines.push('');
-    lines.push('Warnings');
+  lines.push(renderMarkdownFieldTable(stageA.fields));
+  lines.push('');
+  lines.push('**Field Roles**');
+  lines.push('');
+  lines.push('```');
+  for (const line of renderRolesLines(stageA.roles)) lines.push(line);
+  lines.push('```');
+  lines.push('');
+  lines.push(`**Warnings (${stageA.warnings.length})**`);
+  lines.push('');
+  lines.push('```');
+  if (stageA.warnings.length === 0) {
+    lines.push('(none)');
+  } else {
     for (const warning of stageA.warnings) lines.push(`! ${warning}`);
   }
+  lines.push('```');
+  lines.push('<!-- vs-schema-confirm: END -->');
   return lines.join('\n');
 }
 
-function formatList(values: string[]): string {
-  return values.length === 0 ? '(none)' : values.join(', ');
+function formatPrimaryKey(summary: StageASummary): string {
+  if (!summary.primaryKey) return '(none)';
+  if (!summary.primaryKeyBizAttr) return summary.primaryKey;
+  return `${summary.primaryKey} (BizAttr=${summary.primaryKeyBizAttr})`;
 }
 
-function renderTable(headers: string[], rows: string[][]): string {
-  const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map(row => (row[index] ?? '').length))
-  );
-  const renderRow = (row: string[]) =>
-    row
-      .map((cell, index) => (cell ?? '').padEnd(widths[index]))
-      .join(' | ')
-      .trimEnd();
-  const divider = widths.map(width => '-'.repeat(width)).join('-+-');
-  if (rows.length === 0) {
-    return [renderRow(headers), divider, '(no fields)'].join('\n');
+function renderMarkdownFieldTable(fields: StageAField[]): string {
+  const headers = ['name', 'type', 'BizAttr', 'required', 'description'];
+  const headerRow = `| ${headers.join(' | ')} |`;
+  const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+  if (fields.length === 0) {
+    return [headerRow, separatorRow, '| (no fields) |  |  |  |  |'].join('\n');
   }
-  return [renderRow(headers), divider, ...rows.map(renderRow)].join('\n');
+  const bodyRows = fields.map(field => {
+    const cells = [
+      escapeMarkdownCell(field.name),
+      `\`${escapeBacktickType(field.type)}\``,
+      escapeMarkdownCell(field.bizAttr || '-'),
+      escapeMarkdownCell(field.required),
+      escapeMarkdownCell(field.description || '-')
+    ];
+    return `| ${cells.join(' | ')} |`;
+  });
+  return [headerRow, separatorRow, ...bodyRows].join('\n');
+}
+
+function renderRolesLines(roles: StageARoles): string[] {
+  const labelWidth = 'VideoIndexFields'.length;
+  const lines: string[] = [];
+  const entries: Array<[string, string[] | undefined]> = [
+    ['IndexFields', roles.index],
+    ['FilterFields', roles.filter],
+    ['SuggestFields', roles.suggest],
+    ['ImageIndexFields', roles.imageIndex],
+    ['VideoIndexFields', roles.videoIndex],
+    ['ChatFields', roles.chat]
+  ];
+  for (const [label, values] of entries) {
+    const padded = `${label}:`.padEnd(labelWidth + 1);
+    if (!values || values.length === 0) {
+      lines.push(`${padded} (none)`);
+    } else {
+      lines.push(`${padded} (${values.length}) ${values.join(', ')}`);
+    }
+  }
+  const padded = `${'FilterFieldsMap:'.padEnd(labelWidth + 1)}`;
+  if (roles.filterTypes.length === 0) {
+    lines.push(`${padded} (none)`);
+  } else {
+    lines.push(
+      `${padded} ${roles.filterTypes.map(entry => `${entry.field}:${entry.type}`).join(', ')}`
+    );
+  }
+  return lines;
+}
+
+function escapeMarkdownCell(value: string): string {
+  return value.replace(/\|/g, '\\|');
+}
+
+function escapeBacktickType(value: string): string {
+  return value.replace(/`/g, "'");
 }
