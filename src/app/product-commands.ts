@@ -66,6 +66,10 @@ export interface AppCreateOptions extends ServiceCommandOptions {
   industry?: string;
   language?: string;
   color?: string;
+  iconColor?: string;
+  riskCheck?: boolean;
+  dryRun?: boolean;
+  projectName?: string;
 }
 
 export interface AppListOptions extends ServiceCommandOptions {
@@ -112,6 +116,14 @@ export interface DatasetCreateOptions extends ServiceCommandOptions {
   type?: string;
   description?: string;
   schema?: string;
+  schemaJson?: string;
+  industry?: string;
+  language?: string;
+  abnormalImagePolicy?: string;
+  videoAutoDelete?: string;
+  dryRun?: boolean;
+  fieldDescMap?: string;
+  projectName?: string;
 }
 
 export interface DatasetListOptions extends ServiceCommandOptions {
@@ -518,18 +530,22 @@ export interface PurchaseLinkOptions {
 }
 
 export async function runAppCreateCommand(options: AppCreateOptions): Promise<void> {
-  const payload = normalizeAppCreatePayload(
-    (await loadJsonInput(options.data)) ??
-      compactObject({
-        Name: options.name,
-        Description: options.description,
-        Language: options.language,
-        Icon: options.color ? { ColorName: options.color } : undefined
-      }),
+  const iconColor = options.iconColor ?? options.color;
+  const fallbackPayload = compactObject({
+    Name: options.name,
+    Description: options.description,
+    Language: options.language,
+    Icon: iconColor ? { ColorName: iconColor } : undefined,
+    EnableRiskCheck: options.riskCheck === true ? true : undefined,
+    DryRun: options.dryRun === true ? true : undefined,
+    ProjectName: options.projectName
+  });
+  const payload = normalizeAppCreateV2Payload(
+    (await loadJsonInput(options.data)) ?? fallbackPayload,
     options.industry
   );
   requireNonEmptyObject(payload, 'Need --data or --name for app create.');
-  await printResult(callOpenApi('/api/v1/CreateApplication', payload, options));
+  await printResult(callOpenApi('/open/CreateApplicationV2', payload, options));
 }
 
 export async function runAppUpdateCommand(options: AppUpdateOptions): Promise<void> {
@@ -740,21 +756,37 @@ export async function runAppOnlineConfigUpdateCommand(options: AppOnlineConfigUp
 }
 
 export async function runDatasetCreateCommand(options: DatasetCreateOptions): Promise<void> {
-  const payload = normalizeDatasetPayload(
-    (await loadJsonInput(options.data)) ??
-      compactObject({
-        Name: options.name,
-        Type: options.type,
-        Description: options.description,
-        Schema: await loadJsonInput(options.schema)
+  const schemaInline = options.schemaJson
+    ? await loadJsonInput(options.schemaJson)
+    : await loadJsonInput(options.schema);
+  const fieldDescMap = options.fieldDescMap ? await loadJsonInput(options.fieldDescMap) : undefined;
+  const processConfig = (options.abnormalImagePolicy || options.videoAutoDelete)
+    ? compactObject({
+        AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
+        VideoAutoDeletePolicy: options.videoAutoDelete
       })
-  );
-  if (isRecord(payload) && (payload.Type === 2 || payload.Type === 5)) {
-    throw new Error(`Creating dataset of type ${payload.Type === 2 ? 'query (2)' : 'dataset type 5'} via CLI is not supported.`);
+    : undefined;
+  const fallbackPayload = compactObject({
+    Name: options.name,
+    Type: options.type,
+    Description: options.description,
+    Schema: schemaInline,
+    Industry: options.industry,
+    Language: options.language,
+    ProcessConfig: processConfig,
+    FieldDescMap: fieldDescMap,
+    DryRun: options.dryRun === true ? true : undefined,
+    ProjectName: options.projectName
+  });
+  const payload = normalizeDatasetV2Payload((await loadJsonInput(options.data)) ?? fallbackPayload);
+  if (isRecord(payload)) {
+    const datasetType = typeof payload.Type === 'string' ? payload.Type.toLowerCase() : payload.Type;
+    if (datasetType === 'query' || datasetType === 5 || datasetType === 'document' && payload.Type === 5) {
+      throw new Error(`Creating dataset of type ${payload.Type} via CLI is not supported.`);
+    }
   }
   requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
-  validateUserEventSchema(payload);
-  await printResult(callOpenApi('/api/v1/CreateDataset', payload, options));
+  await printResult(callOpenApi('/open/CreateDatasetV2', payload, options));
 }
 
 export async function runDatasetSchemaCheckCommand(options: DatasetSchemaCheckOptions): Promise<void> {
@@ -2671,7 +2703,21 @@ async function runAppCli(argv: string[]): Promise<void> {
         description: optionalString(values.description),
         industry: optionalString(values.industry),
         language: optionalString(values.language),
-        color: optionalString(values.color)
+        color: optionalString(values.color),
+        iconColor: optionalString(values['icon-color']),
+        riskCheck: optionalBoolean(values['risk-check']),
+        dryRun: optionalBoolean(values['dry-run']),
+        projectName: optionalString(values['project-name'])
+      });
+      return;
+    case 'attach-dataset':
+      await runAppAttachDatasetCommand({
+        ...serviceOptions,
+        applicationId: optionalString(values['app-id']) ?? optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        dataConfig: optionalString(values['data-config']),
+        dryRun: optionalBoolean(values['dry-run']),
+        projectName: optionalString(values['project-name'])
       });
       return;
     case 'update':
@@ -2840,7 +2886,41 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         name: optionalString(values.name),
         type: optionalString(values.type),
         description: optionalString(values.description),
-        schema: optionalString(values.schema)
+        schema: optionalString(values.schema),
+        schemaJson: optionalString(values['schema-json']),
+        industry: optionalString(values.industry),
+        language: optionalString(values.language),
+        abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
+        videoAutoDelete: optionalString(values['video-auto-delete']),
+        dryRun: optionalBoolean(values['dry-run']),
+        fieldDescMap: optionalString(values['field-desc-map']),
+        projectName: optionalString(values['project-name'])
+      });
+      return;
+    case 'import-url':
+      await runDatasetImportUrlCommand({
+        ...serviceOptions,
+        fileName: optionalString(values['file-name']),
+        projectName: optionalString(values['project-name'])
+      });
+      return;
+    case 'infer-schema':
+      await runDatasetInferSchemaCommand({
+        ...serviceOptions,
+        tosKey: optionalString(values['tos-key']),
+        type: optionalString(values.type),
+        name: optionalString(values.name),
+        industry: optionalString(values.industry),
+        language: optionalString(values.language),
+        theme: optionalString(values.theme),
+        projectName: optionalString(values['project-name'])
+      });
+      return;
+    case 'infer-result':
+      await runDatasetInferResultCommand({
+        ...serviceOptions,
+        taskId: optionalString(values['task-id']),
+        projectName: optionalString(values['project-name'])
       });
       return;
     case 'get':
@@ -2870,7 +2950,16 @@ async function runDatasetCli(argv: string[]): Promise<void> {
     case 'ingest':
       await runDatasetIngestWorkflowCommand({
         ...serviceOptions,
-        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
+        file: optionalString(values.file),
+        type: optionalString(values.type),
+        datasetName: optionalString(values['dataset-name']),
+        industry: optionalString(values.industry),
+        language: optionalString(values.language),
+        theme: optionalString(values.theme),
+        schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
+        schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
+        dryRun: optionalBoolean(values['dry-run']),
+        datasetId: optionalString(values['dataset-id']),
         fields: optionalString(values.fields)
       });
       return;
@@ -3652,6 +3741,17 @@ function parseStandaloneOptions(argv: string[]) {
       'query-completion-config': { type: 'string' },
       'want-to-search-config': { type: 'string' },
       'overview-config': { type: 'string' },
+      'file-name': { type: 'string' },
+      'task-id': { type: 'string' },
+      'schema-json': { type: 'string' },
+      'field-desc-map': { type: 'string' },
+      'abnormal-image-policy': { type: 'string' },
+      'video-auto-delete': { type: 'string' },
+      'data-config': { type: 'string' },
+      'icon-color': { type: 'string' },
+      'risk-check': { type: 'boolean' },
+      'app-id': { type: 'string' },
+      theme: { type: 'string' },
     }
   });
 
@@ -3853,6 +3953,247 @@ function normalizeAppCreatePayload(payload: unknown, industry?: string): unknown
     ...payload,
     Industry: explicitIndustry ?? payloadIndustry ?? DEFAULT_APPLICATION_INDUSTRY
   };
+}
+
+const APPLICATION_INDUSTRY_V2_ALIASES: Record<string, string> = {
+  none: '',
+  ecommerce: 'e_commerce',
+  'e-commerce': 'e_commerce',
+  material: 'material',
+  video: 'video',
+  news: 'news',
+  social: 'social_platform',
+  'social-platform': 'social_platform',
+  'social-platforms': 'social_platform',
+  socialplatform: 'social_platform',
+  other: 'other'
+};
+
+const APPLICATION_INDUSTRY_CODE_TO_V2: Record<number, string> = {
+  0: '',
+  1: 'e_commerce',
+  2: 'material',
+  3: 'video',
+  4: 'news',
+  5: 'social_platform',
+  20: 'other'
+};
+
+function parseApplicationIndustryV2(value: string, source: string): string {
+  const normalized = value.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  if (Object.prototype.hasOwnProperty.call(APPLICATION_INDUSTRY_V2_ALIASES, normalized)) {
+    return APPLICATION_INDUSTRY_V2_ALIASES[normalized];
+  }
+  const valid = new Set(Object.values(APPLICATION_INDUSTRY_V2_ALIASES));
+  if (valid.has(value.trim())) return value.trim();
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isInteger(parsed) && APPLICATION_INDUSTRY_CODE_TO_V2[parsed] !== undefined) {
+    return APPLICATION_INDUSTRY_CODE_TO_V2[parsed];
+  }
+  throw new Error(
+    `Invalid ${source} value: ${value}. Use none|ecommerce|material|video|news|social-platform|other.`
+  );
+}
+
+export function parseApplicationIndustryV2Value(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'number') {
+    const mapped = APPLICATION_INDUSTRY_CODE_TO_V2[value];
+    if (mapped) return mapped;
+    throw new Error(`Invalid Industry numeric value in payload: ${value}`);
+  }
+  if (typeof value === 'string') return parseApplicationIndustryV2(value, 'Industry');
+  throw new Error(`Invalid Industry value type in payload: ${typeof value}`);
+}
+
+function normalizeAppCreateV2Payload(payload: unknown, industry?: string): unknown {
+  if (!isRecord(payload)) return payload;
+  const explicit = industry ? parseApplicationIndustryV2(industry, '--industry') : undefined;
+  const inferred = parseApplicationIndustryV2Value(payload.Industry);
+  return compactObject({
+    ...payload,
+    Industry: explicit ?? inferred ?? 'ECommerce'
+  });
+}
+
+const DATASET_TYPE_V2_ALIASES: Record<string, string> = {
+  item: 'item',
+  query: 'query',
+  video: 'video',
+  'user-event': 'user_event',
+  user_event: 'user_event',
+  behavior: 'user_event',
+  event: 'user_event',
+  document: 'document',
+  doc: 'document',
+  multimodal: 'multi_modal',
+  multi_modal: 'multi_modal',
+  'multi-modal': 'multi_modal'
+};
+
+const DATASET_TYPE_CODE_TO_V2: Record<number, string> = {
+  1: 'item',
+  2: 'query',
+  3: 'video',
+  4: 'user_event',
+  5: 'document',
+  6: 'multi_modal'
+};
+
+export function parseDatasetTypeV2Value(value: unknown): string {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (DATASET_TYPE_V2_ALIASES[normalized]) return DATASET_TYPE_V2_ALIASES[normalized];
+    const valid = new Set(Object.values(DATASET_TYPE_V2_ALIASES));
+    if (valid.has(value.trim())) return value.trim();
+  }
+  if (typeof value === 'number' && DATASET_TYPE_CODE_TO_V2[value]) {
+    return DATASET_TYPE_CODE_TO_V2[value];
+  }
+  throw new Error(
+    `Invalid dataset Type value: ${String(value)}. Use item|video|user_event|document|multi_modal|query.`
+  );
+}
+
+function normalizeDatasetV2Payload(payload: unknown): unknown {
+  if (!isRecord(payload)) return payload;
+  const normalized: Record<string, unknown> = { ...payload };
+  if (payload.Type !== undefined) {
+    normalized.Type = parseDatasetTypeV2Value(payload.Type);
+  }
+  if (payload.Schema !== undefined) {
+    normalized.Schema = normalizeDatasetSchemaFieldsV2(payload.Schema);
+  }
+  if (payload.Industry !== undefined && typeof payload.Industry === 'string') {
+    normalized.Industry = payload.Industry.trim();
+  }
+  return normalized;
+}
+
+function normalizeDatasetSchemaFieldsV2(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map(entry => {
+    if (!isRecord(entry)) return entry;
+    const normalized: Record<string, unknown> = { ...entry };
+    const fieldName = optionalString(entry.Name) ?? optionalString(entry.FieldName);
+    const fieldType = entry.Type ?? entry.FieldType;
+    delete normalized.FieldName;
+    delete normalized.FieldType;
+    if (fieldName) normalized.Name = fieldName;
+    if (fieldType !== undefined) {
+      if (typeof fieldType === 'number') {
+        normalized.Type = datasetFieldTypeNumberToString(fieldType);
+      } else if (typeof fieldType === 'string') {
+        normalized.Type = fieldType.trim();
+      }
+    }
+    const subFields = entry.Fields ?? entry.SubFields ?? entry.fields ?? entry.subFields;
+    if (Array.isArray(subFields)) {
+      normalized.Fields = normalizeDatasetSchemaFieldsV2(subFields);
+      delete normalized.SubFields;
+      delete normalized.fields;
+      delete normalized.subFields;
+    }
+    return normalized;
+  });
+}
+
+const DATASET_FIELD_TYPE_NUM_TO_STRING: Record<number, string> = {
+  1: 'string',
+  2: 'int32',
+  3: 'int64',
+  4: 'float',
+  5: 'bool',
+  6: 'array<string>',
+  7: 'array<int32>',
+  8: 'array<int64>',
+  9: 'array<float>',
+  10: 'array<bool>',
+  11: 'object',
+  12: 'array<object>'
+};
+
+function datasetFieldTypeNumberToString(value: number): string {
+  return DATASET_FIELD_TYPE_NUM_TO_STRING[value] ?? String(value);
+}
+
+export interface DatasetImportUrlOptions extends ServiceCommandOptions {
+  fileName?: string;
+  projectName?: string;
+}
+
+export async function runDatasetImportUrlCommand(options: DatasetImportUrlOptions): Promise<void> {
+  const payload = (await loadJsonInput(options.data)) ?? compactObject({
+    FileName: options.fileName,
+    ProjectName: options.projectName
+  });
+  requireNonEmptyObject(payload, 'Need --file-name (or --data) for dataset import-url.');
+  await printResult(callOpenApi('/open/GetPresignedImportUrlV2', payload, options));
+}
+
+export interface DatasetInferSchemaOptions extends ServiceCommandOptions {
+  tosKey?: string;
+  type?: string;
+  name?: string;
+  industry?: string;
+  language?: string;
+  theme?: string;
+  projectName?: string;
+}
+
+export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOptions): Promise<void> {
+  const fallbackPayload = compactObject({
+    TosKey: options.tosKey,
+    Type: options.type ? parseDatasetTypeV2Value(options.type) : undefined,
+    Name: options.name,
+    Industry: options.industry ? parseApplicationIndustryV2Value(options.industry) : undefined,
+    Language: options.language,
+    Theme: options.theme,
+    ProjectName: options.projectName
+  });
+  const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
+  requireNonEmptyObject(payload, 'Need --tos-key and --type (or --data) for dataset infer-schema.');
+  await printResult(callOpenApi('/open/AddInferDatasetSchemaTaskV2', payload, options));
+}
+
+export interface DatasetInferResultOptions extends ServiceCommandOptions {
+  taskId?: string;
+  projectName?: string;
+}
+
+export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
+  const fallbackPayload = compactObject({
+    TaskID: options.taskId,
+    ProjectName: options.projectName
+  });
+  const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
+  requireNonEmptyObject(payload, 'Need --task-id (or --data) for dataset infer-result.');
+  await printResult(callOpenApi('/open/GetInferDatasetSchemaResultV2', payload, options));
+}
+
+export interface AppAttachDatasetOptions extends ServiceCommandOptions {
+  applicationId?: string;
+  datasetId?: string;
+  dataConfig?: string;
+  dataConfigJson?: string;
+  dryRun?: boolean;
+  projectName?: string;
+}
+
+export async function runAppAttachDatasetCommand(options: AppAttachDatasetOptions): Promise<void> {
+  const dataConfig = options.dataConfigJson
+    ? await loadJsonInput(options.dataConfigJson)
+    : await loadJsonInput(options.dataConfig);
+  const fallbackPayload = compactObject({
+    ApplicationId: options.applicationId,
+    DatasetId: options.datasetId,
+    DataConfig: dataConfig,
+    DryRun: options.dryRun === true ? true : undefined,
+    ProjectName: options.projectName
+  });
+  const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
+  requireNonEmptyObject(payload, 'Need --app-id and --dataset-id (or --data) for app attach-dataset.');
+  await printResult(callOpenApi('/open/AttachDatasetToApplicationV2', payload, options));
 }
 
 function normalizeAppUpdatePayload(payload: unknown, industry?: string): unknown {

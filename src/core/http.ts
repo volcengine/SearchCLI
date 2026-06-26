@@ -218,7 +218,8 @@ export function buildSignedRequestHeaders(
 
 function createBaseHeaders(): Record<string, string> {
   return {
-    accept: 'application/json'
+    accept: 'application/json',
+    'user-agent': 'Search-Cli'
   };
 }
 
