@@ -1992,19 +1992,85 @@ EXAMPLES
 
 USAGE
   vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]
-  vs dataset ingest --dataset-id <id> --fields ./.viking/item-plans/<plan>/normalized-items.json [workflow flags]
+  vs dataset ingest --file ./items.jsonl --type <item|video|user_event|document|multi_modal> [--dataset-name <name>] [--industry <industry>] [--language <lang>] [--theme <text>] [--dry-run] [workflow flags]
 
 DESCRIPTION
   In a plan-driven dataset-only flow, pair this with \`dataset create --data @dataset-create.json\`
   and pass the generated normalized-items artifact to \`--fields\`.
 
+  The V2 onboarding chain (--file + --type) runs the full pipeline: presigned upload, schema
+  inference polling, and CreateDatasetV2. Use --dry-run to validate without persisting the dataset.
+
 KEY FLAGS
-  --dataset-id     Target dataset ID.
+  --dataset-id     Target dataset ID (legacy data-write mode).
   --fields         JSON array payload. When ingesting from an item plan, prefer normalized-items.json.
+  --file           Local JSONL/CSV source for V2 chain mode.
+  --type           Dataset type for V2 chain mode.
+  --dataset-name   Optional dataset name for V2 chain mode.
+  --industry       Optional industry hint for V2 chain mode.
+  --language       Optional language hint for V2 chain mode.
+  --dry-run        Validate the V2 chain without persisting the dataset.
 
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
-  vs dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json`,
+  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce
+  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run`,
+    'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
+
+USAGE
+  vs dataset import-url --file-name <file> [--project-name <name>] [service flags]
+  vs dataset import-url --data @import-url.json [service flags]
+
+DESCRIPTION
+  Returns FileUrl + FileKey. Upload the local file to FileUrl via PUT, then pass FileKey to
+  \`dataset infer-schema --tos-key\`.
+
+KEY FLAGS
+  --file-name      Source file name. Required unless --data already provides FileName.
+  --project-name   Viking project name when the API requires project scoping.
+
+EXAMPLES
+  vs dataset import-url --file-name items.jsonl
+  vs dataset import-url --data @import-url.json`,
+    'infer-schema': `Submit a schema inference task for V2 dataset onboarding (AddInferDatasetSchemaTaskV2).
+
+USAGE
+  vs dataset infer-schema --tos-key <key> --type <item|video|user_event|document|multi_modal> [--name <name>] [--industry <industry>] [--language <lang>] [--theme <text>] [service flags]
+  vs dataset infer-schema --data @infer-schema.json [service flags]
+
+DESCRIPTION
+  Submits the uploaded TOS key for schema inference and returns a TaskID. Poll the task with
+  \`dataset infer-result\` until Status is Success.
+
+KEY FLAGS
+  --tos-key        FileKey returned by \`dataset import-url\`.
+  --type           Dataset type (item|video|user_event|document|multi_modal|...).
+  --name           Optional dataset name hint.
+  --industry       Optional industry hint (e_commerce|video|news|...).
+  --language       Optional language hint (zh|en|ja|...).
+  --theme          Optional theme/domain hint.
+
+EXAMPLES
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item --industry e_commerce`,
+    'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
+
+USAGE
+  vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]
+  vs dataset infer-result --data @infer-result.json [service flags]
+
+DESCRIPTION
+  Returns the current Status (Pending|Running|Success|Failed) along with Schema / FieldDescMap /
+  DataFieldConfig when Status is Success. This is a single-shot call; \`dataset ingest\` performs
+  the polling internally.
+
+KEY FLAGS
+  --task-id        TaskID returned by \`dataset infer-schema\`.
+  --project-name   Viking project name when the API requires project scoping.
+
+EXAMPLES
+  vs dataset infer-result --task-id task_abc123
+  vs dataset infer-result --data @infer-result.json`
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
@@ -2222,9 +2288,32 @@ EXAMPLES
   vs app dataset-config update --application-id 123 --dataset-id 456 --field-config @field-config.json
   vs app dataset-config update --application-id 123 --dataset-id 456 --field-config ./.viking/item-plans/<plan>/field-config.json --dry-run
   vs app dataset-config update --application-id 123 --dataset-id 456 --schema-version 2 --field-config-version 5 --field-config @field-config.json`,
+    'attach-dataset:': `Attach a dataset to an application with a reviewed DataConfig (V2 AttachDatasetToApplicationV2).
+
+USAGE
+  vs app attach-dataset --app-id <id> --dataset-id <id> --data-config @data-config.json [--dry-run] [service flags]
+  vs app attach-dataset --data @attach.json [service flags]
+
+DESCRIPTION
+  Replaces the legacy \`app dataset bind\` flow. The DataConfig payload should include IndexFields,
+  FilterFields, SuggestFields, ChatFields, FilterFieldsMap, and FieldDescMap so the application has
+  a complete reviewed schema-to-config mapping when the attach succeeds.
+
+KEY FLAGS
+  --app-id          Target application ID (alias: --application-id).
+  --dataset-id      Target dataset ID.
+  --data-config     Reviewed DataConfig JSON (@file or inline).
+  --dry-run         Validate without persisting the attach.
+  --project-name    Viking project name when the API requires project scoping.
+
+EXAMPLES
+  vs app attach-dataset --app-id app_123 --dataset-id ds_456 --data-config @data-config.json
+  vs app attach-dataset --app-id app_123 --dataset-id ds_456 --data-config @data-config.json --dry-run
+  vs app attach-dataset --data @attach.json`,
   };
 
-  console.log(helpByAction[`${action}:${subAction ?? ''}`] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
+  const key = `${action}:${subAction ?? ''}`;
+  console.log(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
 }
 
 function printItemCommandHelp(action: string): void {
@@ -2686,6 +2775,10 @@ async function runAppCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if ((action === 'dataset' || action === 'dataset-config') && hasHelpFlag(argv.slice(2))) {
     printAppCommandHelp(action, argv[1]);
+    return;
+  }
+  if (action === 'attach-dataset' && hasHelpFlag(argv.slice(1))) {
+    printAppCommandHelp(action);
     return;
   }
   if (hasHelpFlag(argv.slice(1))) {

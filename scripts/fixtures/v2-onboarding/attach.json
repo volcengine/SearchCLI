@@ -1,0 +1,22 @@
+{
+  "ApplicationId": "acc-app-1",
+  "DatasetId": "acc-ds-1",
+  "DataConfig": {
+    "IndexFields": ["title", "description", "brand", "tags"],
+    "FilterFields": ["brand", "tags", "price"],
+    "SuggestFields": ["title"],
+    "ChatFields": ["title", "description"],
+    "FilterFieldsMap": {
+      "brand": { "Type": "string" },
+      "tags": { "Type": "array<string>" },
+      "price": { "Type": "float" }
+    },
+    "FieldDescMap": {
+      "title": "Display title shown in search results",
+      "description": "Long text describing the item",
+      "brand": "Brand name",
+      "tags": "Free-form tags",
+      "price": "Price in USD"
+    }
+  }
+}

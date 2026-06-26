@@ -5,4 +5,5 @@ release/
 # macOS metadata
 .DS_Store
 **/.DS_Store
-
+tmp*/
+tmp-acceptance/
