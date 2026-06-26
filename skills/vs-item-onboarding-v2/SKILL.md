@@ -4,7 +4,7 @@ description: "V2 item-level onboarding driven entirely by the V2 OpenAPI: GetPre
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: item onboarding v2, dataset onboarding v2, V2 OpenAPI, presigned upload, AddInferDatasetSchemaTaskV2, GetInferDatasetSchemaResultV2, CreateDatasetV2, AttachDatasetToApplicationV2, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence
+keywords: item onboarding v2, dataset onboarding v2, V2 OpenAPI, presigned upload, AddInferDatasetSchemaTaskV2, GetInferDatasetSchemaResultV2, CreateDatasetV2, AttachDatasetToApplicationV2, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, Stage A confirmation
 commands: dataset import-url, dataset infer-schema, dataset infer-result, dataset create, dataset ingest, data write, app create, app attach-dataset
 ---
 
@@ -70,13 +70,20 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
    This single artifact is the source-of-truth for every subsequent step. Do **not** regenerate it; do **not** edit `BizAttr` (those drive PK / title / URL detection on the backend). If the user requests semantic edits (e.g. tweak a `FieldDescMap` description, reorder `IndexFields`), edit this file in place and reuse it.
 
-5. **Stage A — Confirmation (mandatory)** — render the persisted artifact for the user:
-   - Dataset name (proposed), industry, language, type.
-   - A field table with columns `name`, `type`, `BizAttr`, `description (FieldDescMap)`, `required`.
-   - The `DataFieldConfig` field-role summary: `IndexFields` (text search), `ImageIndexFields` (image search), `VideoIndexFields`, `FilterFields` + `FilterFieldsMap`, `SuggestFields`, `ChatFields`.
-   - Total field count and any anomalies (e.g. `FieldDescMap` missing entries; both `ImageIndexFields` and `VideoIndexFields` empty for a multimodal goal; `BizAttr: ImagePK` not present anywhere — that would mean the backend has no PK to derive).
+5. **Stage A — Confirmation (mandatory)** — render the persisted artifact for the user **using the CLI's deterministic renderer**, not by hand-assembling markdown from the JSON:
 
-   Ask exactly one question, e.g. *"以上 schema 与字段角色配置是否符合预期？回复 `yes` 继续，或回复需要修改的字段。"* Only proceed to step 6 after a positive confirmation. If the user requests changes, edit the persisted artifact in place — do not re-run inference.
+   ```bash
+   vs dataset infer-result --task-id <TaskID> --render-schema
+   ```
+
+   This emits a fixed Stage-A block (Summary / Fields table / Field Roles / Warnings) that tolerates `Name`/`FieldName`, `Type`/`FieldType`, missing `Required`/`BizAttr`/`Description`, and missing or incomplete `DataFieldConfig`. The output is byte-stable: re-running the same task always produces the exact same table, so the user-visible schema view never drifts between renders.
+
+   - Dataset name (proposed), industry, language, type — print these once above the CLI block.
+   - The CLI's `Fields` table has columns `name | type | BizAttr | required | description`.
+   - The CLI's `Field Roles` block lists `IndexFields` (text search), `FilterFields`, `SuggestFields`, `ImageIndexFields`, `VideoIndexFields`, `ChatFields`, and `FilterFieldsMap` enum/id/num buckets.
+   - The CLI's `Warnings` block flags: missing `FieldDescMap` entries, no PK-class `BizAttr`, empty `IndexFields`, and any role field that references a name absent from the schema.
+
+   Ask exactly one question, e.g. *"以上 schema 与字段角色配置是否符合预期？回复 `yes` 继续，或回复需要修改的字段。"* Only proceed to step 6 after a positive confirmation. If the user requests changes, edit the persisted artifact in place — do not re-run inference, and do not re-format the table yourself. Re-run `vs dataset infer-result --task-id <id> --render-schema` (or feed the edited artifact via `--data @infer-result.json --render-schema`) so the user keeps seeing the same deterministic view.
 
 6. **Dry-run create** — build `dataset-create.json` directly from the persisted artifact: copy `Schema` as-is (do **not** flip `IsPK`; the backend derives PK from `BizAttr`), copy `DataFieldConfig.FieldDescMap` as `FieldDescMap`, fill in `Name` / `Type` / `Industry` / `Language` / `Description`, set `DryRun: true`. Run `vs dataset create --data @dataset-create.json --dry-run`. Surface any validation errors and pause for correction. Useful payload shape:
 

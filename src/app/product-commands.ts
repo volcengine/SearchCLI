@@ -15,6 +15,8 @@ import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help
 import { ApiRequestError, postJson } from '../core/http';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
+import { hasExplicitOutputFormatFlag } from '../core/output-format';
+import { buildInferSchemaStageA, renderInferSchemaStageAText } from '../core/infer-schema-stage-a';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
 import {
@@ -2056,7 +2058,7 @@ EXAMPLES
     'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
 
 USAGE
-  vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]
+  vs dataset infer-result --task-id <id> [--project-name <name>] [--render-schema] [service flags]
   vs dataset infer-result --data @infer-result.json [service flags]
 
 DESCRIPTION
@@ -2067,10 +2069,15 @@ DESCRIPTION
 KEY FLAGS
   --task-id        TaskID returned by \`dataset infer-schema\`.
   --project-name   Viking project name when the API requires project scoping.
+  --render-schema  Render the inferred schema as a deterministic Stage-A table (fields +
+                   field-role roster + anomaly warnings). Tolerates Name/FieldName,
+                   Type/FieldType, missing Required / BizAttr / FieldDescMap, and missing
+                   DataFieldConfig entries. Use this before asking the user to confirm.
 
 EXAMPLES
   vs dataset infer-result --task-id task_abc123
-  vs dataset infer-result --data @infer-result.json`
+  vs dataset infer-result --task-id task_abc123 --render-schema
+  vs dataset infer-result --data @infer-result.json --render-schema`
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
@@ -3013,7 +3020,8 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       await runDatasetInferResultCommand({
         ...serviceOptions,
         taskId: optionalString(values['task-id']),
-        projectName: optionalString(values['project-name'])
+        projectName: optionalString(values['project-name']),
+        renderSchema: optionalBoolean(values['render-schema'])
       });
       return;
     case 'get':
@@ -4252,6 +4260,7 @@ export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOp
 export interface DatasetInferResultOptions extends ServiceCommandOptions {
   taskId?: string;
   projectName?: string;
+  renderSchema?: boolean;
 }
 
 export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
@@ -4261,7 +4270,17 @@ export async function runDatasetInferResultCommand(options: DatasetInferResultOp
   });
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
   requireNonEmptyObject(payload, 'Need --task-id (or --data) for dataset infer-result.');
-  await printResult(callOpenApi('/open/GetInferDatasetSchemaResultV2', payload, options));
+  const response = await callOpenApi('/open/GetInferDatasetSchemaResultV2', payload, options);
+  if (options.renderSchema) {
+    const stageA = buildInferSchemaStageA(response);
+    if (hasExplicitOutputFormatFlag()) {
+      await printResult(stageA);
+      return;
+    }
+    process.stdout.write(`${renderInferSchemaStageAText(stageA)}\n`);
+    return;
+  }
+  await printResult(response);
 }
 
 export interface AppAttachDatasetOptions extends ServiceCommandOptions {

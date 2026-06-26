@@ -116,6 +116,10 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
   await runTest('v2-dataset-infer-schema-mock', testDatasetInferSchemaMock);
   await runTest('v2-dataset-infer-result-mock', testDatasetInferResultMock);
+  await runTest('v2-dataset-infer-result-render-schema-mixed', testDatasetInferResultRenderSchemaMixed);
+  await runTest('v2-dataset-infer-result-render-schema-degenerate', testDatasetInferResultRenderSchemaDegenerate);
+  await runTest('v2-dataset-infer-result-render-schema-no-data-config', testDatasetInferResultRenderSchemaNoDataConfig);
+  await runTest('v2-dataset-infer-result-render-schema-stability', testDatasetInferResultRenderSchemaStability);
   await runTest('v2-dataset-create-mock', testDatasetCreateMock);
   await runTest('v2-app-create-mock', testAppCreateMock);
   await runTest('v2-app-attach-dataset-mock', testAppAttachDatasetMock);
@@ -1727,6 +1731,149 @@ async function testDatasetInferResultMock() {
     assert.match(stdout, /Success/);
     assert.match(stdout, /item_id/);
     return `${command.prefix} dataset infer-result --task-id task_xyz`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDatasetInferResultRenderSchemaMixed() {
+  const mixedResult = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'QueryPK', IsPK: true, Required: true },
+      { Name: 'title', Type: 'string', BizAttr: 'Title', Required: false },
+      { Name: 'tags', FieldType: 'array<string>' },
+      { FieldName: 'price', Type: 'float' }
+    ],
+    FieldDescMap: {
+      item_id: 'Primary key',
+      title: 'Title for search results',
+      tags: 'Free-form tags'
+    },
+    DataFieldConfig: {
+      IndexFields: ['title', 'tags'],
+      FilterFields: ['price', 'non_existing'],
+      SuggestFields: ['title'],
+      FilterFieldsMap: { price: { Type: 'float' } }
+    }
+  };
+  return runInferResultRenderSchema(mixedResult, ({ stdout }) => {
+    assert.match(stdout, /Stage A — Schema Confirmation/);
+    assert.match(stdout, /Field count: 4/);
+    assert.match(stdout, /Primary key: item_id \(QueryPK\)/);
+    assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
+    assert.match(stdout, /item_id\s+\|\s+string\s+\|\s+QueryPK\s+\|\s+yes\s+\|\s+Primary key/);
+    assert.match(stdout, /tags\s+\|\s+array<string>\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
+    assert.match(stdout, /price\s+\|\s+float\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /FieldDescMap is missing entries for: price/);
+    assert.match(stdout, /Field roles reference unknown schema fields: non_existing/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaDegenerate() {
+  const degenerate = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'doc_id', FieldType: 'string' },
+      { FieldName: 'body', FieldType: 'string' }
+    ]
+  };
+  return runInferResultRenderSchema(degenerate, ({ stdout }) => {
+    assert.match(stdout, /Stage A — Schema Confirmation/);
+    assert.match(stdout, /Field count: 2/);
+    assert.match(stdout, /Primary key: \(none\)/);
+    assert.match(stdout, /doc_id\s+\|\s+string\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /No field carries a primary-key BizAttr/);
+    assert.match(stdout, /DataFieldConfig\.IndexFields is empty/);
+    assert.match(stdout, /FieldDescMap is missing entries for: doc_id, body/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaNoDataConfig() {
+  const noDataConfig = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'video_id', FieldType: 'string', BizAttr: 'VideoContentID', IsPK: true },
+      { FieldName: 'cover', FieldType: 'string', BizAttr: 'ImagePK' }
+    ],
+    FieldDescMap: {
+      video_id: 'Primary key',
+      cover: 'Cover image'
+    }
+  };
+  return runInferResultRenderSchema(noDataConfig, ({ stdout }) => {
+    assert.match(stdout, /Field count: 2/);
+    assert.match(stdout, /Primary key: video_id \(VideoContentID\)/);
+    assert.match(stdout, /IndexFields:\s+\(none\)/);
+    assert.match(stdout, /FilterFields:\s+\(none\)/);
+    assert.match(stdout, /SuggestFields:\s+\(none\)/);
+    assert.match(stdout, /DataFieldConfig\.IndexFields is empty/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaStability() {
+  const fixture = JSON.parse(
+    fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'), 'utf8')
+  );
+  const state = {
+    requests: [],
+    responses: {
+      GetInferDatasetSchemaResultV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-result-stability' },
+        Result: fixture
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const outputs = [];
+    for (let i = 0; i < 5; i += 1) {
+      const { stdout } = await runCli(
+        [
+          'dataset', 'infer-result',
+          '--task-id', 'task_stability',
+          '--render-schema',
+          ...v2ServiceFlags(server.baseUrl)
+        ],
+        { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+      );
+      outputs.push(stdout);
+    }
+    for (let i = 1; i < outputs.length; i += 1) {
+      assert.equal(outputs[i], outputs[0], `render-schema output drifted across runs (run ${i + 1})`);
+    }
+    assert.match(outputs[0], /Stage A — Schema Confirmation/);
+    assert.match(outputs[0], /Primary key: item_id \(QueryPK\)/);
+    assert.match(outputs[0], /Field count: 7/);
+    return `${command.prefix} dataset infer-result --render-schema (5x stability)`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function runInferResultRenderSchema(result, assertions) {
+  const state = {
+    requests: [],
+    responses: {
+      GetInferDatasetSchemaResultV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-result-render' },
+        Result: result
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'dataset', 'infer-result',
+        '--task-id', 'task_render',
+        '--render-schema',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assertions({ stdout });
+    return `${command.prefix} dataset infer-result --render-schema`;
   } finally {
     await server.close();
   }
