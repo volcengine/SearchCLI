@@ -12,7 +12,7 @@ const ROLE_KEYS = [
   ['ChatFields', 'chat']
 ] as const;
 
-export interface StageAField {
+export interface SchemaConfirmField {
   name: string;
   type: string;
   bizAttr: string;
@@ -20,7 +20,7 @@ export interface StageAField {
   description: string;
 }
 
-export interface StageARoles {
+export interface SchemaConfirmRoles {
   index: string[];
   filter: string[];
   suggest: string[];
@@ -30,21 +30,21 @@ export interface StageARoles {
   filterTypes: Array<{ field: string; type: string }>;
 }
 
-export interface StageASummary {
+export interface SchemaConfirmSummary {
   fieldCount: number;
   primaryKey: string | null;
   primaryKeyBizAttr: string | null;
   status: string;
 }
 
-export interface InferSchemaStageA {
-  summary: StageASummary;
-  fields: StageAField[];
-  roles: StageARoles;
+export interface InferSchemaConfirm {
+  summary: SchemaConfirmSummary;
+  fields: SchemaConfirmField[];
+  roles: SchemaConfirmRoles;
   warnings: string[];
 }
 
-export function buildInferSchemaStageA(envelope: unknown): InferSchemaStageA {
+export function buildInferSchemaConfirm(envelope: unknown): InferSchemaConfirm {
   const result = extractResult(envelope);
   const schema = toArray(pick(result, ['Schema', 'schema']));
   const topFieldDescMap = toRecord(pick(result, ['FieldDescMap', 'fieldDescMap']));
@@ -63,7 +63,7 @@ export function buildInferSchemaStageA(envelope: unknown): InferSchemaStageA {
     }
   }
 
-  const fields: StageAField[] = schema.map(entry => normalizeField(entry, mergedDescMap));
+  const fields: SchemaConfirmField[] = schema.map(entry => normalizeField(entry, mergedDescMap));
   const seenNames = new Set<string>();
   for (const field of fields) {
     seenNames.add(field.name);
@@ -78,7 +78,7 @@ export function buildInferSchemaStageA(envelope: unknown): InferSchemaStageA {
     }
   }
 
-  const roles: StageARoles = {
+  const roles: SchemaConfirmRoles = {
     index: [],
     filter: [],
     suggest: [],
@@ -104,7 +104,7 @@ export function buildInferSchemaStageA(envelope: unknown): InferSchemaStageA {
   roles.filterTypes.sort((a, b) => a.field.localeCompare(b.field));
 
   const status = stringifyScalar(pick(result, ['Status', 'status'])) || 'Unknown';
-  const summary: StageASummary = {
+  const summary: SchemaConfirmSummary = {
     fieldCount: fields.length,
     primaryKey,
     primaryKeyBizAttr,
@@ -116,7 +116,7 @@ export function buildInferSchemaStageA(envelope: unknown): InferSchemaStageA {
   return { summary, fields, roles, warnings };
 }
 
-function normalizeField(entry: unknown, descMap: Record<string, string>): StageAField {
+function normalizeField(entry: unknown, descMap: Record<string, string>): SchemaConfirmField {
   const record = toRecord(entry);
   const name =
     stringifyScalar(pick(record, ['Name', 'name', 'FieldName', 'fieldName'])) || '(unnamed)';
@@ -131,8 +131,8 @@ function normalizeField(entry: unknown, descMap: Record<string, string>): StageA
 }
 
 function collectWarnings(input: {
-  fields: StageAField[];
-  roles: StageARoles;
+  fields: SchemaConfirmField[];
+  roles: SchemaConfirmRoles;
   mergedDescMap: Record<string, string>;
   seenNames: Set<string>;
   primaryKey: string | null;
@@ -161,7 +161,7 @@ function collectWarnings(input: {
   return warnings;
 }
 
-function collectUnknownRoleFields(roles: StageARoles, seenNames: Set<string>): string[] {
+function collectUnknownRoleFields(roles: SchemaConfirmRoles, seenNames: Set<string>): string[] {
   const result = new Set<string>();
   const buckets: Array<string[]> = [
     roles.index,
@@ -251,47 +251,47 @@ function lowerFirst(value: string): string {
   return value.length === 0 ? value : value[0].toLowerCase() + value.slice(1);
 }
 
-export function renderInferSchemaStageAText(stageA: InferSchemaStageA): string {
+export function renderInferSchemaConfirmText(confirm: InferSchemaConfirm): string {
   const lines: string[] = [];
   lines.push('<!-- vs-schema-confirm: BEGIN (verbatim — do not paraphrase) -->');
   lines.push('**Metadata**');
   lines.push('');
   lines.push('```');
-  lines.push(`Status: ${stageA.summary.status}`);
-  lines.push(`Field count: ${stageA.summary.fieldCount}`);
-  lines.push(`Primary key: ${formatPrimaryKey(stageA.summary)}`);
+  lines.push(`Status: ${confirm.summary.status}`);
+  lines.push(`Field count: ${confirm.summary.fieldCount}`);
+  lines.push(`Primary key: ${formatPrimaryKey(confirm.summary)}`);
   lines.push('```');
   lines.push('');
-  lines.push(`**Fields (${stageA.fields.length})**`);
+  lines.push(`**Fields (${confirm.fields.length})**`);
   lines.push('');
-  lines.push(renderMarkdownFieldTable(stageA.fields));
+  lines.push(renderMarkdownFieldTable(confirm.fields));
   lines.push('');
   lines.push('**Field Roles**');
   lines.push('');
   lines.push('```');
-  for (const line of renderRolesLines(stageA.roles)) lines.push(line);
+  for (const line of renderRolesLines(confirm.roles)) lines.push(line);
   lines.push('```');
   lines.push('');
-  lines.push(`**Warnings (${stageA.warnings.length})**`);
+  lines.push(`**Warnings (${confirm.warnings.length})**`);
   lines.push('');
   lines.push('```');
-  if (stageA.warnings.length === 0) {
+  if (confirm.warnings.length === 0) {
     lines.push('(none)');
   } else {
-    for (const warning of stageA.warnings) lines.push(`! ${warning}`);
+    for (const warning of confirm.warnings) lines.push(`! ${warning}`);
   }
   lines.push('```');
   lines.push('<!-- vs-schema-confirm: END -->');
   return lines.join('\n');
 }
 
-function formatPrimaryKey(summary: StageASummary): string {
+function formatPrimaryKey(summary: SchemaConfirmSummary): string {
   if (!summary.primaryKey) return '(none)';
   if (!summary.primaryKeyBizAttr) return summary.primaryKey;
   return `${summary.primaryKey} (BizAttr=${summary.primaryKeyBizAttr})`;
 }
 
-function renderMarkdownFieldTable(fields: StageAField[]): string {
+function renderMarkdownFieldTable(fields: SchemaConfirmField[]): string {
   const headers = ['name', 'type', 'BizAttr', 'required', 'description'];
   const headerRow = `| ${headers.join(' | ')} |`;
   const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
@@ -311,7 +311,7 @@ function renderMarkdownFieldTable(fields: StageAField[]): string {
   return [headerRow, separatorRow, ...bodyRows].join('\n');
 }
 
-function renderRolesLines(roles: StageARoles): string[] {
+function renderRolesLines(roles: SchemaConfirmRoles): string[] {
   const labelWidth = 'VideoIndexFields'.length;
   const lines: string[] = [];
   const entries: Array<[string, string[] | undefined]> = [

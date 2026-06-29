@@ -10,6 +10,24 @@ commands: dataset import-url, dataset infer-schema, dataset infer-result, datase
 
 # Viking Item Onboarding (V2)
 
+## Language Matching (apply throughout)
+
+Match the language of the **user's most recent message** in every line of prose you write — confirmation prompts, status notes, hand-off summaries, questions, error explanations, **and any internal thinking / reasoning / planning output that the host may surface (e.g. `<thinking>` blocks, "thinking" panels, scratchpad notes, todo descriptions)**. If the user is writing in Chinese, every prose line and every reasoning line must also be in Chinese; if English, English; same for Japanese, etc. The fact that this skill file is written in English is for documentation only — at runtime translate all **prose and reasoning** into the user's language. Do not switch back to English mid-flow just because the surrounding skill text is English.
+
+**中文用户优先级（最常见的场景）**：当 `current_query` 或对话中最近一条用户消息为中文时：
+
+- 你写给用户看的所有句子（确认提示、状态说明、报错解释、最终交付总结）必须用中文。
+- 你内部的思考 / 推理 / 计划输出（thinking 块、scratchpad、待办描述等）也必须用中文。
+- 工作区里你新建的中间文件、目录名（除了与 CLI 契约相关的英文标识外）的注释或描述部分，也尽量使用中文。
+
+Do **not** translate the following — keep them verbatim so the contract stays machine-checkable:
+
+- The verbatim CLI block between `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->` (English section labels `**Metadata**` / `**Fields (N)**` / `**Field Roles**` / `**Warnings (N)**` and English warning text come straight from the CLI).
+- CLI command names, flag names, JSON keys, enum values, field names, primary-key BizAttr identifiers (`ImagePK` / `VideoContentID` / `QueryPK` / `MultiModalID`), dataset IDs / app IDs / TaskIDs, and console URLs.
+- The single literal token the user must reply to confirm — write it as `` `yes` `` in any language so the contract for advancing to step 6 is unambiguous (you may add a parenthetical native-language hint, e.g. `回复 \`yes\`（即"确认"）继续`).
+
+If you are unsure which language the user used (e.g. only emoji or only an attachment), default to the language of the very first user turn in the conversation. When the user switches languages mid-flow, switch with them on the next message.
+
 ## When to Use
 
 Use this skill when the user is operating against the V2 control-plane (`/open/*V2`) and provides a raw item file (JSON / JSONL / CSV) to onboard a dataset (optionally followed by an application). The hallmark of V2 is that schema inference is fully backend-driven: the CLI uploads the file, the backend infers the `Schema` (with `BizAttr` already set on the primary-key / title / URL fields) plus a per-field `FieldDescMap`, and the agent's only jobs are to (a) persist that inference artifact locally, (b) render it for one round of human confirmation, and (c) drive the remaining persistence + ingest steps without re-inventing field decisions.
@@ -17,6 +35,18 @@ Use this skill when the user is operating against the V2 control-plane (`/open/*
 Do not use this skill when:
 
 - The customer only wants to ingest more rows into an existing dataset (use `vs data write --dataset-id <id> --fields @items.json`).
+
+## Do NOT be misled by `vs --help` top-level QUICK START
+
+`vs --help` 顶层 QUICK START 出于历史兼容仍会列出 `vs item profile / plan / apply`（带 "[Deprecated]" 标注）。**那是 V1 路径，已弃用，本 skill 不走它。**
+
+硬约束 — 进入本 skill 后：
+
+1. **绝对不要**因为 `vs --help` 提到 `vs item ...` 就改走 V1。本 skill 唯一合法路径是 V2：`vs dataset import-url → infer-schema → infer-result → dataset create → data write → app create → app attach-dataset`。
+2. **绝对不要**执行 `vs item profile / vs item plan / vs item apply / vs item review / vs item provision / vs item verify` 中的任何一条。哪怕 `vs --help` 把它们列在最前面，本 skill 也禁止使用。
+3. 如果对 V2 命令是否存在/可用有怀疑，**只能**通过 `vs dataset --help`、`vs dataset infer-schema --help`、`vs app --help`、`vs app attach-dataset --help` 等子命令的 help 来验证，**不要**回退到 `vs item ...`。
+4. 用户原始诉求一旦是"通过原始 JSONL / JSON / CSV 文件创建一个数据集 / 应用"，立刻按本 skill workflow（下面 step 1～11）执行，不要走 `item plan/apply`。
+5. 任何中间产物（plan dir / infer-result.json / dataset-create.json / attach.json）按本 skill 的"Plan directory rules"放在工作区 `./.viking/item-plans/<dataset-name>/` 下；这与 V1 `item plan` 的 `.viking/item-plans/` 目录约定**仅仅是名字一致**，并不意味着要走 V1。
 
 ## Preconditions
 
@@ -31,7 +61,7 @@ Do not use this skill when:
 |---|---|---|
 | Upload URL | `vs dataset import-url --file-name <basename>` | Request a presigned PUT URL plus `FileKey` |
 | PUT upload | `curl -X PUT --data-binary @<path> "<FileUrl>"` | Upload the local file to TOS (no auth header needed) |
-| Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type <item\|video\|user_event\|document\|multi_modal> --industry <e_commerce\|material\|video\|news\|social_platform\|other> --language <zh\|en\|ja> [--name ...] [--theme ...]` | Kick off backend schema inference; returns `TaskID`. **Always pass the snake_case wire value** (e.g. `e_commerce`, not `ecommerce`); the CLI accepts aliases like `ecommerce` for `--industry` only as a courtesy, JSON payloads later require the wire value verbatim. |
+| Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type <item\|video\|user_event> --industry <e_commerce\|material\|video\|news\|social_platform\|other> --language <zh\|en\|ja> [--name ...]` | Kick off backend schema inference; returns `TaskID`. **Always pass the snake_case wire value** (e.g. `e_commerce`, not `ecommerce`); the CLI accepts aliases like `ecommerce` for `--industry` only as a courtesy, JSON payloads later require the wire value verbatim. |
 | Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact) |
 | Create dataset | `vs dataset create --data @dataset-create.json [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr` |
 | Write data | `vs data write --dataset-id <DatasetId> --fields @items.json` | Push the actual records into the dataset |
@@ -46,8 +76,17 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
 1. **Get upload URL** — `vs dataset import-url --file-name <basename>`. Capture `Result.FileUrl` and `Result.FileKey`. Keep `FileKey` for step 3.
 2. **PUT upload** — upload the raw item file to `FileUrl` (e.g. `curl -X PUT --data-binary "@<local-path>" "<FileUrl>"`). Expect HTTP 200 with empty body. Do not add an `Authorization` header — `FileUrl` is already presigned.
-3. **Submit inference task** — `vs dataset infer-schema --tos-key <FileKey> --type <item|...> --industry <alias> --language <lang> --name <dataset-name> [--theme "<short biz description>"]`. Capture `Result.TaskId`. Industry aliases follow the snake_case backend rules: `ecommerce`/`e-commerce` → `e_commerce`, `social-platform` → `social_platform`, plus `material`/`video`/`news`/`other`. The CLI converts the alias to the backend-expected snake_case automatically.
-4. **Poll inference result + persist locally** — `vs dataset infer-result --task-id <TaskId>` until `Result.Status === "Success"` (poll roughly every 5s, max ~3 minutes). Then write `Result` verbatim to a local artifact file — e.g. `./.viking/item-plans/<dataset-name>/infer-result.json` — so the rest of the workflow can read from it. The persisted object is:
+3. **Submit inference task** — `vs dataset infer-schema --tos-key <FileKey> --type <item|...> --industry <alias> --language <lang> --name <dataset-name>`. Capture `Result.TaskId`. Industry aliases follow the snake_case backend rules: `ecommerce`/`e-commerce` → `e_commerce`, `social-platform` → `social_platform`, plus `material`/`video`/`news`/`other`. The CLI converts the alias to the backend-expected snake_case automatically.
+4. **Poll inference result + persist locally** — `vs dataset infer-result --task-id <TaskId>` until `Result.Status === "Success"` (poll roughly every 5s, max ~3 minutes). Then write `Result` verbatim to a **workspace-relative** artifact file so the rest of the workflow can read from it.
+
+   **Plan directory rules (重要)**：
+
+   - **必须**写到当前工作区相对路径：`./.viking/item-plans/<dataset-name>/infer-result.json`（即 `<cwd>/.viking/item-plans/<dataset-name>/...`）。
+   - **禁止**写到 `~/.viking/`（即 `$HOME/.viking/`）下任何位置。`~/.viking/` 是 vs CLI 私有的配置/凭据目录（`config.json`、`credentials.json.enc`），不是 plan dir。很多 agent host 把 `~/` 放在沙箱之外，写过去会以 `EPERM: operation not permitted` 失败，并且即便写成功也会和 CLI 的私有文件混在一起。
+   - 如果当前工作区根目录无法写（例如沙箱只允许临时目录）：fallback 优先级为 `${WORKSPACE_DIR}/.viking/item-plans/<dataset-name>/` → `${TMPDIR}/viking-item-plans/<dataset-name>/` → `./viking-item-plans/<dataset-name>/`。**绝不**改写到家目录 `~/.viking/`。
+   - 一旦确定了 plan dir，把它存到一个本地变量（例如 `WORK`）并在后续 step 6/7/8/10 里复用同一个路径，**不要**在不同 step 之间切换 plan dir。
+
+   The persisted object is:
 
    ```json
    {
@@ -85,8 +124,16 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
    <verbatim CLI stdout from the BEGIN marker through the END marker, character-for-character>
 
-   This is the Schema Confirmation block. Reply `yes` to continue, or describe which fields to adjust (e.g. "make `description` searchable", "add `brand` to SuggestFields").
+   <one-line confirmation prompt, written in the user's language — see Language Matching above and the templates below>
    ````
+
+   **Confirmation prompt — pick the template matching the user's most recent message language. Do not paste the English template verbatim if the user is writing in Chinese.**
+
+   - 中文（用户说中文时使用，**默认**）：
+     `以上是 Schema 确认块。回复 \`yes\` 继续，或说明需要调整的字段（例如：把 \`description\` 加入文本检索字段、把 \`brand\` 加入 SuggestFields）。`
+   - English (when the user is writing in English):
+     `This is the Schema Confirmation block. Reply \`yes\` to continue, or describe which fields to adjust (e.g. "make \`description\` searchable", "add \`brand\` to SuggestFields").`
+   - 日本語 / その他言語：translate the same intent, keep the token `` `yes` `` verbatim and keep field names / JSON keys (`description`, `SuggestFields`, ...) in English.
 
    **You MUST**:
    - Copy the CLI stdout between (and including) the `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->` markers character-for-character.
@@ -135,8 +182,9 @@ Run strictly in order. Each step depends on output from the previous one; an inf
     - Host contains `volcengineapi.com` / `volces.com` → **火山引擎**, use `https://console.volcengine.com/aisearch/platform/region:aisearch-platform+<region>/...`. `<region>` is the active profile region (e.g. `cn-beijing`).
     - Host contains `byteplus.com` → **BytePlus**, use `https://console.byteplus.com/aisearch/region:aisearch+ap-southeast-1/...` (BytePlus today only exposes the `ap-southeast-1` region; do not fabricate other regions).
 
-    Print the URLs only for the resources that actually exist in this run (dataset is always present; app/attach are only present if the user opted in). For example, on Volc `cn-beijing`:
+    Print the URLs only for the resources that actually exist in this run (dataset is always present; app/attach are only present if the user opted in). Render the prose lines (✓ markers, readiness reminder, runtime-API tip) in the **user's current language** per the **Language Matching** rule; keep IDs and URLs verbatim. Examples for the same Volc `cn-beijing` run, one per language:
 
+    **中文用户**:
     ```
     ✓ 数据集已创建：DatasetId=<DatasetId>
       控制台链接：https://console.volcengine.com/aisearch/platform/region:aisearch-platform+cn-beijing/home/dataset/<DatasetId>
@@ -146,6 +194,30 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
     数据需要后台处理后才能查询。请打开上面链接关注数据集 / 应用的「生效状态」（Ready）。
     生效之后即可使用 `vs search`、`vs chat`、`vs recommend` 等运行时接口进行体验。
+    ```
+
+    **English user**:
+    ```
+    ✓ Dataset created: DatasetId=<DatasetId>
+      Console link: https://console.volcengine.com/aisearch/platform/region:aisearch-platform+cn-beijing/home/dataset/<DatasetId>
+
+    ✓ Application created and dataset attached: AppId=<AppId>
+      Console link: https://console.volcengine.com/aisearch/platform/region:aisearch-platform+cn-beijing/app/<AppId>
+
+    Data must finish backend processing before it is queryable. Open the links above and watch for the "Ready" state on the dataset / application.
+    Once they report Ready, you can exercise the runtime APIs via `vs search`, `vs chat`, `vs recommend`.
+    ```
+
+    **日本語ユーザ**:
+    ```
+    ✓ データセットを作成しました: DatasetId=<DatasetId>
+      コンソールリンク: https://console.volcengine.com/aisearch/platform/region:aisearch-platform+cn-beijing/home/dataset/<DatasetId>
+
+    ✓ アプリケーションを作成しデータセットを紐付けました: AppId=<AppId>
+      コンソールリンク: https://console.volcengine.com/aisearch/platform/region:aisearch-platform+cn-beijing/app/<AppId>
+
+    データが利用可能になるにはバックエンド処理の完了が必要です。上記リンクからデータセット / アプリケーションの「Ready」状態を確認してください。
+    Ready になると `vs search` / `vs chat` / `vs recommend` などのランタイム API を利用できます。
     ```
 
     Same shape on BytePlus, with the byteplus URL pattern. The agent must surface this block as the final output of the workflow; do not omit it even if the user has not asked. If only the dataset was created (no app branch), still print the dataset link and the readiness reminder (chat / search will require attaching to an app afterwards).
@@ -165,7 +237,7 @@ Step 5 is the only step where the agent's chat message _is_ the user experience.
 3. **One-line confirmation prompt** (below the CLI block):
 
    ```
-   This is the Schema Confirmation block. Reply `yes` to continue, or describe which fields to adjust (e.g. "make `description` searchable", "add `brand` to SuggestFields").
+   <one-line confirmation prompt, written in the user's language — Chinese for Chinese users, English for English users, etc. See the per-language templates in step 5 above. The literal token `` `yes` `` and field / JSON key names stay in English.>
    ```
 
 ### Do
@@ -195,7 +267,8 @@ V2 enum fields are **strings**. Pass the CLI alias (case-insensitive) and let th
 | `Industry` | `social-platform` / `social` | `social_platform` |
 | `Industry` | `other` | `other` |
 | `Industry` | `none` | `""` (empty) |
-| `Type` (dataset) | `item` / `video` / `user-event` / `document` / `multi-modal` / `query` | same, snake_case |
+| `Type` (dataset, `infer-schema`) | `item` / `video` / `user_event` (use `user-event` as a courtesy alias) | same, snake_case |
+| `Type` (dataset, `create`) | `item` / `video` / `user_event` / `document` | same, snake_case |
 | `Type` (field) | `string` / `int32` / `int64` / `float` / `bool` / `array<string>` / `array<int64>` / `array<float>` / `object` / `array<object>` | identical string |
 
 Do not pass numeric codes to any V2 API. The CLI keeps a one-way alias map and an int→string fallback for legacy payloads, but agents should emit strings only.
@@ -229,14 +302,15 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 ## Constraints
 
 1. **Persist the inference artifact.** Write the entire `Result` from `dataset infer-result` to a local file in step 4 and re-read it in steps 6, 7, and 10. Do not pass field roles inline from memory; always source them from the persisted file so create + attach stay consistent.
-2. **Never flip `IsPK`.** Backend derives PK from `BizAttr`. Modifying `IsPK` (or stripping `BizAttr`) on the wire is a code smell and can fail validation.
-3. **Never skip Schema Confirmation (step 5).** Schema persistence (step 6 onward) requires an explicit human "yes" on the inferred schema and field roles.
-4. **Always dry-run once.** Run `dataset create --dry-run` before the real create. Surface backend validation errors to the user before retrying.
-5. **String enums only.** Pass `Type` and `Industry` as their string values (PascalCase alias accepted on input, snake_case is what the backend expects on wire). Numeric codes will be rejected.
-6. **No backtrack flags.** `attach-dataset` (V2) does not accept `BacktrackReq`. If the user needs historical backtrack, treat it as a separate workflow.
-7. **Preserve `FieldDescMap` and `DataConfig`.** Forward the inferred `FieldDescMap` to `CreateDatasetV2`, and forward the inferred `DataConfig` verbatim to `AttachDatasetToApplicationV2`. Do not regenerate or strip them locally.
-8. **No `Authorization` header on the TOS PUT.** `FileUrl` is presigned; adding auth headers will break the upload.
-9. **Always end with the console hand-off block.** The agent's final message in this workflow must include the dataset (and app, if created) console URLs derived from the active profile (`volcengine.com` for Volc, `byteplus.com` for BytePlus) plus a reminder that runtime APIs (`search`, `chat`, recommend) can only be used once the console shows the resource as Ready. Never skip this step — the user has no other clue where to monitor readiness.
+2. **Plan dir 必须在工作区内。** 所有 plan/artifact 文件（`infer-result.json` / `dataset-create.json` / `attach.json` 等）必须写到 **工作区相对路径** `./.viking/item-plans/<dataset-name>/`（或在沙箱受限时按 step 4 的 fallback 顺序：`${WORKSPACE_DIR}/.viking/...` → `${TMPDIR}/viking-item-plans/...` → `./viking-item-plans/...`）。**绝不允许**写到 `~/.viking/`（即 `$HOME/.viking/`），那是 vs CLI 私有的 config/credentials 目录、且大多数 agent 沙箱不放行家目录写入，会触发 `EPERM: operation not permitted`。
+3. **Never flip `IsPK`.** Backend derives PK from `BizAttr`. Modifying `IsPK` (or stripping `BizAttr`) on the wire is a code smell and can fail validation.
+4. **Never skip Schema Confirmation (step 5).** Schema persistence (step 6 onward) requires an explicit human "yes" on the inferred schema and field roles.
+5. **Always dry-run once.** Run `dataset create --dry-run` before the real create. Surface backend validation errors to the user before retrying.
+6. **String enums only.** Pass `Type` and `Industry` as their string values (PascalCase alias accepted on input, snake_case is what the backend expects on wire). Numeric codes will be rejected.
+7. **No backtrack flags.** `attach-dataset` (V2) does not accept `BacktrackReq`. If the user needs historical backtrack, treat it as a separate workflow.
+8. **Preserve `FieldDescMap` and `DataConfig`.** Forward the inferred `FieldDescMap` to `CreateDatasetV2`, and forward the inferred `DataConfig` verbatim to `AttachDatasetToApplicationV2`. Do not regenerate or strip them locally.
+9. **No `Authorization` header on the TOS PUT.** `FileUrl` is presigned; adding auth headers will break the upload.
+10. **Always end with the console hand-off block.** The agent's final message in this workflow must include the dataset (and app, if created) console URLs derived from the active profile (`volcengine.com` for Volc, `byteplus.com` for BytePlus) plus a reminder that runtime APIs (`search`, `chat`, recommend) can only be used once the console shows the resource as Ready. Never skip this step — the user has no other clue where to monitor readiness.
 
 ## Recovery Hints
 

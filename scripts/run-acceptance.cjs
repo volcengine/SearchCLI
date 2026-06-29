@@ -115,6 +115,9 @@ async function runV2OnboardingSuite() {
 
   await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
   await runTest('v2-dataset-infer-schema-mock', testDatasetInferSchemaMock);
+  await runTest('v2-dataset-infer-schema-rejects-document', testDatasetInferSchemaRejectsDocument);
+  await runTest('v2-dataset-infer-schema-rejects-multi-modal', testDatasetInferSchemaRejectsMultiModal);
+  await runTest('v2-dataset-create-rejects-multi-modal', testDatasetCreateRejectsMultiModal);
   await runTest('v2-dataset-infer-result-mock', testDatasetInferResultMock);
   await runTest('v2-dataset-infer-result-render-schema-mixed', testDatasetInferResultRenderSchemaMixed);
   await runTest('v2-dataset-infer-result-render-schema-degenerate', testDatasetInferResultRenderSchemaDegenerate);
@@ -1696,6 +1699,77 @@ async function testDatasetInferSchemaMock() {
   }
 }
 
+async function expectCliRejection(argv, { pattern, env } = {}) {
+  let captured;
+  try {
+    await runCli(argv, env ? { env } : undefined);
+  } catch (err) {
+    captured = err;
+  }
+  assert.ok(captured, 'expected CLI invocation to fail');
+  const stderr = String(captured.stderr ?? '');
+  const stdout = String(captured.stdout ?? '');
+  assert.match(stderr + stdout, pattern);
+  return captured;
+}
+
+async function testDatasetInferSchemaRejectsDocument() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'infer-schema',
+      '--tos-key',
+      'onboarding/items.jsonl',
+      '--type',
+      'document',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset infer-schema --type document (rejected)`;
+}
+
+async function testDatasetInferSchemaRejectsMultiModal() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'infer-schema',
+      '--tos-key',
+      'onboarding/items.jsonl',
+      '--type',
+      'multi_modal',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset infer-schema --type multi_modal (rejected)`;
+}
+
+async function testDatasetCreateRejectsMultiModal() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'create',
+      '--name',
+      'demo-mm',
+      '--type',
+      'multi_modal',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event.*document/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset create --type multi_modal (rejected)`;
+}
+
 async function testDatasetInferResultMock() {
   const inferResult = JSON.parse(
     fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'), 'utf8')
@@ -1758,13 +1832,13 @@ async function testDatasetInferResultRenderSchemaMixed() {
     }
   };
   return runInferResultRenderSchema(mixedResult, ({ stdout }) => {
-    assert.match(stdout, /Stage A — Schema Confirmation/);
+    assert.match(stdout, /vs-schema-confirm: BEGIN/);
     assert.match(stdout, /Field count: 4/);
-    assert.match(stdout, /Primary key: item_id \(QueryPK\)/);
+    assert.match(stdout, /Primary key: item_id \(BizAttr=QueryPK\)/);
     assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
-    assert.match(stdout, /item_id\s+\|\s+string\s+\|\s+QueryPK\s+\|\s+yes\s+\|\s+Primary key/);
-    assert.match(stdout, /tags\s+\|\s+array<string>\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
-    assert.match(stdout, /price\s+\|\s+float\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+QueryPK\s+\|\s+yes\s+\|\s+Primary key/);
+    assert.match(stdout, /tags\s+\|\s+`array<string>`\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
+    assert.match(stdout, /price\s+\|\s+`float`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
     assert.match(stdout, /FieldDescMap is missing entries for: price/);
     assert.match(stdout, /Field roles reference unknown schema fields: non_existing/);
   });
@@ -1779,10 +1853,10 @@ async function testDatasetInferResultRenderSchemaDegenerate() {
     ]
   };
   return runInferResultRenderSchema(degenerate, ({ stdout }) => {
-    assert.match(stdout, /Stage A — Schema Confirmation/);
+    assert.match(stdout, /vs-schema-confirm: BEGIN/);
     assert.match(stdout, /Field count: 2/);
     assert.match(stdout, /Primary key: \(none\)/);
-    assert.match(stdout, /doc_id\s+\|\s+string\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /doc_id\s+\|\s+`string`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
     assert.match(stdout, /No field carries a primary-key BizAttr/);
     assert.match(stdout, /DataFieldConfig\.IndexFields is empty/);
     assert.match(stdout, /FieldDescMap is missing entries for: doc_id, body/);
@@ -1803,7 +1877,7 @@ async function testDatasetInferResultRenderSchemaNoDataConfig() {
   };
   return runInferResultRenderSchema(noDataConfig, ({ stdout }) => {
     assert.match(stdout, /Field count: 2/);
-    assert.match(stdout, /Primary key: video_id \(VideoContentID\)/);
+    assert.match(stdout, /Primary key: video_id \(BizAttr=VideoContentID\)/);
     assert.match(stdout, /IndexFields:\s+\(none\)/);
     assert.match(stdout, /FilterFields:\s+\(none\)/);
     assert.match(stdout, /SuggestFields:\s+\(none\)/);
@@ -1842,8 +1916,8 @@ async function testDatasetInferResultRenderSchemaStability() {
     for (let i = 1; i < outputs.length; i += 1) {
       assert.equal(outputs[i], outputs[0], `render-schema output drifted across runs (run ${i + 1})`);
     }
-    assert.match(outputs[0], /Stage A — Schema Confirmation/);
-    assert.match(outputs[0], /Primary key: item_id \(QueryPK\)/);
+    assert.match(outputs[0], /vs-schema-confirm: BEGIN/);
+    assert.match(outputs[0], /Primary key: item_id \(BizAttr=QueryPK\)/);
     assert.match(outputs[0], /Field count: 7/);
     return `${command.prefix} dataset infer-result --render-schema (5x stability)`;
   } finally {

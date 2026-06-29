@@ -29,7 +29,6 @@ export default class DatasetIngest extends Command {
     }),
     industry: Flags.string({ description: 'Industry hint forwarded to V2 inference/create.' }),
     language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
-    theme: Flags.string({ description: 'Free-form theme hint to improve inference quality.' }),
     'schema-wait-timeout-ms': Flags.integer({
       description: 'Timeout in milliseconds for polling the schema inference task. Default 120000.'
     }),
@@ -63,7 +62,6 @@ export default class DatasetIngest extends Command {
       datasetName: flags['dataset-name'],
       industry: flags.industry,
       language: flags.language,
-      theme: flags.theme,
       schemaWaitTimeoutMs: flags['schema-wait-timeout-ms'],
       schemaPollIntervalMs: flags['schema-poll-interval-ms'],
       dryRun: flags['dry-run'],

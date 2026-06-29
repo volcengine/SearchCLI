@@ -26,7 +26,6 @@ export default class DatasetInferSchema extends Command {
     name: Flags.string({ description: 'Suggested dataset name (passed through to the backend).' }),
     industry: Flags.string({ description: 'Industry hint: none|ecommerce|material|video|news|social-platform|other.' }),
     language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
-    theme: Flags.string({ description: 'Free-form theme/description hint to improve inference quality.' }),
     'project-name': Flags.string({
       description: 'Viking project name when the API requires project scoping.'
     })
@@ -48,7 +47,6 @@ export default class DatasetInferSchema extends Command {
       name: flags.name,
       industry: flags.industry,
       language: flags.language,
-      theme: flags.theme,
       projectName: flags['project-name']
     });
   }

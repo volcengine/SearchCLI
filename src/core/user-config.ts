@@ -38,6 +38,7 @@ const cliProfileSchema = z.object({
   controlPlaneBaseUrl: z.string().url().optional(),
   dataPlaneBaseUrl: z.string().url().optional(),
   host: z.string().min(1).optional(),
+  xTtBackend: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   projectName: z.string().min(1).optional(),
   region: z.string().min(1).optional(),
@@ -304,7 +305,7 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     controlPlaneBaseUrl: endpoints.controlPlaneBaseUrl,
     dataPlaneBaseUrl: endpoints.dataPlaneBaseUrl,
     dataPlaneHost: profileConfig.host ?? stored.host,
-    xTtBackend: stored.xTtBackend,
+    xTtBackend: profileConfig.xTtBackend ?? stored.xTtBackend,
     environmentId: endpoints.envId,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
     accessKeyId:
@@ -435,7 +436,12 @@ function normalizeCliConfigShape(value: unknown): unknown {
   const normalized: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(record)) {
     if (key === 'profiles' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
-      normalized.profiles = entry;
+      normalized.profiles = Object.fromEntries(
+        Object.entries(entry as Record<string, unknown>).map(([profileName, profileEntry]) => [
+          profileName,
+          normalizeXttBackendEntry(profileEntry)
+        ])
+      );
       continue;
     }
 

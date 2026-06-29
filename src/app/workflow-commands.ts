@@ -48,7 +48,6 @@ export interface DatasetIngestWorkflowOptions extends WorkflowServiceOptions {
   datasetName?: string;
   industry?: string;
   language?: string;
-  theme?: string;
   schemaWaitTimeoutMs?: number;
   schemaPollIntervalMs?: number;
   dryRun?: boolean;
@@ -66,7 +65,7 @@ interface WorkflowStepResult {
 }
 
 import { isUserEventDatasetType } from '../core/types';
-import { toInteger, printResult, isRecord } from './product-commands';
+import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
 
 export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWorkflowOptions): Promise<void> {
   console.warn("Warning: 'vs app dataset bind' is deprecated; use 'vs app attach-dataset' instead.");
@@ -290,6 +289,7 @@ export async function runDatasetIngestWorkflowCommand(options: DatasetIngestWork
 async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions): Promise<void> {
   if (!options.file) throw new Error('--file is required for V2 dataset ingest.');
   if (!options.type) throw new Error('--type is required for V2 dataset ingest.');
+  const normalizedType = parseDatasetTypeV2Value(options.type, INFER_SCHEMA_DATASET_TYPES);
 
   const config = resolveServiceConfig(toServiceConfigInput(options));
   const projectName = options.projectName ?? config.projectName;
@@ -325,11 +325,10 @@ async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions):
   const inferTaskResponse = unwrapResult(
     await client.post('/open/AddInferDatasetSchemaTaskV2', compactObject({
       TosKey: fileKey,
-      Type: options.type,
+      Type: normalizedType,
       Name: options.datasetName,
       Industry: options.industry,
       Language: options.language,
-      Theme: options.theme,
       ProjectName: projectName
     }))
   );
@@ -360,7 +359,7 @@ async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions):
 
   const datasetCreatePayload = compactObject({
     Name: options.datasetName ?? `cli-${fileKey.split('/').pop()?.replace(/\.[^.]*$/, '') ?? Date.now()}`,
-    Type: options.type,
+    Type: parseDatasetTypeV2Value(normalizedType, CREATE_DATASET_TYPES),
     Schema: inferResult.Schema,
     Industry: options.industry,
     Language: options.language,
