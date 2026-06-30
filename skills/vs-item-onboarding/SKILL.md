@@ -171,10 +171,14 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
     Then call `vs app attach-dataset --data @attach.json`. Empty `Result` means success. This is the moment where the `IndexFields`/`FilterFields`/`ImageIndexFields`/etc. captured in step 4 are actually applied — never reinvent these arrays from the schema; always pull them from the persisted artifact.
 
-11. **Hand-off — print console links + readiness reminder (mandatory).** After the last successful step (data write, or attach when the app branch ran), the agent must render a short summary block telling the user (a) where to monitor readiness in the console, and (b) that runtime APIs (`search`, `chat`, recommend) can only be exercised once readiness reports OK. Pick the console host from the active profile's `baseUrl` / `controlPlaneBaseUrl`:
+11. **Hand-off — print console links + readiness reminder (mandatory).** After the last successful step (data write, or attach when the app branch ran), the agent must render a short summary block telling the user (a) where to monitor readiness in the console, and (b) that runtime APIs (`search`, `chat`, recommend) can only be exercised once readiness reports OK. Pick the console host from the active profile's `baseUrl` / `controlPlaneBaseUrl`, and assemble URLs using these exact path templates (do **not** invent other paths like `/dataset/detail/<id>` or `/application/detail/<id>` — those are wrong):
 
-    - Host contains `volcengineapi.com` / `volces.com` → **Volc Engine**, use `https://console.volcengine.com/aisearch/platform/region:aisearch-platform+<region>/...`. `<region>` is the active profile region (e.g. `cn-beijing`).
-    - Host contains `byteplus.com` → **BytePlus**, use `https://console.byteplus.com/aisearch/region:aisearch+ap-southeast-1/...` (BytePlus today only exposes the `ap-southeast-1` region; do not fabricate other regions).
+    - Host contains `volcengineapi.com` / `volces.com` → **Volc Engine**, base = `https://console.volcengine.com/aisearch/platform/region:aisearch-platform+<region>`. `<region>` is the active profile region (e.g. `cn-beijing`).
+      - Dataset URL: `<base>/home/dataset/<DatasetId>`
+      - App URL: `<base>/app/<AppId>`
+    - Host contains `byteplus.com` → **BytePlus**, base = `https://console.byteplus.com/aisearch/region:aisearch+ap-southeast-1` (BytePlus today only exposes the `ap-southeast-1` region; do not fabricate other regions).
+      - Dataset URL: `<base>/home/dataset/<DatasetId>`
+      - App URL: `<base>/app/<AppId>`
 
     Print the URLs only for the resources that actually exist in this run (dataset is always present; app/attach are only present if the user opted in). Render the prose lines (✓ markers, readiness reminder, runtime-API tip) in the **user's current language** per the **Language Matching** rule; keep IDs and URLs verbatim.
 
