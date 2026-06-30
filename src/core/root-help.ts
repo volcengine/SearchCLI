@@ -16,8 +16,7 @@ const PRODUCT_COMMANDS: HelpLine[] = [
   { text: 'data               Write and inspect dataset items directly' },
   { text: 'search             Run search and manage search scenes' },
   { text: 'chat               Run conversational search' },
-  { text: 'recommend          Run recommend and manage scenes and rules' },
-  { text: 'item               [Deprecated] Legacy V1 onboarding (profile/plan/apply); prefer `dataset` + `app` instead' }
+  { text: 'recommend          Run recommend and manage scenes and rules' }
 ];
 
 const ADVANCED_COMMANDS: HelpLine[] = [
@@ -60,11 +59,6 @@ QUICK START
     vs data write --dataset-id <DatasetId> --fields @items.json
     vs app create --name <app-name> --industry e_commerce --language zh
     vs app attach-dataset --data @attach.json
-
-  [Deprecated] V1 onboarding (will be removed in a future release; do not use for new flows)
-    vs item profile --file ./items.json --pretty
-    vs item plan --file ./items.json --goal "Build item search"
-    vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
 
   Try one search request
     vs search run --application-id <app> --scene-id <scene> --query "wireless headphones"

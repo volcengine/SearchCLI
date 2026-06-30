@@ -6,6 +6,8 @@ import { runItemPlanCommand } from '../../app/item-commands';
 import { extractServiceConnectionOptions, workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class ItemPlan extends Command {
+  static override hidden = true;
+
   static override description =
     'Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts. For dataset-only onboarding, pass --skip-app so the plan emits dataset-create.json and normalized-items.json for the follow-up dataset create + ingest flow.';
 

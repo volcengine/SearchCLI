@@ -6,6 +6,8 @@ import { runItemProfileCommand } from '../../app/item-commands';
 import { outputFormatFlags } from '../../command-support/service-flags';
 
 export default class ItemProfile extends Command {
+  static override hidden = true;
+
   static override description = 'Profile a structured item dataset and infer schema, key fields, and risks.';
 
   static override examples = [

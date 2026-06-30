@@ -6,6 +6,8 @@ import { runItemReviewCommand } from '../../app/item-commands';
 import { outputFormatFlags } from '../../command-support/service-flags';
 
 export default class ItemReview extends Command {
+  static override hidden = true;
+
   static override description =
     'Render the current schema and binding field-config summary, then write review-confirmation.json from the current plan state. This is a review record command and does not provision or verify runtime behavior.';
 

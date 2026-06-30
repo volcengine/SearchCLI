@@ -1838,29 +1838,22 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
-    item: `${renderUsageBlock(
-      [
-        'vs item profile --file ./items.json [--type <item|video>] [output flags]',
-        'vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]',
-        'vs item review --plan-dir <dir> [--reviewer <name>] [--review-notes <text>] [output flags]',
-        'vs item provision --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]',
-        'vs item verify --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]',
-        'vs item apply --plan-dir <dir> [--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]'
-      ]
-    )}
+    item: `DEPRECATED
+  The legacy V1 \`vs item\` onboarding (profile / plan / review / provision / verify / apply)
+  has been replaced by the V2 \`vs dataset\` + \`vs app\` flow.
 
-DESCRIPTION
-  Understand arbitrary structured item data, generate a reviewable onboarding plan, and apply it to
-  create / ingest / activate a Viking item-search app. Use \`--dry-run\` first when reviewing a plan.
-  Use \`--type item\` for generic图文/卡片/商品类数据，use \`--type video\` for视频内容数据.
+USAGE
+  vs dataset import-url --file-name <basename>
+  vs dataset infer-schema --tos-key <FileKey> --type <item|video> --industry <type> --language <lang>
+  vs dataset infer-result --task-id <TaskID> --render-schema
+  vs dataset create --data @dataset-create.json
+  vs data write --dataset-id <DatasetId> --fields @items.json
+  vs app create --name <name> --industry <type> --language <lang>
+  vs app attach-dataset --data @attach.json
 
-COMMON FLAGS
-  profile/plan:
-    --type <item|video> --format --jq --output
-  review:
-    --format --jq --output
-  apply:
-    --base-url --ak --sk --region --timeout-ms --project-name --format --jq --output`,
+MORE HELP
+  vs dataset --help
+  vs app --help`,
     search: `${renderUsageBlock(
       [
         'vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
