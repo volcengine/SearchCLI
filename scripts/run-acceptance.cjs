@@ -238,7 +238,7 @@ async function testSkillList() {
   assert.deepEqual(names, [
     'vs-alias-mapping',
     'vs-chat',
-    'vs-item-onboarding-v2',
+    'vs-item-onboarding',
     'vs-product-qa',
     'vs-recommend',
     'vs-search',
@@ -252,11 +252,11 @@ async function testSkillList() {
 }
 
 async function testSkillShow() {
-  const { stdout } = await runCli(['skill', 'show', '--name', 'vs-item-onboarding-v2', '--json']);
+  const { stdout } = await runCli(['skill', 'show', '--name', 'vs-item-onboarding', '--json']);
   const payload = JSON.parse(stdout);
-  assert.equal(payload.name, 'vs-item-onboarding-v2');
+  assert.equal(payload.name, 'vs-item-onboarding');
   assert.match(payload.description, /item-level onboarding/i);
-  return `${command.prefix} skill show --name vs-item-onboarding-v2 --json`;
+  return `${command.prefix} skill show --name vs-item-onboarding --json`;
 }
 
 async function testValidateSkillsSpacePath() {

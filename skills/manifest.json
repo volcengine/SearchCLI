@@ -7,9 +7,10 @@
       ]
     },
     {
-      "name": "vs-item-onboarding-v2",
+      "name": "vs-item-onboarding",
       "files": [
-        "vs-item-onboarding-v2/SKILL.md"
+        "vs-item-onboarding/SKILL.md",
+        "vs-item-onboarding/references/worked-example.md"
       ]
     },
     {

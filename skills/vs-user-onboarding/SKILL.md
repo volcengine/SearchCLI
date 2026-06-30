@@ -184,7 +184,7 @@ After credentials are imported, run `vs auth status --json --project-name <proje
 
 ### Step 8 - hand off to data onboarding
 
-Tell the user that authentication is complete and they can continue with `vs-item-onboarding-v2` for data ingestion and their first search experience. End this workflow after the handoff.
+Tell the user that authentication is complete and they can continue with `vs-item-onboarding` for data ingestion and their first search experience. End this workflow after the handoff.
 
 ## Order Verification Behavior
 

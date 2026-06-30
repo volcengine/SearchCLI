@@ -56,7 +56,7 @@ vs --help
 vs auth status --json
 vs doctor --json
 vs skill list
-vs skill show --name vs-item-onboarding-v2
+vs skill show --name vs-item-onboarding
 vs skill show --name vs-search-tuning
 ```
 

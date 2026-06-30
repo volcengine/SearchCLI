@@ -5,7 +5,7 @@ Use this matrix when the user's request is better handled by a specialized skill
 | Topic | Hand off to |
 |---|---|
 | Sign-up / purchase / pay / first AK/SK | `vs-user-onboarding` |
-| Item data ingestion / dataset creation | `vs-item-onboarding-v2` |
+| Item data ingestion / dataset creation | `vs-item-onboarding` |
 | Search tuning suggestions / tuning execution / interpreting tuning output | `vs-search-tuning` |
 | Search runtime checks | `vs-search` |
 | Chat runtime checks | `vs-chat` |

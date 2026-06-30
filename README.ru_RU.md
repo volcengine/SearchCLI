@@ -153,7 +153,7 @@ npx skills add "git@github.com:volcengine/SearchCLI.git" -y -g
 Стандартный публичный skill bundle включает:
 
 - `vs-shared`
-- `vs-item-onboarding-v2`
+- `vs-item-onboarding`
 - `vs-search`
 - `vs-search-tuning`
 - `vs-chat`
