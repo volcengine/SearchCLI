@@ -1,11 +1,16 @@
 ---
 name: vs-search-tuning-specify-policy-direction
 description: Viking Search tuning for specified policy directions. Use this when the user provides specific queries, a type of query, or a business policy direction, and asks to boost, suppress, or fix a class of search results through request-parameter passthrough. You must only perform read-only baseline evaluation and request-level candidate testing; do not modify search scenes, app config, dictionaries, recommend scenes, or primary recall parameters.
+category: search
+applies_to: codex, agents, external-agent
+requires_cli: ">=0.2.0"
+keywords: search policy tuning, specified policy direction, request-parameter passthrough, boost suppress, strategy effect matrix
+commands: auth status, llm status, search tune llm-check, app status, app get, app dataset-config get, app online-config get, search scene list, search scene get, search run, search tune run
 ---
 
 # Viking Search Tuning for Specified Policy Directions (vs-search-tuning-specify-policy-direction)
 
-## 1. When To Use
+## When to Use
 
 Use this Skill when the user provides specific queries or a type of query, and explicitly specifies an "optimization policy direction" such as boosting the weight of a product type, increasing exposure for seasonal products, or fixing a class of bad cases.
 
@@ -20,6 +25,24 @@ Mode selection:
 
 - If the user provides specific queries or bad cases: use **Mode A**.
 - If the user only provides a policy direction and no specific queries: use **Mode B**. The Agent synthesizes 50 dataset-related queries.
+
+## Preconditions
+
+- A Viking Search application id is available.
+- A dataset id and baseline search scene id are either provided by the user or can be resolved from read-only CLI checks.
+- The user has provided either concrete queries, a query type, or an explicit business policy direction.
+- `vs auth status --json` succeeds before any runtime search probe.
+- The requested change can be evaluated through request-parameter passthrough without writing persistent scene, app, dictionary, or recommend configuration.
+
+## Commands
+
+- `auth status`: verify local Viking authentication before runtime probes.
+- `llm status` / `search tune llm-check`: verify optional LLM judging or query synthesis readiness.
+- `app status` / `app get`: inspect app readiness and metadata without modifying it.
+- `app dataset-config get` / `app online-config get`: read dataset-facing fields and online defaults.
+- `search scene list` / `search scene get`: find and lock a read-only baseline scene.
+- `search run`: run equivalent baseline and candidate requests with full `--data` payloads.
+- `search tune run`: inspect installed CLI capability only; do not use it for this workflow unless it exposes safe request-level passthrough.
 
 ## 2. Intervention Boundaries
 
@@ -225,7 +248,7 @@ Standard procedure:
 
 Do not pretend rule hit rate is NDCG. Rule hit rate may be reported additionally, but it must be distinguished from NDCG.
 
-## 6. Standard Workflow (Concise)
+## Workflow
 
 ### Step 1 - Lock the Baseline Scene
 
@@ -408,7 +431,7 @@ The report must include:
 - Rollback method: stop carrying the payload in requests; delete local artifacts.
 - Entry points for `strategy-effect-matrix.json` or `ndcg-matrix.json` and `replay.sh`.
 
-## 8. Hard Constraints
+## Constraints
 
 - Use only the 8 methods in Section 2.1 as official business intervention methods.
 - Do not modify primary recall parameters.
