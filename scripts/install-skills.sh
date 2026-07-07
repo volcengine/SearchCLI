@@ -179,9 +179,9 @@ main() {
   node "${SCRIPT_DIR}/validate-skills.mjs" "${SKILLS_ROOT}"
 
   local -a all_skills=()
-  while IFS= read -r line; do
-    [[ -n "${line}" ]] && all_skills+=("${line}")
-  done < <(find "${SKILLS_ROOT}" -mindepth 1 -maxdepth 1 -type d -print | xargs -n 1 basename | sort)
+  while IFS= read -r dir; do
+    [[ -n "${dir}" ]] && all_skills+=("$(basename "${dir}")")
+  done < <(find "${SKILLS_ROOT}" -mindepth 1 -maxdepth 1 -type d -print | sort)
 
   local -a selected=()
   if [[ "${#REQUESTED[@]}" -eq 0 || "${REQUESTED[0]}" == "all" ]]; then
