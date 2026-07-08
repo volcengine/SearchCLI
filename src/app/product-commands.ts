@@ -3964,7 +3964,8 @@ function toServiceConfigInput(options: ServiceCommandOptions): ServiceConfigInpu
     secretKey: options.secretKey,
     projectName: (options as ProjectScopedOptions).projectName,
     region: options.region,
-    timeoutMs: options.timeoutMs
+    timeoutMs: options.timeoutMs,
+    debug: options.debug
   };
 }
 
