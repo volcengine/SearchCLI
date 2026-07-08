@@ -1,0 +1,3 @@
+{"item_id":"acc-item-1","title":"Acceptance Tee","description":"acceptance fixture item 1","brand":"Acc","tags":["tee","unisex"],"price":99.0,"image_url":"http://example.test/img/1.jpg"}
+{"item_id":"acc-item-2","title":"Acceptance Polo","description":"acceptance fixture item 2","brand":"Acc","tags":["polo"],"price":129.0,"image_url":"http://example.test/img/2.jpg"}
+{"item_id":"acc-item-3","title":"Acceptance Pants","description":"acceptance fixture item 3","brand":"Acc","tags":["pants"],"price":189.0,"image_url":"http://example.test/img/3.jpg"}

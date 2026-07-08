@@ -17,7 +17,6 @@ export interface ConsoleFileUploadOptions extends ServiceConfigInput {
 export interface ConsoleFileUploadResult {
   fileUrl: string;
   fileKey: string;
-  tosBucket?: string;
   httpMethod?: string;
   expiresInSeconds?: number;
 }
@@ -42,7 +41,6 @@ export async function uploadFileWithConsoleSignature(
   );
   const fileUrl = requiredStringField(signatureResponse, ['FileUrl', 'UploadUrl', 'SignedUrl']);
   const fileKey = requiredStringField(signatureResponse, ['FileKey', 'TosKey', 'Key']);
-  const tosBucket = optionalStringField(signatureResponse, ['TosBucket', 'Bucket']);
   const contentType = options.contentType ?? detectUploadContentType(fileName);
   const fileContent =
     options.fileContent ??
@@ -57,7 +55,6 @@ export async function uploadFileWithConsoleSignature(
   return {
     fileUrl,
     fileKey,
-    tosBucket,
     httpMethod: optionalStringField(signatureResponse, ['HttpMethod']),
     expiresInSeconds: optionalNumberField(signatureResponse, ['ExpiresInSeconds'])
   };

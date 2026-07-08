@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import type { RuntimeConfig } from './types';
 import { resolveCliDefaults } from './user-config';
+import { setDebugMode } from './debug-logger';
 
 const runtimeConfigSchema = z.object({
   controlPlaneBaseUrl: z.string().url(),
@@ -25,7 +26,8 @@ const runtimeConfigSchema = z.object({
   llmSecretKey: z.string().optional(),
   llmRegion: z.string().optional(),
   llmService: z.string().optional(),
-  llmModel: z.string().optional()
+  llmModel: z.string().optional(),
+  debug: z.boolean()
 });
 
 export interface RuntimeConfigInput {
@@ -50,6 +52,7 @@ export interface RuntimeConfigInput {
   llmRegion?: string;
   llmService?: string;
   llmModel?: string;
+  debug?: boolean;
 }
 
 export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
@@ -73,7 +76,7 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     llmModel: input.llmModel
   });
 
-  return runtimeConfigSchema.parse({
+  const resolved = runtimeConfigSchema.parse({
     controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
     dataPlaneBaseUrl: defaults.dataPlaneBaseUrl,
     dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
@@ -93,6 +96,13 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     llmSecretKey: defaults.llmSecretKey,
     llmRegion: defaults.llmRegion,
     llmService: defaults.llmService,
-    llmModel: defaults.llmModel
+    llmModel: defaults.llmModel,
+    debug: input.debug ?? false
   });
+
+  if (resolved.debug) {
+    setDebugMode(true);
+  }
+
+  return resolved;
 }

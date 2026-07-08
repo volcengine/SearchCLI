@@ -5,4 +5,9 @@ release/
 # macOS metadata
 .DS_Store
 **/.DS_Store
+tmp*/
+tmp-acceptance/
 
+# Trae agent workspace
+.trae/
+._agent/

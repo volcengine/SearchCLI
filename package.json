@@ -42,6 +42,8 @@
     "test:acceptance:binary:live": "node ./scripts/package-binary.mjs node20-macos-arm64 && node ./scripts/run-acceptance.cjs --binary --live",
     "test:acceptance": "npm run test:acceptance:dist && npm run test:acceptance:binary",
     "test:acceptance:live": "npm run test:acceptance:dist:live && npm run test:acceptance:binary:live",
+    "test:acceptance:v2-mock": "npm run build && node ./scripts/run-acceptance.cjs --dist --suite v2-onboarding",
+    "test:acceptance:v2-live": "npm run build && VIKING_ACCEPTANCE_LIVE=1 node ./scripts/run-acceptance.cjs --dist --suite live",
     "dist:bundle": "node ./scripts/build-standalone.mjs",
     "dist:binary": "node ./scripts/package-binary.mjs",
     "dist:matrix": "node ./scripts/package-binary.mjs node20-macos-arm64 node20-macos-x64 node20-linux-x64 node20-win-x64"

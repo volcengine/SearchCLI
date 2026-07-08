@@ -6,6 +6,8 @@ import { runItemVerifyCommand } from '../../app/item-commands';
 import { workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class ItemVerify extends Command {
+  static override hidden = true;
+
   static override description =
     'Wait until provisioned item data becomes searchable, then run search/chat verification and optional recommend smoke. Use this after provision/apply when you want runtime checks rather than stage-one provisioning.';
 

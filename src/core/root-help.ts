@@ -11,9 +11,8 @@ const CORE_COMMANDS: HelpLine[] = [
 ];
 
 const PRODUCT_COMMANDS: HelpLine[] = [
-  { text: 'item               Profile item data, generate onboarding plans, and apply them' },
+  { text: 'dataset            Onboard data and manage datasets (V2 backend-driven schema inference; primary onboarding entry)' },
   { text: 'app                Manage applications, activation, and readiness' },
-  { text: 'dataset            Manage datasets, schema, uploads, and ingest workflows' },
   { text: 'data               Write and inspect dataset items directly' },
   { text: 'connector          Sync incremental source changes into datasets' },
   { text: 'search             Run search and manage search scenes' },
@@ -31,6 +30,7 @@ export function printRootHelp(): void {
   const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join('\n  ');
   const moreHelpLines = [
     'vs <command> --help',
+    'vs dataset --help',
     'vs app --help',
     'vs item --help',
     'vs connector --help',
@@ -41,7 +41,7 @@ export function printRootHelp(): void {
 
   console.log(`SearchCLI
 
-Interactive AI search CLI. Use item/app/dataset/search/chat for the primary product workflow.
+Interactive AI search CLI. Use dataset/app/search/chat for the primary product workflow.
 
 USAGE
   vs <command>
@@ -53,10 +53,15 @@ QUICK START
     vs llm login
     vs doctor
 
-  Create or activate an app from item data
-    vs item profile --file ./items.json --pretty
-    vs item plan --file ./items.json --goal "Build item search"
-    vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
+  Onboard items into a fresh app (V2 — default, backend-driven schema inference)
+    vs dataset import-url --file-name items.jsonl
+    curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+    vs dataset infer-schema --tos-key <FileKey> --type item --industry e_commerce --language zh --name <dataset-name>
+    vs dataset infer-result --task-id <TaskID> --render-schema
+    vs dataset create --data @dataset-create.json
+    vs data write --dataset-id <DatasetId> --fields @items.json
+    vs app create --name <app-name> --industry e_commerce --language zh
+    vs app attach-dataset --data @attach.json
 
   Try one search request
     vs search run --application-id <app> --scene-id <scene> --query "wireless headphones"

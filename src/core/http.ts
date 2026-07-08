@@ -5,6 +5,7 @@ import './node-bootstrap';
 import { Signer } from '@volcengine/openapi';
 import { formatMissingVikingAuthMessage } from './auth-errors';
 import type { ServiceConfig } from './service-config';
+import { debugLog } from './debug-logger';
 
 const DEFAULT_OPENAPI_VERSION = '2025-03-01';
 type SignedHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -77,6 +78,11 @@ async function sendSignedJson<T = unknown>(
   const body = shouldSendBody(method, payload) ? JSON.stringify(payload ?? {}) : undefined;
   const timeoutSignal = AbortSignal.timeout(config.timeoutMs);
 
+  debugLog('HTTP Request', `${method} ${url.toString()}`);
+  if (body) {
+    debugLog('HTTP Request Body', body);
+  }
+
   const response = await fetch(url, {
     method,
     headers: await buildHeaders(config, method, url, body, includeControlPlaneHeaders),
@@ -86,6 +92,10 @@ async function sendSignedJson<T = unknown>(
 
   const rawText = await response.text();
   const parsed = parseMaybeJson(rawText);
+
+  debugLog('HTTP Response', `Status: ${response.status} ${response.statusText}`);
+  debugLog('HTTP Response Body', typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2));
+
   if (!response.ok) {
     const apiError = extractResponseMetadataError(parsed);
     console.error(
@@ -218,7 +228,8 @@ export function buildSignedRequestHeaders(
 
 function createBaseHeaders(): Record<string, string> {
   return {
-    accept: 'application/json'
+    accept: 'application/json',
+    'user-agent': 'Search-Cli'
   };
 }
 

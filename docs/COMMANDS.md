@@ -50,19 +50,10 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 
 ## 2. Product and Workflows (PRODUCT)
 
-### `item` - Item/Product Onboarding Workflow
-*   `vs item profile --file <path>`
-    *   Parameters: `[--type <item|video>] [output flags]`
-*   `vs item plan --file <path>`
-    *   Parameters: `[--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]`
-*   `vs item apply --plan-dir <dir>`
-    *   Parameters: `[--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]`
-*   `vs item review --plan-dir <dir>`
-    *   Parameters: `[--reviewer <name>] [--review-notes <text>] [output flags]`
-*   `vs item provision --plan-dir <dir>`
-    *   Parameters: `[--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]`
-*   `vs item verify --plan-dir <dir>`
-    *   Parameters: `[--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]`
+> **V1 `vs item profile / plan / review / provision / verify / apply` is deprecated**
+> and hidden from help. New onboarding flows must use the V2 path below
+> (`vs dataset import-url → infer-schema → infer-result → dataset create`,
+> followed by `vs data write` and optional `vs app create` + `vs app attach-dataset`).
 
 ### `app` - Application Management
 *   `vs app create --name <name>`
@@ -84,6 +75,11 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Parameters: `[--wait-timeout-ms <ms> --poll-interval-ms <ms> --activated-only] [service flags]`
 *   `vs app dataset bind --application-id <id> --dataset-id <id>`
     *   Parameters: `[--field-config @config.json --dry-run] [service flags]`
+    *   Note: legacy V1 binding. For V2 onboarding use `vs app attach-dataset` instead.
+*   `vs app attach-dataset --app-id <id> --dataset-id <id> --data-config @data-config.json` (V2)
+    *   Parameters: `[--dry-run] [--project-name <name>] [service flags]`
+    *   Or: `vs app attach-dataset --data @attach.json [service flags]`
+    *   Description: V2 replacement for `app dataset bind`. The `DataConfig` payload should carry `IndexFields`, `FilterFields`, `SuggestFields`, `ChatFields`, `FilterFieldsMap`, and `FieldDescMap` straight from the persisted infer-result artifact.
 *   `vs app dataset unbind --application-id <id> --dataset-id <id>`
     *   Parameters: `[service flags]`
 *   `vs app dataset-config get --application-id <id> --dataset-id <id>`
