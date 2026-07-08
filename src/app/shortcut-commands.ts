@@ -170,7 +170,8 @@ function toServiceConfigInput(options: ShortcutServiceOptions): ServiceConfigInp
     secretKey: options.secretKey,
     projectName: options.projectName,
     region: options.region,
-    timeoutMs: options.timeoutMs
+    timeoutMs: options.timeoutMs,
+    debug: options.debug
   };
 }
 

@@ -17,16 +17,64 @@ const root = path.resolve(__dirname, '..');
 const args = new Set(process.argv.slice(2));
 const mode = args.has('--binary') ? 'binary' : 'dist';
 const live = args.has('--live');
+const suiteArg = parseSuiteArg(process.argv.slice(2)) ?? 'all';
+const liveEnabled = Boolean(process.env.VIKING_ACCEPTANCE_LIVE);
 const timestamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d+Z$/, 'Z');
 const reportDir = path.join(root, 'tmp-acceptance', `${timestamp}-${mode}`);
 const reportPath = path.join(reportDir, 'acceptance.md');
 
 const command = resolveCommand(mode);
 const tests = [];
+let currentSuite = 'core';
+
+function parseSuiteArg(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === '--suite' && argv[index + 1]) {
+      return argv[index + 1];
+    }
+    if (value && value.startsWith('--suite=')) {
+      return value.slice('--suite='.length);
+    }
+  }
+  return undefined;
+}
+
+function shouldRunSuite(name) {
+  if (suiteArg === 'all') return true;
+  return suiteArg === name;
+}
+
+async function runSuite(name, fn) {
+  if (!shouldRunSuite(name)) return;
+  const previous = currentSuite;
+  currentSuite = name;
+  try {
+    await fn();
+  } finally {
+    currentSuite = previous;
+  }
+}
 
 async function main() {
   fs.mkdirSync(reportDir, { recursive: true });
 
+  await runSuite('core', runCoreSuite);
+  await runSuite('v2-onboarding', runV2OnboardingSuite);
+
+  if (live || liveEnabled || suiteArg === 'live') {
+    await runSuite('live', runLiveSuite);
+  }
+
+  writeReport();
+
+  const failed = tests.filter(test => test.status === 'failed');
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
+}
+
+async function runCoreSuite() {
   await runTest('root-help', testRootHelp);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
@@ -52,17 +100,72 @@ async function main() {
   await runTest('auth-import-env', testAuthImportEnv);
   await runTest('llm-openai-compatible-credential-flow', testLlmOpenAiCompatibleCredentialFlow);
   await runTest('search-tune-llm-check-guidance', testSearchTuneLlmCheckGuidance);
+}
 
-  if (live) {
-    await runSkipped('live-smoke', 'Live acceptance is intentionally excluded from the public repository.');
+async function runV2OnboardingSuite() {
+  await runTest('v2-dataset-import-url-help', testDatasetImportUrlHelp);
+  await runTest('v2-dataset-infer-schema-help', testDatasetInferSchemaHelp);
+  await runTest('v2-dataset-infer-result-help', testDatasetInferResultHelp);
+  await runTest('v2-app-attach-dataset-help', testAppAttachDatasetHelp);
+
+  await runTest('v2-dataset-create-dry-run', testDatasetCreateDryRun);
+  await runTest('v2-app-create-dry-run', testAppCreateDryRun);
+  await runTest('v2-app-attach-dataset-dry-run', testAppAttachDatasetDryRun);
+  await runTest('v2-dataset-ingest-dry-run', testDatasetIngestDryRun);
+
+  await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
+  await runTest('v2-dataset-infer-schema-mock', testDatasetInferSchemaMock);
+  await runTest('v2-dataset-infer-schema-rejects-document', testDatasetInferSchemaRejectsDocument);
+  await runTest('v2-dataset-infer-schema-rejects-multi-modal', testDatasetInferSchemaRejectsMultiModal);
+  await runTest('v2-dataset-create-rejects-multi-modal', testDatasetCreateRejectsMultiModal);
+  await runTest('v2-dataset-infer-result-mock', testDatasetInferResultMock);
+  await runTest('v2-dataset-infer-result-render-schema-mixed', testDatasetInferResultRenderSchemaMixed);
+  await runTest('v2-dataset-infer-result-render-schema-degenerate', testDatasetInferResultRenderSchemaDegenerate);
+  await runTest('v2-dataset-infer-result-render-schema-no-data-config', testDatasetInferResultRenderSchemaNoDataConfig);
+  await runTest('v2-dataset-infer-result-render-schema-stability', testDatasetInferResultRenderSchemaStability);
+  await runTest('v2-dataset-create-mock', testDatasetCreateMock);
+  await runTest('v2-app-create-mock', testAppCreateMock);
+  await runTest('v2-app-attach-dataset-mock', testAppAttachDatasetMock);
+  await runTest('v2-data-write-mock', testDataWriteMock);
+
+  const orchestrator = loadV2OnboardingOrchestrator();
+  if (orchestrator) {
+    await runTest('v2-onboarding-pipeline-items', () =>
+      orchestrator({
+        runCli,
+        startV2MockServer,
+        fixturesDir: path.join(root, 'scripts', 'fixtures', 'v2-onboarding'),
+        flavor: 'items'
+      })
+    );
+    await runTest('v2-onboarding-pipeline-videos', () =>
+      orchestrator({
+        runCli,
+        startV2MockServer,
+        fixturesDir: path.join(root, 'scripts', 'fixtures', 'v2-onboarding'),
+        flavor: 'videos'
+      })
+    );
   }
+}
 
-  writeReport();
-
-  const failed = tests.filter(test => test.status === 'failed');
-  if (failed.length > 0) {
-    process.exitCode = 1;
+async function runLiveSuite() {
+  if (!liveEnabled) {
+    await runSkipped(
+      'v2-onboarding-live',
+      'VIKING_ACCEPTANCE_LIVE is not set. Live acceptance is opt-in only.'
+    );
+    return;
   }
+  await runTest('v2-onboarding-live', testV2OnboardingLivePlaceholder);
+}
+
+function loadV2OnboardingOrchestrator() {
+  const orchestratorPath = path.join(root, 'scripts', 'suites', 'v2-onboarding.cjs');
+  if (!fs.existsSync(orchestratorPath)) return undefined;
+  delete require.cache[require.resolve(orchestratorPath)];
+  const mod = require(orchestratorPath);
+  return mod && typeof mod.runV2OnboardingPipeline === 'function' ? mod.runV2OnboardingPipeline : undefined;
 }
 
 function resolveCommand(kind) {
@@ -103,10 +206,11 @@ async function runCli(argv, options = {}) {
 async function runTest(name, fn) {
   try {
     const detail = await fn();
-    tests.push({ name, status: 'passed', detail });
+    tests.push({ name, suite: currentSuite, status: 'passed', detail });
   } catch (error) {
     tests.push({
       name,
+      suite: currentSuite,
       status: 'failed',
       detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     });
@@ -114,7 +218,7 @@ async function runTest(name, fn) {
 }
 
 async function runSkipped(name, reason) {
-  tests.push({ name, status: 'skipped', detail: reason });
+  tests.push({ name, suite: currentSuite, status: 'skipped', detail: reason });
 }
 
 async function testRootHelp() {
@@ -133,13 +237,16 @@ async function testSkillList() {
   const names = payload.skills.map(skill => skill.name).sort();
   assert.deepEqual(names, [
     'vs-alias-mapping',
-    'vs-app-dataset-bind',
     'vs-chat',
     'vs-item-onboarding',
+    'vs-product-qa',
     'vs-recommend',
     'vs-search',
     'vs-search-tuning',
-    'vs-shared'
+    'vs-search-tuning-partial-case',
+    'vs-search-tuning-specify-policy-direction',
+    'vs-shared',
+    'vs-user-onboarding'
   ]);
   return `${command.prefix} skill list --json`;
 }
@@ -1167,21 +1274,881 @@ async function startLlmCheckMockServer(state) {
   };
 }
 
+async function startV2MockServer(state) {
+  const responses = state.responses ?? {};
+  state.requests = state.requests ?? [];
+
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      const parsedBody = body ? safeJsonParse(body) : {};
+      const parsedUrl = new URL(req.url, 'http://placeholder.local');
+      const action = parsedUrl.searchParams.get('Action');
+
+      if (action) {
+        state.requests.push({
+          kind: 'control-plane',
+          action,
+          query: Object.fromEntries(parsedUrl.searchParams.entries()),
+          body: parsedBody
+        });
+        const handler = responses[action];
+        const payload = typeof handler === 'function'
+          ? handler({ body: parsedBody, query: parsedUrl.searchParams })
+          : handler;
+        if (payload === undefined) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: `unhandled V2 action: ${action}` }));
+          return;
+        }
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      const pathOnly = parsedUrl.pathname;
+      const handler = responses[pathOnly];
+      if (handler !== undefined) {
+        state.requests.push({ kind: 'data-plane', path: pathOnly, body: parsedBody });
+        const payload = typeof handler === 'function'
+          ? handler({ body: parsedBody })
+          : handler;
+        if (payload === undefined) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: `unhandled data-plane path: ${pathOnly}` }));
+          return;
+        }
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: `unexpected request: ${req.method} ${req.url}` }));
+    });
+  });
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  return {
+    baseUrl,
+    close: () => new Promise(resolve => server.close(resolve))
+  };
+}
+
+function safeJsonParse(text) {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function v2ServiceFlags(baseUrl) {
+  return [
+    '--control-plane-base-url',
+    baseUrl,
+    '--data-plane-base-url',
+    baseUrl,
+    '--region',
+    'cn-north-1',
+    '--ak',
+    'mock-ak',
+    '--sk',
+    'mock-sk',
+    '--timeout-ms',
+    '5000'
+  ];
+}
+
+function envWithVikingBaseUrlsReset(baseUrl) {
+  return {
+    VIKING_CONTROL_PLANE_BASE_URL: baseUrl,
+    VIKING_DATA_PLANE_BASE_URL: baseUrl,
+    VIKING_ACCESS_KEY_ID: 'mock-ak',
+    VIKING_SECRET_KEY: 'mock-sk',
+    VIKING_REGION: 'cn-north-1'
+  };
+}
+
+async function testDatasetImportUrlHelp() {
+  const { stdout } = await runCli(['dataset', 'import-url', '--help']);
+  assert.match(stdout, /Request a presigned upload URL for V2 dataset onboarding/);
+  assert.match(stdout, /--file-name/);
+  assert.match(stdout, /GetPresignedImportUrlV2/);
+  return `${command.prefix} dataset import-url --help`;
+}
+
+async function testDatasetInferSchemaHelp() {
+  const { stdout } = await runCli(['dataset', 'infer-schema', '--help']);
+  assert.match(stdout, /Submit a schema inference task for V2 dataset onboarding/);
+  assert.match(stdout, /AddInferDatasetSchemaTaskV2/);
+  assert.match(stdout, /--tos-key/);
+  assert.match(stdout, /--type/);
+  return `${command.prefix} dataset infer-schema --help`;
+}
+
+async function testDatasetInferResultHelp() {
+  const { stdout } = await runCli(['dataset', 'infer-result', '--help']);
+  assert.match(stdout, /Fetch the latest result of a V2 schema inference task/);
+  assert.match(stdout, /GetInferDatasetSchemaResultV2/);
+  assert.match(stdout, /--task-id/);
+  return `${command.prefix} dataset infer-result --help`;
+}
+
+async function testAppAttachDatasetHelp() {
+  const { stdout } = await runCli(['app', 'attach-dataset', '--help']);
+  assert.match(stdout, /Attach a dataset to an application/);
+  assert.match(stdout, /AttachDatasetToApplicationV2/);
+  assert.match(stdout, /--app-id/);
+  assert.match(stdout, /--dataset-id/);
+  assert.match(stdout, /--data-config/);
+  return `${command.prefix} app attach-dataset --help`;
+}
+
+async function testDatasetCreateDryRun() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateDatasetV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-create-dry-run' },
+        Result: { DatasetID: undefined, DryRun: body?.DryRun === true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'dataset-create.json');
+    const fixtureRaw = JSON.parse(fs.readFileSync(fixture, 'utf8'));
+    const tempPath = path.join(reportDir, 'dataset-create-dry-run.json');
+    fs.writeFileSync(tempPath, JSON.stringify({ ...fixtureRaw, DryRun: true }));
+    const { stdout } = await runCli(
+      ['dataset', 'create', '--data', `@${tempPath}`, ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    assert.equal(state.requests[0].kind, 'control-plane');
+    assert.equal(state.requests[0].action, 'CreateDatasetV2');
+    assert.equal(state.requests[0].body.DryRun, true);
+    assert.equal(state.requests[0].body.Type, 'item');
+    assert.equal(state.requests[0].body.Industry, 'e_commerce');
+    assert.match(stdout, /req-create-dry-run/);
+    return `${command.prefix} dataset create --data @${tempPath}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testAppCreateDryRun() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateApplicationV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-app-create-dry-run' },
+        Result: { ApplicationId: undefined, DryRun: body?.DryRun === true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'app',
+        'create',
+        '--name',
+        'acc-app',
+        '--industry',
+        'ecommerce',
+        '--language',
+        'zh',
+        '--dry-run',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    assert.equal(state.requests[0].action, 'CreateApplicationV2');
+    assert.equal(state.requests[0].body.Name, 'acc-app');
+    assert.equal(state.requests[0].body.Industry, 'e_commerce');
+    assert.equal(state.requests[0].body.Language, 'zh');
+    assert.equal(state.requests[0].body.DryRun, true);
+    assert.match(stdout, /req-app-create-dry-run/);
+    return `${command.prefix} app create --dry-run`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testAppAttachDatasetDryRun() {
+  const state = {
+    requests: [],
+    responses: {
+      AttachDatasetToApplicationV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-attach-dry-run' },
+        Result: { DryRun: body?.DryRun === true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'attach.json');
+    const fixtureRaw = JSON.parse(fs.readFileSync(fixture, 'utf8'));
+    const tempPath = path.join(reportDir, 'attach-dry-run.json');
+    fs.writeFileSync(tempPath, JSON.stringify({ ...fixtureRaw, DryRun: true }));
+    const { stdout } = await runCli(
+      ['app', 'attach-dataset', '--data', `@${tempPath}`, ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    assert.equal(state.requests[0].action, 'AttachDatasetToApplicationV2');
+    assert.equal(state.requests[0].body.ApplicationId, 'acc-app-1');
+    assert.equal(state.requests[0].body.DatasetId, 'acc-ds-1');
+    assert.equal(state.requests[0].body.DryRun, true);
+    assert.ok(state.requests[0].body.DataConfig);
+    assert.match(stdout, /req-attach-dry-run/);
+    return `${command.prefix} app attach-dataset --data @${tempPath}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDatasetIngestDryRun() {
+  let inferPolls = 0;
+  const state = {
+    requests: [],
+    responses: {
+      GetPresignedImportUrlV2: ({ query }) => ({
+        ResponseMetadata: { RequestId: 'req-import-url' },
+        Result: {
+          FileUrl: `${query.get('placeholder') ?? ''}` || 'http://127.0.0.1:0/__noop_upload',
+          FileKey: 'mock-onboarding/items.jsonl'
+        }
+      }),
+      AddInferDatasetSchemaTaskV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-task' },
+        Result: { TaskID: 'task_mock_123' }
+      }),
+      GetInferDatasetSchemaResultV2: () => {
+        inferPolls += 1;
+        if (inferPolls < 1) {
+          return {
+            ResponseMetadata: { RequestId: `req-infer-poll-${inferPolls}` },
+            Result: { Status: 'Running' }
+          };
+        }
+        return {
+          ResponseMetadata: { RequestId: `req-infer-poll-${inferPolls}` },
+          Result: JSON.parse(
+            fs.readFileSync(
+              path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'),
+              'utf8'
+            )
+          )
+        };
+      },
+      CreateDatasetV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-create-from-ingest' },
+        Result: { DatasetID: undefined, DryRun: body?.DryRun === true }
+      })
+    }
+  };
+
+  const server = await startV2MockServer(state);
+
+  let uploadCallCount = 0;
+  const uploadServer = http.createServer((req, res) => {
+    uploadCallCount += 1;
+    res.statusCode = 200;
+    res.end('');
+  });
+  await new Promise(resolve => uploadServer.listen(0, '127.0.0.1', resolve));
+  const uploadAddress = uploadServer.address();
+  state.responses.GetPresignedImportUrlV2 = () => ({
+    ResponseMetadata: { RequestId: 'req-import-url' },
+    Result: {
+      FileUrl: `http://127.0.0.1:${uploadAddress.port}/upload`,
+      FileKey: 'mock-onboarding/items.jsonl'
+    }
+  });
+
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'items.jsonl');
+    const { stdout } = await runCli(
+      [
+        'dataset',
+        'ingest',
+        '--file',
+        fixture,
+        '--type',
+        'item',
+        '--industry',
+        'e_commerce',
+        '--language',
+        'zh',
+        '--schema-poll-interval-ms',
+        '50',
+        '--schema-wait-timeout-ms',
+        '5000',
+        '--dry-run',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+
+    const actions = state.requests.filter(req => req.kind === 'control-plane').map(req => req.action);
+    assert.ok(actions.includes('GetPresignedImportUrlV2'), `expected GetPresignedImportUrlV2 call, got ${actions.join(',')}`);
+    assert.ok(actions.includes('AddInferDatasetSchemaTaskV2'));
+    assert.ok(actions.includes('GetInferDatasetSchemaResultV2'));
+    assert.ok(actions.includes('CreateDatasetV2'));
+    assert.equal(uploadCallCount, 1, 'expected exactly one upload PUT');
+    const createCall = state.requests.find(req => req.action === 'CreateDatasetV2');
+    assert.equal(createCall.body.DryRun, true);
+    assert.equal(createCall.body.Type, 'item');
+    assert.match(stdout, /dry_run/i);
+    return `${command.prefix} dataset ingest --file items.jsonl --dry-run`;
+  } finally {
+    await server.close();
+    await new Promise(resolve => uploadServer.close(resolve));
+  }
+}
+
+async function testDatasetImportUrlMock() {
+  const state = {
+    requests: [],
+    responses: {
+      GetPresignedImportUrlV2: () => ({
+        ResponseMetadata: { RequestId: 'req-import-url' },
+        Result: { FileUrl: 'https://upload.example/u/123', FileKey: 'onboarding/items.jsonl' }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'dataset',
+        'import-url',
+        '--file-name',
+        'items.jsonl',
+        '--project-name',
+        'acc-project',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.kind, 'control-plane');
+    assert.equal(call.action, 'GetPresignedImportUrlV2');
+    assert.equal(call.query.Version, '2025-03-01');
+    assert.equal(call.query.Region, 'cn-north-1');
+    assert.equal(call.body.FileName, 'items.jsonl');
+    assert.equal(call.body.ProjectName, 'acc-project');
+    assert.match(stdout, /onboarding\/items.jsonl/);
+    return `${command.prefix} dataset import-url --file-name items.jsonl`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDatasetInferSchemaMock() {
+  const state = {
+    requests: [],
+    responses: {
+      AddInferDatasetSchemaTaskV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-schema' },
+        Result: { TaskID: 'task_xyz' }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'dataset',
+        'infer-schema',
+        '--tos-key',
+        'onboarding/items.jsonl',
+        '--type',
+        'item',
+        '--industry',
+        'ecommerce',
+        '--language',
+        'zh',
+        '--project-name',
+        'acc-project',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.action, 'AddInferDatasetSchemaTaskV2');
+    assert.equal(call.body.TosKey, 'onboarding/items.jsonl');
+    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Industry, 'e_commerce');
+    assert.equal(call.body.Language, 'zh');
+    assert.match(stdout, /task_xyz/);
+    return `${command.prefix} dataset infer-schema --tos-key ... --type item`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function expectCliRejection(argv, { pattern, env } = {}) {
+  let captured;
+  try {
+    await runCli(argv, env ? { env } : undefined);
+  } catch (err) {
+    captured = err;
+  }
+  assert.ok(captured, 'expected CLI invocation to fail');
+  const stderr = String(captured.stderr ?? '');
+  const stdout = String(captured.stdout ?? '');
+  assert.match(stderr + stdout, pattern);
+  return captured;
+}
+
+async function testDatasetInferSchemaRejectsDocument() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'infer-schema',
+      '--tos-key',
+      'onboarding/items.jsonl',
+      '--type',
+      'document',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset infer-schema --type document (rejected)`;
+}
+
+async function testDatasetInferSchemaRejectsMultiModal() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'infer-schema',
+      '--tos-key',
+      'onboarding/items.jsonl',
+      '--type',
+      'multi_modal',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset infer-schema --type multi_modal (rejected)`;
+}
+
+async function testDatasetCreateRejectsMultiModal() {
+  await expectCliRejection(
+    [
+      'dataset',
+      'create',
+      '--name',
+      'demo-mm',
+      '--type',
+      'multi_modal',
+      ...v2ServiceFlags('http://127.0.0.1:1')
+    ],
+    {
+      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event.*document/i,
+      env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
+    }
+  );
+  return `${command.prefix} dataset create --type multi_modal (rejected)`;
+}
+
+async function testDatasetInferResultMock() {
+  const inferResult = JSON.parse(
+    fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'), 'utf8')
+  );
+  const state = {
+    requests: [],
+    responses: {
+      GetInferDatasetSchemaResultV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-result' },
+        Result: inferResult
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'dataset',
+        'infer-result',
+        '--task-id',
+        'task_xyz',
+        '--project-name',
+        'acc-project',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.action, 'GetInferDatasetSchemaResultV2');
+    assert.equal(call.body.TaskID, 'task_xyz');
+    assert.equal(call.body.ProjectName, 'acc-project');
+    assert.match(stdout, /Success/);
+    assert.match(stdout, /item_id/);
+    return `${command.prefix} dataset infer-result --task-id task_xyz`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDatasetInferResultRenderSchemaMixed() {
+  const mixedResult = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'QueryPK', IsPK: true, Required: true },
+      { Name: 'title', Type: 'string', BizAttr: 'Title', Required: false },
+      { Name: 'tags', FieldType: 'array<string>' },
+      { FieldName: 'price', Type: 'float' }
+    ],
+    FieldDescMap: {
+      item_id: 'Primary key',
+      title: 'Title for search results',
+      tags: 'Free-form tags'
+    },
+    DataFieldConfig: {
+      IndexFields: ['title', 'tags'],
+      FilterFields: ['price', 'non_existing'],
+      SuggestFields: ['title'],
+      FilterFieldsMap: { price: { Type: 'float' } }
+    }
+  };
+  return runInferResultRenderSchema(mixedResult, ({ stdout }) => {
+    assert.match(stdout, /vs-schema-confirm: BEGIN/);
+    assert.match(stdout, /Field count: 4/);
+    assert.match(stdout, /Primary key: item_id \(BizAttr=QueryPK\)/);
+    assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
+    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+QueryPK\s+\|\s+yes\s+\|\s+Primary key/);
+    assert.match(stdout, /tags\s+\|\s+`array<string>`\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
+    assert.match(stdout, /price\s+\|\s+`float`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /FieldDescMap is missing entries for: price/);
+    assert.match(stdout, /Field roles reference unknown schema fields: non_existing/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaDegenerate() {
+  const degenerate = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'doc_id', FieldType: 'string' },
+      { FieldName: 'body', FieldType: 'string' }
+    ]
+  };
+  return runInferResultRenderSchema(degenerate, ({ stdout }) => {
+    assert.match(stdout, /vs-schema-confirm: BEGIN/);
+    assert.match(stdout, /Field count: 2/);
+    assert.match(stdout, /Primary key: \(none\)/);
+    assert.match(stdout, /doc_id\s+\|\s+`string`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
+    assert.match(stdout, /No field carries a primary-key BizAttr/);
+    assert.match(stdout, /DataFieldConfig\.IndexFields is empty/);
+    assert.match(stdout, /FieldDescMap is missing entries for: doc_id, body/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaNoDataConfig() {
+  const noDataConfig = {
+    Status: 'Success',
+    Schema: [
+      { FieldName: 'video_id', FieldType: 'string', BizAttr: 'VideoContentID', IsPK: true },
+      { FieldName: 'cover', FieldType: 'string', BizAttr: 'ImagePK' }
+    ],
+    FieldDescMap: {
+      video_id: 'Primary key',
+      cover: 'Cover image'
+    }
+  };
+  return runInferResultRenderSchema(noDataConfig, ({ stdout }) => {
+    assert.match(stdout, /Field count: 2/);
+    assert.match(stdout, /Primary key: video_id \(BizAttr=VideoContentID\)/);
+    assert.match(stdout, /IndexFields:\s+\(none\)/);
+    assert.match(stdout, /FilterFields:\s+\(none\)/);
+    assert.match(stdout, /SuggestFields:\s+\(none\)/);
+    assert.match(stdout, /DataFieldConfig\.IndexFields is empty/);
+  });
+}
+
+async function testDatasetInferResultRenderSchemaStability() {
+  const fixture = JSON.parse(
+    fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'), 'utf8')
+  );
+  const state = {
+    requests: [],
+    responses: {
+      GetInferDatasetSchemaResultV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-result-stability' },
+        Result: fixture
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const outputs = [];
+    for (let i = 0; i < 5; i += 1) {
+      const { stdout } = await runCli(
+        [
+          'dataset', 'infer-result',
+          '--task-id', 'task_stability',
+          '--render-schema',
+          ...v2ServiceFlags(server.baseUrl)
+        ],
+        { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+      );
+      outputs.push(stdout);
+    }
+    for (let i = 1; i < outputs.length; i += 1) {
+      assert.equal(outputs[i], outputs[0], `render-schema output drifted across runs (run ${i + 1})`);
+    }
+    assert.match(outputs[0], /vs-schema-confirm: BEGIN/);
+    assert.match(outputs[0], /Primary key: item_id \(BizAttr=QueryPK\)/);
+    assert.match(outputs[0], /Field count: 7/);
+    return `${command.prefix} dataset infer-result --render-schema (5x stability)`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function runInferResultRenderSchema(result, assertions) {
+  const state = {
+    requests: [],
+    responses: {
+      GetInferDatasetSchemaResultV2: () => ({
+        ResponseMetadata: { RequestId: 'req-infer-result-render' },
+        Result: result
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'dataset', 'infer-result',
+        '--task-id', 'task_render',
+        '--render-schema',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assertions({ stdout });
+    return `${command.prefix} dataset infer-result --render-schema`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDatasetCreateMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateDatasetV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-create' },
+        Result: { DatasetID: 'ds_mock_123', DryRun: body?.DryRun === true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'dataset-create.json');
+    const { stdout } = await runCli(
+      ['dataset', 'create', '--data', `@${fixture}`, ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.action, 'CreateDatasetV2');
+    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Industry, 'e_commerce');
+    assert.equal(call.body.Name, 'acc-items');
+    assert.ok(Array.isArray(call.body.Schema));
+    assert.ok(call.body.Schema.some(field => field.FieldName === 'item_id' || field.Name === 'item_id'));
+    assert.match(stdout, /ds_mock_123/);
+    return `${command.prefix} dataset create --data @${fixture}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testAppCreateMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateApplicationV2: () => ({
+        ResponseMetadata: { RequestId: 'req-app-create' },
+        Result: { ApplicationId: 'app_mock_123' }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      [
+        'app',
+        'create',
+        '--name',
+        'acc-app',
+        '--industry',
+        'ecommerce',
+        '--language',
+        'zh',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.action, 'CreateApplicationV2');
+    assert.equal(call.body.Name, 'acc-app');
+    assert.equal(call.body.Industry, 'e_commerce');
+    assert.equal(call.body.Language, 'zh');
+    assert.match(stdout, /app_mock_123/);
+    return `${command.prefix} app create --name acc-app`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testAppAttachDatasetMock() {
+  const state = {
+    requests: [],
+    responses: {
+      AttachDatasetToApplicationV2: () => ({
+        ResponseMetadata: { RequestId: 'req-attach' },
+        Result: { Attached: true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'attach.json');
+    const { stdout } = await runCli(
+      ['app', 'attach-dataset', '--data', `@${fixture}`, ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.action, 'AttachDatasetToApplicationV2');
+    assert.equal(call.body.ApplicationId, 'acc-app-1');
+    assert.equal(call.body.DatasetId, 'acc-ds-1');
+    assert.ok(call.body.DataConfig);
+    assert.ok(Array.isArray(call.body.DataConfig.IndexFields));
+    assert.match(stdout, /req-attach/);
+    return `${command.prefix} app attach-dataset --data @${fixture}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDataWriteMock() {
+  const state = {
+    requests: [],
+    responses: {
+      '/api/v1/dataset/acc-ds-1/write': () => ({ result: { written: true, count: 3 } })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const fixture = path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'items.jsonl');
+    const fields = fs
+      .readFileSync(fixture, 'utf8')
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => JSON.parse(line));
+    const tempPath = path.join(reportDir, 'data-write-fields.json');
+    fs.writeFileSync(tempPath, JSON.stringify(fields));
+
+    const { stdout } = await runCli(
+      [
+        'data',
+        'write',
+        '--dataset-id',
+        'acc-ds-1',
+        '--fields',
+        `@${tempPath}`,
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    const call = state.requests[0];
+    assert.equal(call.kind, 'data-plane');
+    assert.equal(call.path, '/api/v1/dataset/acc-ds-1/write');
+    assert.ok(Array.isArray(call.body.fields));
+    assert.equal(call.body.fields.length, 3);
+    assert.match(stdout, /written/);
+    return `${command.prefix} data write --dataset-id acc-ds-1`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testV2OnboardingLivePlaceholder() {
+  return 'Live V2 onboarding suite is a placeholder. Replace with a real signed E2E call when ready.';
+}
+
 function writeReport() {
   const lines = [
     '# Acceptance',
     '',
     `- mode: ${mode}`,
-    `- live: ${live ? 'true' : 'false'}`,
+    `- suite: ${suiteArg}`,
+    `- live: ${live || liveEnabled ? 'true' : 'false'}`,
     `- command: ${command.prefix}`,
     ''
   ];
 
+  const counts = { passed: 0, failed: 0, skipped: 0 };
   for (const test of tests) {
-    lines.push(`## ${test.name}`);
-    lines.push(`- status: ${test.status}`);
-    lines.push(`- detail: ${test.detail}`);
+    counts[test.status] = (counts[test.status] ?? 0) + 1;
+  }
+  lines.push('## Summary');
+  lines.push(`- passed: ${counts.passed ?? 0}`);
+  lines.push(`- failed: ${counts.failed ?? 0}`);
+  lines.push(`- skipped: ${counts.skipped ?? 0}`);
+  lines.push(`- total: ${tests.length}`);
+  lines.push('');
+
+  const bySuite = new Map();
+  for (const test of tests) {
+    const suiteName = test.suite ?? 'core';
+    if (!bySuite.has(suiteName)) {
+      bySuite.set(suiteName, []);
+    }
+    bySuite.get(suiteName).push(test);
+  }
+
+  for (const [suiteName, suiteTests] of bySuite) {
+    const suitePassed = suiteTests.filter(test => test.status === 'passed').length;
+    const suiteFailed = suiteTests.filter(test => test.status === 'failed').length;
+    const suiteSkipped = suiteTests.filter(test => test.status === 'skipped').length;
+    lines.push(`# Suite: ${suiteName}`);
     lines.push('');
+    lines.push(`- passed: ${suitePassed}`);
+    lines.push(`- failed: ${suiteFailed}`);
+    lines.push(`- skipped: ${suiteSkipped}`);
+    lines.push('');
+    for (const test of suiteTests) {
+      lines.push(`## ${test.name}`);
+      lines.push(`- status: ${test.status}`);
+      lines.push(`- detail: ${test.detail}`);
+      lines.push('');
+    }
   }
 
   fs.writeFileSync(reportPath, `${lines.join('\n')}\n`, 'utf8');

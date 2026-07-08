@@ -7,19 +7,43 @@ import { workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class DatasetIngest extends Command {
   static override description =
-    'Import a batch of records into a dataset with a task-oriented workflow command. In a plan-driven dataset-only flow, pair this with `dataset create --data @dataset-create.json` and pass the generated normalized-items artifact to `--fields`.';
+    'Onboard data into Viking. Two modes: V2 onboarding chain (`--file --type` → import-url → upload → infer-schema → infer-result → dataset create) for first-time dataset creation; legacy data-write (`--dataset-id --fields`) for runtime ingestion into an existing dataset.';
 
   static override examples = [
-    '<%= config.bin %> dataset ingest --dataset-id 123 --fields @items.json',
-    '<%= config.bin %> dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json'
+    '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --dataset-name demo-items',
+    '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --industry ecommerce --language zh --dry-run',
+    '<%= config.bin %> dataset ingest --dataset-id 123 --fields @items.json'
   ];
 
   static override flags = {
     ...workflowServiceFlags,
-    'dataset-id': Flags.string({ required: true }),
+    // V2 onboarding chain
+    file: Flags.string({
+      description: 'Local file path to upload via GetPresignedImportUrlV2. Required for V2 onboarding chain.'
+    }),
+    type: Flags.string({
+      description: 'Dataset type for the V2 chain: item|video|user_event|document|multi_modal.'
+    }),
+    'dataset-name': Flags.string({
+      description: 'Optional dataset name used during inference and create.'
+    }),
+    industry: Flags.string({ description: 'Industry hint forwarded to V2 inference/create.' }),
+    language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
+    'schema-wait-timeout-ms': Flags.integer({
+      description: 'Timeout in milliseconds for polling the schema inference task. Default 120000.'
+    }),
+    'schema-poll-interval-ms': Flags.integer({
+      description: 'Polling interval in milliseconds for the schema inference task. Default 2000.'
+    }),
+    'dry-run': Flags.boolean({
+      description: 'Validate the dataset create at the end without persisting (DryRun=true).'
+    }),
+    // Legacy data-write
+    'dataset-id': Flags.string({
+      description: 'Legacy mode: target dataset ID for runtime data-write. Pair with --fields.'
+    }),
     fields: Flags.string({
-      description:
-        'Inline JSON array, @file path, or JSON file path containing the fields array. When ingesting from an item plan, prefer normalized-items.json.'
+      description: 'Legacy mode: inline JSON array, @file path, or JSON file path containing the fields array.'
     })
   };
 
@@ -33,6 +57,14 @@ export default class DatasetIngest extends Command {
       secretKey: flags.sk,
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
+      file: flags.file,
+      type: flags.type,
+      datasetName: flags['dataset-name'],
+      industry: flags.industry,
+      language: flags.language,
+      schemaWaitTimeoutMs: flags['schema-wait-timeout-ms'],
+      schemaPollIntervalMs: flags['schema-poll-interval-ms'],
+      dryRun: flags['dry-run'],
       datasetId: flags['dataset-id'],
       fields: flags.fields
     });

@@ -438,4 +438,5 @@ export interface RuntimeConfig {
   llmRegion?: string;
   llmService?: string;
   llmModel?: string;
+  debug: boolean;
 }
