@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+.pkg-cache/
 
 # macOS metadata
 .DS_Store

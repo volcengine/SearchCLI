@@ -40,8 +40,8 @@ export default class DatasetCreate extends Command {
     'abnormal-image-policy': Flags.string({
       description: 'ProcessConfig.AbnormalImageDataProcessPolicy (e.g. drop|keep).'
     }),
-    'video-auto-delete': Flags.string({
-      description: 'ProcessConfig.VideoAutoDeletePolicy (e.g. on|off).'
+    'video-auto-delete': Flags.boolean({
+      description: 'ProcessConfig.VideoAutoDelete: when set, the backend auto-deletes source videos after processing.'
     }),
     'dry-run': Flags.boolean({
       description: 'Validate the request without persisting the dataset (DryRun=true).'

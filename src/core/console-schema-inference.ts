@@ -63,7 +63,7 @@ export async function inferSchemaArtifactsWithConsole(
   while (Date.now() <= deadline) {
     const resultResponse = unwrapResultEnvelope(
       await openapi.post('/open/GetInferDatasetSchemaResultV2', {
-        TaskID: taskId,
+        TaskId: taskId,
         ProjectName: options.projectName ?? config.projectName
       })
     );

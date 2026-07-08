@@ -342,7 +342,7 @@ async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions):
   let inferResult: Record<string, unknown> | undefined;
   while (Date.now() <= deadline) {
     const polled = unwrapResult(
-      await client.post('/open/GetInferDatasetSchemaResultV2', { TaskID: taskId, ProjectName: projectName })
+      await client.post('/open/GetInferDatasetSchemaResultV2', { TaskId: taskId, ProjectName: projectName })
     );
     const status = readStatus(polled.Status);
     if (status === 'success') {

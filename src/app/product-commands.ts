@@ -123,7 +123,7 @@ export interface DatasetCreateOptions extends ServiceCommandOptions {
   language?: string;
   theme?: string;
   abnormalImagePolicy?: string;
-  videoAutoDelete?: string;
+  videoAutoDelete?: boolean;
   dryRun?: boolean;
   fieldDescMap?: string;
   projectName?: string;
@@ -763,10 +763,10 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
     ? await loadJsonInput(options.schemaJson)
     : await loadJsonInput(options.schema);
   const fieldDescMap = options.fieldDescMap ? await loadJsonInput(options.fieldDescMap) : undefined;
-  const processConfig = (options.abnormalImagePolicy || options.videoAutoDelete)
+  const processConfig = (options.abnormalImagePolicy !== undefined || options.videoAutoDelete !== undefined)
     ? compactObject({
         AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
-        VideoAutoDeletePolicy: options.videoAutoDelete
+        VideoAutoDelete: options.videoAutoDelete
       })
     : undefined;
   const fallbackPayload = compactObject({
@@ -1939,7 +1939,7 @@ function printDatasetCommandHelp(action: string): void {
     create: `Create a Viking dataset.
 
 USAGE
-  vs dataset create --name <name> --type <item|video|user_event|document> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--video-auto-delete <policy>] [--project-name <name>] [--dry-run] [service flags]
+  vs dataset create --name <name> --type <item|video|user_event|document> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--video-auto-delete] [--project-name <name>] [--dry-run] [service flags]
   vs dataset create --data @dataset-create.json [service flags]
 
 DESCRIPTION
@@ -1961,7 +1961,7 @@ KEY FLAGS
   --theme                   Optional theme/domain hint. Forwards to CreateDatasetV2.Theme.
   --field-desc-map          JSON map of FieldName → human description. Forwards to FieldDescMap.
   --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy value (e.g. skip|fail).
-  --video-auto-delete       ProcessConfig.VideoAutoDeletePolicy value (preserved for forward compatibility).
+  --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
   --project-name            Viking project name when the API requires project scoping.
   --dry-run                 Validate the payload server-side without persisting the dataset.
 
@@ -3038,7 +3038,7 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         language: optionalString(values.language),
         theme: optionalString(values.theme),
         abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
-        videoAutoDelete: optionalString(values['video-auto-delete']),
+        videoAutoDelete: optionalBoolean(values['video-auto-delete']),
         dryRun: optionalBoolean(values['dry-run']),
         fieldDescMap: optionalString(values['field-desc-map']),
         projectName: optionalString(values['project-name'])
@@ -3893,7 +3893,7 @@ function parseStandaloneOptions(argv: string[]) {
       'schema-json': { type: 'string' },
       'field-desc-map': { type: 'string' },
       'abnormal-image-policy': { type: 'string' },
-      'video-auto-delete': { type: 'string' },
+      'video-auto-delete': { type: 'boolean' },
       'data-config': { type: 'string' },
       'icon-color': { type: 'string' },
       'risk-check': { type: 'boolean' },
@@ -4313,7 +4313,7 @@ export interface DatasetInferResultOptions extends ServiceCommandOptions {
 
 export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
   const fallbackPayload = compactObject({
-    TaskID: options.taskId,
+    TaskId: options.taskId,
     ProjectName: options.projectName
   });
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
