@@ -55,6 +55,14 @@ import {
   runSearchTuneRunCommand,
   runSearchTuneValidateCommand
 } from './search-tuning-commands';
+import {
+  runConnectorInitCommand,
+  runConnectorInspectCommand,
+  runConnectorRunCommand,
+  runConnectorStatusCommand,
+  runConnectorStopCommand
+} from './connector-commands';
+import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -1671,6 +1679,13 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
+    case 'connector':
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runConnectorCli(argv);
+      return true;
     case 'dict':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -1728,6 +1743,7 @@ export function printProductDomainsHelp(): void {
     'vs dataset create|get|list|delete|update|ingest',
     'vs dataset schema check',
     'vs data write|import|delete',
+    'vs connector init|run|status|stop|inspect',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
     'vs chat run',
@@ -1785,6 +1801,29 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+    connector: `${renderUsageBlock(
+      [
+        'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
+        'vs connector init --name <job> --source mongo --dataset-id <id> --database <db> --collection <collection> --id-field <field> --cursor-field <field> [connector flags]',
+        'vs connector init --name <job> --source redis-stream --dataset-id <id> --stream <key> --id-field <field> [connector flags]',
+        'vs connector run --job <job> [--once] [service flags]',
+        'vs connector run --job <job> --daemon [service flags]',
+        'vs connector status --job <job>',
+        'vs connector stop --job <job>',
+        'vs connector stop --pid <pid>',
+        'vs connector stop --job <job> --pid <pid>',
+        'vs connector inspect --job <job>'
+      ]
+    )}
+
+SOURCE ENVIRONMENT
+  mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default.
+  mongo        Uses MONGO_URI by default.
+  redis-stream Uses REDIS_URL by default.
+  Override prefixes with --env-prefix.
+
+COMMON FLAGS
+  --batch-size --interval-ms --fields --daemon --format --jq --output`,
     dict: `${renderUsageBlock(
       [
         'vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]',
@@ -2919,6 +2958,62 @@ async function runDataCli(argv: string[]): Promise<void> {
   }
 }
 
+async function runConnectorCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('connector');
+    return;
+  }
+  const values = parseStandaloneOptions(argv.slice(1));
+  const serviceOptions = toStandaloneServiceOptions(values);
+
+  switch (action) {
+    case 'init':
+      await runConnectorInitCommand({
+        name: requiredString(values.name, '--name'),
+        source: requiredString(values.source, '--source') as ConnectorSourceType,
+        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
+        envPrefix: optionalString(values['env-prefix']),
+        idField: optionalString(values['id-field']),
+        fields: optionalString(values.fields),
+        cursorField: optionalString(values['cursor-field']),
+        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
+        initialCursor: optionalString(values['initial-cursor']),
+        table: optionalString(values['source-table']),
+        where: optionalString(values.where),
+        database: optionalString(values.database),
+        collection: optionalString(values.collection),
+        stream: optionalString(values.stream),
+        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
+        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+      });
+      return;
+    case 'run':
+      await runConnectorRunCommand({
+        ...serviceOptions,
+        job: requiredString(values.job, '--job'),
+        once: optionalBoolean(values.once),
+        daemon: optionalBoolean(values.daemon),
+        worker: optionalBoolean(values.worker)
+      });
+      return;
+    case 'status':
+      await runConnectorStatusCommand(requiredString(values.job, '--job'));
+      return;
+    case 'stop':
+      await runConnectorStopCommand(
+        optionalString(values.job),
+        parseOptionalInt(optionalString(values.pid))
+      );
+      return;
+    case 'inspect':
+      await runConnectorInspectCommand(requiredString(values.job, '--job'));
+      return;
+    default:
+      throw new Error(`Unknown connector subcommand: ${action}`);
+  }
+}
+
 async function runDictCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if (hasHelpFlag(argv.slice(1))) {
@@ -3538,8 +3633,26 @@ function parseStandaloneOptions(argv: string[]) {
       goal: { type: 'string' },
       profile: { type: 'string' },
       id: { type: 'string' },
+      job: { type: 'string' },
       'plan-dir': { type: 'string' },
       name: { type: 'string' },
+      source: { type: 'string' },
+      'env-prefix': { type: 'string' },
+      'id-field': { type: 'string' },
+      'cursor-field': { type: 'string' },
+      'cursor-type': { type: 'string' },
+      'initial-cursor': { type: 'string' },
+      'source-table': { type: 'string' },
+      where: { type: 'string' },
+      database: { type: 'string' },
+      collection: { type: 'string' },
+      stream: { type: 'string' },
+      'batch-size': { type: 'string' },
+      'interval-ms': { type: 'string' },
+      once: { type: 'boolean' },
+      daemon: { type: 'boolean' },
+      worker: { type: 'boolean' },
+      pid: { type: 'string' },
       'application-name': { type: 'string' },
       'dataset-name': { type: 'string' },
       description: { type: 'string' },

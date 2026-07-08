@@ -15,6 +15,7 @@ const PRODUCT_COMMANDS: HelpLine[] = [
   { text: 'app                Manage applications, activation, and readiness' },
   { text: 'dataset            Manage datasets, schema, uploads, and ingest workflows' },
   { text: 'data               Write and inspect dataset items directly' },
+  { text: 'connector          Sync incremental source changes into datasets' },
   { text: 'search             Run search and manage search scenes' },
   { text: 'chat               Run conversational search' },
   { text: 'recommend          Run recommend and manage scenes and rules' }
@@ -32,6 +33,7 @@ export function printRootHelp(): void {
     'vs <command> --help',
     'vs app --help',
     'vs item --help',
+    'vs connector --help',
     'vs skill --help',
     'vs auth --help',
     'vs llm --help'
