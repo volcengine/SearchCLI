@@ -48,6 +48,18 @@
       ]
     },
     {
+      "name": "vs-search-tuning-partial-case",
+      "files": [
+        "vs-search-tuning-partial-case/SKILL.md"
+      ]
+    },
+    {
+      "name": "vs-search-tuning-specify-policy-direction",
+      "files": [
+        "vs-search-tuning-specify-policy-direction/SKILL.md"
+      ]
+    },
+    {
       "name": "vs-shared",
       "files": [
         "vs-shared/SKILL.md"

@@ -12,3 +12,6 @@ tmp-acceptance/
 # Trae agent workspace
 .trae/
 ._agent/
+
+# IDE
+.idea/
