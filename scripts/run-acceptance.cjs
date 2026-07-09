@@ -397,7 +397,7 @@ async function testSearchTuneRunHelp() {
   assert.match(stdout, /Default: 18/);
   assert.match(stdout, /--llm-concurrency/);
   assert.match(stdout, /Default: 100/);
-  assert.doesNotMatch(stdout, /--scene-id/);
+  assert.match(stdout, /--scene-id/);
   assert.match(stdout, /--resume-run-id/);
   assert.match(stdout, /--label-source/);
   assert.match(stdout, /--llm-retries/);

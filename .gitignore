@@ -1,8 +1,9 @@
 node_modules/
 dist/
 release/
+.viking/
+tmp-acceptance/
 
 # macOS metadata
 .DS_Store
 **/.DS_Store
-

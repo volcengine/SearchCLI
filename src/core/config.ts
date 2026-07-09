@@ -13,6 +13,7 @@ const runtimeConfigSchema = z.object({
   applicationId: z.string().min(1),
   datasetId: z.string().min(1),
   sceneId: z.string().optional(),
+  apiKey: z.string().optional(),
   accessKeyId: z.string().optional(),
   secretKey: z.string().optional(),
   region: z.string().min(1),
@@ -37,6 +38,7 @@ export interface RuntimeConfigInput {
   applicationId?: string;
   datasetId?: string;
   sceneId?: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   region?: string;
@@ -58,6 +60,7 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     controlPlaneBaseUrl: input.controlPlaneBaseUrl,
     dataPlaneBaseUrl: input.dataPlaneBaseUrl,
     service: input.service,
+    apiKey: input.apiKey,
     accessKeyId: input.accessKeyId,
     secretKey: input.secretKey,
     region: input.region,
@@ -81,6 +84,7 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     applicationId: input.applicationId ?? process.env.VIKING_APPLICATION_ID,
     datasetId: input.datasetId ?? process.env.VIKING_DATASET_ID,
     sceneId: input.sceneId ?? process.env.VIKING_SCENE_ID,
+    apiKey: defaults.apiKey,
     accessKeyId: defaults.accessKeyId,
     secretKey: defaults.secretKey,
     region: defaults.region,

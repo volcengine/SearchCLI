@@ -199,6 +199,7 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   if (phase === 'verify') {
     await runItemVerifyCommand({
       baseUrl: options.baseUrl,
+      apiKey: options.apiKey,
       accessKeyId: options.accessKeyId,
       secretKey: options.secretKey,
       region: options.region,
@@ -243,6 +244,7 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   }
   const verifyResult = await executeItemVerify({
     baseUrl: options.baseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     region: options.region,
@@ -329,6 +331,7 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
 
   const config = resolveServiceConfig({
     baseUrl: options.baseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -618,6 +621,7 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
 
   const config = resolveServiceConfig({
     baseUrl: options.baseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
