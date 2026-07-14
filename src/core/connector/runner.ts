@@ -10,6 +10,7 @@ import {
 import { ConnectorSink } from './sink';
 import { createConnectorSource } from './sources';
 import {
+  appendConnectorImportedRecordLogs,
   appendConnectorLog,
   createInitialConnectorRuntime,
   clearConnectorStop,
@@ -33,9 +34,8 @@ export interface ConnectorRunResult {
   pid: number;
   mode: 'foreground' | 'daemon';
   tracePath: string;
+  importLogPath: string;
   runtimePath: string;
-  stdoutPath?: string;
-  stderrPath?: string;
   stopCommand: string;
   statePath: string;
 }
@@ -148,6 +148,16 @@ export async function runConnector(input: ConnectorRunInput): Promise<ConnectorR
       await saveConnectorState(config.name, state);
       runtime.heartbeatAt = state.lastRunAt;
       await saveConnectorRuntime(config.name, runtime);
+      await appendConnectorImportedRecordLogs(
+        config.name,
+        flushResult.importedRecords.map(importedRecord => ({
+          stage: 'runtime_data_write',
+          iteration: iterations,
+          id: importedRecord.id,
+          fields: importedRecord.fields,
+          cursor: state.cursor
+        }))
+      );
       await appendConnectorLog(config.name, {
         event: 'iteration_complete',
         pid: process.pid,
@@ -219,9 +229,8 @@ export async function runConnector(input: ConnectorRunInput): Promise<ConnectorR
     pid: process.pid,
     mode,
     tracePath: paths.trace,
+    importLogPath: paths.importLog,
     runtimePath: paths.runtime,
-    stdoutPath: mode === 'daemon' ? paths.stdout : undefined,
-    stderrPath: mode === 'daemon' ? paths.stderr : undefined,
     stopCommand: buildStopCommand(config.name, process.pid),
     statePath: paths.state
   };

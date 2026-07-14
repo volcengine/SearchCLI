@@ -8,6 +8,7 @@ import type { ConnectorChange, ConnectorSinkConfig, ConnectorState } from './typ
 export interface ConnectorFlushResult {
   upsertCount: number;
   importedIds: string[];
+  importedRecords: Array<{ id: string; fields: Record<string, unknown> }>;
   ignoredDeleteCount: number;
   ignoredDeleteIds: string[];
 }
@@ -61,6 +62,7 @@ export class ConnectorSink {
     return {
       upsertCount: batch.length,
       importedIds: batch.map(item => item.id),
+      importedRecords: batch,
       ignoredDeleteCount: ignoredDeleteIds.length,
       ignoredDeleteIds
     };

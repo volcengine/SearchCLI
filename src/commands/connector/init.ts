@@ -7,7 +7,11 @@ import { outputFormatFlags } from '../../command-support/service-flags';
 import type { ConnectorCursorType, ConnectorSourceType } from '../../core/connector/types';
 
 export default class ConnectorInit extends Command {
-  static override description = 'Create a local connector job config for incremental source-to-dataset sync.';
+  static override description = [
+    'Create a local connector job config for incremental source-to-dataset sync.',
+    'The job config is stored under /tmp/viking/connector/<name>/config.json and is later consumed by `vs connector run --job <name>`.',
+    '--output only redirects the rendered command result; it does not change the saved connector config path.'
+  ].join('\n\n');
 
   static override examples = [
     '<%= config.bin %> connector init --name product_mysql --source mysql --dataset-id ds_xxx --source-table products --id-field id --cursor-field updated_at',
@@ -17,7 +21,7 @@ export default class ConnectorInit extends Command {
 
   static override flags = {
     ...outputFormatFlags,
-    name: Flags.string({ required: true, description: 'Local connector job name.' }),
+    name: Flags.string({ required: true, description: 'Local connector job name. It determines the runtime directory /tmp/viking/connector/<name>/.' }),
     source: Flags.string({
       required: true,
       options: ['mysql', 'mongo', 'redis-stream'],
@@ -29,19 +33,23 @@ export default class ConnectorInit extends Command {
     }),
     'id-field': Flags.string({ description: 'Source record ID field. Defaults to id for MySQL and _id otherwise.' }),
     fields: Flags.string({ description: 'Comma-separated source fields to write. Defaults to all fields.' }),
-    'cursor-field': Flags.string({ description: 'Incremental cursor/watermark field for polling sources.' }),
+    'cursor-field': Flags.string({ description: 'Incremental cursor/watermark field for polling sources. For integer MySQL IDs such as id, pair it with --cursor-type number.' }),
     'cursor-type': Flags.string({
       options: ['timestamp', 'number', 'string'],
-      description: 'Cursor value type. Defaults to timestamp for polling sources.'
+      description: 'Cursor value type. Use number for integer IDs such as MySQL auto-increment id. Defaults to timestamp for polling sources.'
     }),
     'initial-cursor': Flags.string({ description: 'Initial cursor value when no state exists.' }),
-    'source-table': Flags.string({ description: 'MySQL table name, optionally schema-qualified.' }),
+    'source-table': Flags.string({ description: 'MySQL table name, optionally schema-qualified. Required when --source mysql.' }),
     where: Flags.string({ description: 'Additional MySQL WHERE clause without the WHERE keyword.' }),
     database: Flags.string({ description: 'Mongo database name.' }),
     collection: Flags.string({ description: 'Mongo collection name.' }),
     stream: Flags.string({ description: 'Redis Stream key.' }),
     'batch-size': Flags.integer({ description: 'Maximum source rows/messages per polling batch.' }),
-    'interval-ms': Flags.integer({ description: 'Polling interval for continuous runs.' })
+    'interval-ms': Flags.integer({ description: 'Polling interval for continuous runs.' }),
+    output: Flags.string({
+      char: 'o',
+      description: 'Write the rendered command result to a file instead of stdout. This does not change the saved connector config path.'
+    })
   };
 
   async run(): Promise<void> {

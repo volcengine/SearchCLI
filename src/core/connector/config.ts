@@ -91,16 +91,12 @@ export function connectorTracePath(job: string): string {
   return path.join(connectorJobDir(job), 'trace.ndjson');
 }
 
+export function connectorImportLogPath(job: string): string {
+  return path.join(connectorJobDir(job), 'imported-records.log');
+}
+
 export function connectorRuntimePath(job: string): string {
   return path.join(connectorJobDir(job), 'runtime.json');
-}
-
-export function connectorStdoutPath(job: string): string {
-  return path.join(connectorJobDir(job), 'worker.stdout.log');
-}
-
-export function connectorStderrPath(job: string): string {
-  return path.join(connectorJobDir(job), 'worker.stderr.log');
 }
 
 export function connectorLogPath(job: string): string {
@@ -147,7 +143,7 @@ export function buildConnectorJobConfig(input: ConnectorInitInput): ConnectorJob
     },
     batch: {
       maxRows: input.batchSize ?? 500,
-      intervalMs: input.intervalMs ?? 3000
+      intervalMs: input.intervalMs ?? 10000
     }
   });
 }

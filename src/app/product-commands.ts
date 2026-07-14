@@ -58,6 +58,7 @@ import {
   runSearchTuneValidateCommand
 } from './search-tuning-commands';
 import {
+  runConnectorExportCommand,
   runConnectorInitCommand,
   runConnectorInspectCommand,
   runConnectorRunCommand,
@@ -1841,6 +1842,9 @@ COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
     connector: `${renderUsageBlock(
       [
+        'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
+        'vs connector export --source mongo --database <db> --collection <collection> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
+        'vs connector export --source redis-stream --stream <key> --id-field <field> [--dataset-name <name> --job <job>] [connector flags]',
         'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
         'vs connector init --name <job> --source mongo --dataset-id <id> --database <db> --collection <collection> --id-field <field> --cursor-field <field> [connector flags]',
         'vs connector init --name <job> --source redis-stream --dataset-id <id> --stream <key> --id-field <field> [connector flags]',
@@ -1859,6 +1863,23 @@ SOURCE ENVIRONMENT
   mongo        Uses MONGO_URI by default.
   redis-stream Uses REDIS_URL by default.
   Override prefixes with --env-prefix.
+
+NOTES
+  Use \`connector export\` to turn a source snapshot into a local JSONL bootstrap artifact.
+  The exported records always land at /tmp/viking/connector/<job>/bootstrap/items.jsonl.
+  \`--output\` only redirects the rendered command result; it does not change the bootstrap JSONL path.
+  When a MySQL cursor field is an integer id (for example \`id\`), pass \`--cursor-type number\`.
+  Use \`connector init + connector run --daemon\` to keep incremental sync running in the background.
+
+KEY FLAGS
+  --job           Export only. Controls <job> in /tmp/viking/connector/<job>/bootstrap/items.jsonl.
+  --dataset-name  Export only. Used to derive the bootstrap job name when --job is omitted.
+  --name          Init only. Controls the local runtime directory /tmp/viking/connector/<name>/.
+  --dataset-id    Init only. Target dataset that later \`connector run\` writes into.
+  --source-table  Required for mysql export/init.
+  --cursor-field  Checkpoint field used for bootstrap/export progress and later incremental sync.
+  --cursor-type   Use \`number\` for integer IDs such as mysql \`id\`; defaults to \`timestamp\`.
+  --output        Redirects the rendered command result only; it does not change bootstrap/config file paths.
 
 COMMON FLAGS
   --batch-size --interval-ms --fields --daemon --format --jq --output`,
@@ -2037,7 +2058,7 @@ EXAMPLES
   vs dataset list
   vs dataset list --type item
   vs dataset list --name catalog --full`,
-    ingest: `Import a batch of records into a dataset with a task-oriented workflow command.
+    ingest: `Complete file-based V2 dataset onboarding or write explicit rows into an existing dataset.
 
 USAGE
   vs dataset ingest --dataset-id <id> --fields @items.json [--project-name <name>] [workflow flags]
@@ -2049,6 +2070,10 @@ DESCRIPTION
 
   The V2 onboarding chain (--file + --type) runs the full pipeline: presigned upload, schema
   inference polling, and CreateDatasetV2. Use --dry-run to validate without persisting the dataset.
+
+  For source-backed onboarding, first run \`vs connector export ...\` to generate a JSONL bootstrap
+  artifact, then reuse the emitted path with \`vs dataset ingest --file ...\`. Background incremental
+  sync is managed separately through \`vs connector init\` + \`vs connector run --daemon\`.
 
 KEY FLAGS
   --dataset-id              Target dataset ID (legacy data-write mode).
@@ -2069,7 +2094,9 @@ KEY FLAGS
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
   vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --language zh
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run`,
+  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run
+  vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
+  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type item --dataset-name demo-items`,
     'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
 
 USAGE
@@ -3204,6 +3231,26 @@ async function runConnectorCli(argv: string[]): Promise<void> {
   const serviceOptions = toStandaloneServiceOptions(values);
 
   switch (action) {
+    case 'export':
+      await runConnectorExportCommand({
+        source: requiredString(values.source, '--source') as ConnectorSourceType,
+        job: optionalString(values.job),
+        datasetName: optionalString(values['dataset-name']),
+        envPrefix: optionalString(values['env-prefix']),
+        idField: optionalString(values['id-field']),
+        fields: optionalString(values.fields),
+        cursorField: optionalString(values['cursor-field']),
+        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
+        initialCursor: optionalString(values['initial-cursor']),
+        table: optionalString(values['source-table']),
+        where: optionalString(values.where),
+        database: optionalString(values.database),
+        collection: optionalString(values.collection),
+        stream: optionalString(values.stream),
+        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
+        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+      });
+      return;
     case 'init':
       await runConnectorInitCommand({
         name: requiredString(values.name, '--name'),
@@ -3873,12 +3920,14 @@ function parseStandaloneOptions(argv: string[]) {
       'plan-dir': { type: 'string' },
       name: { type: 'string' },
       source: { type: 'string' },
+      mode: { type: 'string' },
       'env-prefix': { type: 'string' },
       'id-field': { type: 'string' },
       'cursor-field': { type: 'string' },
       'cursor-type': { type: 'string' },
       'initial-cursor': { type: 'string' },
       'source-table': { type: 'string' },
+      'source-fields': { type: 'string' },
       where: { type: 'string' },
       database: { type: 'string' },
       collection: { type: 'string' },

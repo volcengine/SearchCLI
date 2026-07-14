@@ -2,11 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { spawn } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { buildConnectorJobConfig, connectorStopRequested, saveConnectorConfig } from '../core/connector/config';
+import {
+  buildConnectorJobConfig,
+  connectorStopRequested,
+  loadConnectorConfig,
+  saveConnectorConfig
+} from '../core/connector/config';
+import { bootstrapSourceToJsonl } from '../core/connector/bootstrap';
 import { runConnector } from '../core/connector/runner';
+import { getSourceEnvRequirements, assertSourceEnvConfigured } from '../core/connector/sources/helpers';
 import {
   createInitialConnectorRuntime,
   getConnectorPaths,
@@ -17,32 +23,82 @@ import {
   resolveConnectorRuntimeByPid,
   saveConnectorRuntime
 } from '../core/connector/state-store';
-import type { ConnectorInitInput, ConnectorRunInput } from '../core/connector/types';
+import type { ConnectorExportInput, ConnectorInitInput, ConnectorRunInput } from '../core/connector/types';
+import type { ConnectorRunResult } from '../core/connector/runner';
 import { ensureDir } from '../core/files';
 import { printOutput } from '../core/output-format';
+
+export async function runConnectorExportCommand(input: ConnectorExportInput): Promise<void> {
+  const bootstrap = await bootstrapSourceToJsonl({
+    job: input.job,
+    datasetName: input.datasetName,
+    source: input.source,
+    envPrefix: input.envPrefix,
+    idField: input.idField,
+    cursorField: input.cursorField,
+    cursorType: input.cursorType,
+    initialCursor: input.initialCursor,
+    table: input.table,
+    where: input.where,
+    database: input.database,
+    collection: input.collection,
+    stream: input.stream,
+    sourceFields: input.fields,
+    batchSize: input.batchSize,
+    intervalMs: input.intervalMs
+  });
+
+  await printOutput({
+    ok: true,
+    job: bootstrap.job,
+    source: bootstrap.source,
+    bootstrapDir: bootstrap.bootstrapDir,
+    jsonlPath: bootstrap.jsonlPath,
+    metadataPath: bootstrap.metadataPath,
+    importLogPath: bootstrap.importLogPath,
+    exportedCount: bootstrap.exportedCount,
+    importedIdSample: bootstrap.importedIdSample,
+    cursor: bootstrap.cursor,
+    envRequirements: bootstrap.envRequirements,
+    note: '--output only redirects this command result. It does not change the bootstrap JSONL path.',
+    next: `Use ${bootstrap.jsonlPath} as the file input for dataset creation/onboarding.`
+  });
+}
 
 export async function runConnectorInitCommand(input: ConnectorInitInput): Promise<void> {
   const config = buildConnectorJobConfig(input);
   const configPath = await saveConnectorConfig(config);
+  const envRequirements = getSourceEnvRequirements(config.source.type, config.source.envPrefix);
   await printOutput({
     ok: true,
     job: config.name,
     configPath,
     source: config.source.type,
     datasetId: config.sink.datasetId,
+    envRequirements,
+    envHint: 'Set these values in environment variables, not in chat. After exporting them, run the ingest/sync command.',
     next: `vs connector run --job ${config.name}`
   });
 }
 
 export async function runConnectorRunCommand(input: ConnectorRunInput): Promise<void> {
+  const result = await executeConnectorRunCommand(input);
+  await printOutput(result);
+}
+
+export async function executeConnectorRunCommand(input: ConnectorRunInput): Promise<ConnectorRunResult | Record<string, unknown>> {
   if (input.daemon && input.worker) {
     throw new Error('Internal connector worker process cannot be launched with --daemon.');
   }
 
-  const result = input.daemon
+  if (!input.worker) {
+    const config = await loadConnectorConfig(input.job);
+    assertSourceEnvConfigured(config.source.type, config.source.envPrefix);
+  }
+
+  return input.daemon
     ? await startDetachedConnectorRun(input)
     : await runConnector(input);
-  await printOutput(result);
 }
 
 export async function runConnectorStatusCommand(job: string): Promise<void> {
@@ -67,6 +123,7 @@ export async function runConnectorStatusCommand(job: string): Promise<void> {
     lastBatch: state.lastBatch,
     stats: state.stats,
     tracePath: paths.trace,
+    importLogPath: paths.importLog,
     stdoutPath: paths.stdout,
     stderrPath: paths.stderr,
     stopCommand: runtime?.pid ? buildStopCommand(job, runtime.pid) : `vs connector stop --job ${job}`,
@@ -123,6 +180,7 @@ export async function runConnectorStopCommand(job?: string, pid?: number): Promi
     job: resolvedJob,
     pid: effectivePid,
     tracePath: getConnectorPaths(resolvedJob).trace,
+    importLogPath: getConnectorPaths(resolvedJob).importLog,
     stopPath,
     signal: effectivePid !== undefined ? 'SIGTERM' : undefined,
     stopCommand: effectivePid !== undefined ? buildStopCommand(resolvedJob, effectivePid) : `vs connector stop --job ${resolvedJob}`
@@ -178,49 +236,40 @@ async function startDetachedConnectorRun(input: ConnectorRunInput): Promise<Reco
   ];
   if (input.once) args.push('--once');
 
-  const stdoutFd = openSync(paths.stdout, 'a');
-  const stderrFd = openSync(paths.stderr, 'a');
+  const child = spawn(launchSpec.command, args, {
+    cwd: process.cwd(),
+    detached: true,
+    env: buildWorkerEnv(input),
+    stdio: ['ignore', 'ignore', 'ignore']
+  });
 
-  try {
-    const child = spawn(launchSpec.command, args, {
-      cwd: process.cwd(),
-      detached: true,
-      env: buildWorkerEnv(input),
-      stdio: ['ignore', stdoutFd, stderrFd]
-    });
-
-    if (!child.pid) {
-      throw new Error(`Failed to start connector daemon for job ${input.job}.`);
-    }
-
-    const now = new Date().toISOString();
-    await saveConnectorRuntime(input.job, createInitialConnectorRuntime(input.job, {
-      pid: child.pid,
-      mode: 'daemon',
-      status: 'starting',
-      startedAt: now,
-      heartbeatAt: now
-    }));
-
-    child.unref();
-
-    return {
-      ok: true,
-      job: input.job,
-      daemon: true,
-      pid: child.pid,
-      tracePath: paths.trace,
-      runtimePath: paths.runtime,
-      statePath: paths.state,
-      stdoutPath: paths.stdout,
-      stderrPath: paths.stderr,
-      stopCommand: buildStopCommand(input.job, child.pid),
-      inspectCommand: `vs connector inspect --job ${input.job}`
-    };
-  } finally {
-    closeSync(stdoutFd);
-    closeSync(stderrFd);
+  if (!child.pid) {
+    throw new Error(`Failed to start connector daemon for job ${input.job}.`);
   }
+
+  const now = new Date().toISOString();
+  await saveConnectorRuntime(input.job, createInitialConnectorRuntime(input.job, {
+    pid: child.pid,
+    mode: 'daemon',
+    status: 'starting',
+    startedAt: now,
+    heartbeatAt: now
+  }));
+
+  child.unref();
+
+  return {
+    ok: true,
+    job: input.job,
+    daemon: true,
+    pid: child.pid,
+    tracePath: paths.trace,
+    importLogPath: paths.importLog,
+    runtimePath: paths.runtime,
+    statePath: paths.state,
+    stopCommand: buildStopCommand(input.job, child.pid),
+    inspectCommand: `vs connector inspect --job ${input.job}`
+  };
 }
 
 function resolveCurrentCliLaunchSpec(): { command: string; args: string[] } {

@@ -6,13 +6,12 @@ import path from 'node:path';
 import { ensureDir, writeJson } from '../files';
 import {
   connectorConfigPath,
+  connectorImportLogPath,
   connectorJobDir,
   connectorLogPath,
   connectorRootDir,
   connectorRuntimePath,
   connectorStatePath,
-  connectorStderrPath,
-  connectorStdoutPath,
   connectorStopPath,
   connectorTracePath
 } from './config';
@@ -77,6 +76,20 @@ export async function appendConnectorLog(job: string, event: Record<string, unkn
   await appendFile(filePath, `${JSON.stringify({ ts: new Date().toISOString(), ...event })}\n`, 'utf8');
 }
 
+export async function appendConnectorImportedRecordLog(job: string, event: Record<string, unknown>): Promise<void> {
+  await appendConnectorImportedRecordLogs(job, [event]);
+}
+
+export async function appendConnectorImportedRecordLogs(job: string, events: Record<string, unknown>[]): Promise<void> {
+  if (events.length === 0) return;
+  const filePath = connectorImportLogPath(job);
+  await ensureDir(path.dirname(filePath));
+  const content = events
+    .map(event => JSON.stringify({ ts: new Date().toISOString(), ...event }))
+    .join('\n');
+  await appendFile(filePath, `${content}\n`, 'utf8');
+}
+
 export function getConnectorPaths(job: string): Record<string, string> {
   return {
     dir: connectorJobDir(job),
@@ -86,8 +99,7 @@ export function getConnectorPaths(job: string): Record<string, string> {
     runtime: connectorRuntimePath(job),
     trace: connectorTracePath(job),
     logs: connectorLogPath(job),
-    stdout: connectorStdoutPath(job),
-    stderr: connectorStderrPath(job)
+    importLog: connectorImportLogPath(job)
   };
 }
 
@@ -129,8 +141,6 @@ export function createInitialConnectorRuntime(
     statePath: paths.state,
     stopPath: paths.stop,
     runtimePath: paths.runtime,
-    stdoutPath: paths.stdout,
-    stderrPath: paths.stderr,
     ...overrides
   };
 }

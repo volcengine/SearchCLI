@@ -82,9 +82,11 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dataset update` | console | `POST /api/v1/UpdateDataset` | [UpdateDataset](./api-references/modules/dataset-management/UpdateDataset.md) |
 | `dataset delete` | console | `POST /api/v1/DeleteDataset` | [DeleteDataset](./api-references/modules/dataset-management/DeleteDataset.md) |
 | `dataset schema check` | console | `POST /api/v1/CheckDatasetSchema` | [CheckDatasetSchema](./api-references/modules/dataset-management/CheckDatasetSchema.md) |
-| `dataset ingest` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
+| `dataset ingest` | mixed | `file mode: GetPresignedImportUrlV2 -> PUT upload -> AddInferDatasetSchemaTaskV2 -> GetInferDatasetSchemaResultV2 -> CreateDatasetV2; legacy mode: POST /api/v1/dataset/{datasetId}/write` | none; workflow behavior derived from CLI |
 | `data write` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
 | `data import` | runtime shortcut | `POST /api/v1/dataset/{datasetId}/write` | none; wraps `data write` |
+| `connector export` | local | none | local-only source export to JSONL bootstrap artifacts |
+| `connector run` | mixed | local source polling -> `POST /api/v1/dataset/{datasetId}/write` | none; connector batches are written through the runtime data plane |
 | `dict create` | console | `POST /api/v1/CreateDict` | [CreateDict](./api-references/modules/dictionary-management/CreateDict.md) |
 | `dict update` | console | `POST /api/v1/UpdateDict` | [UpdateDict](./api-references/modules/dictionary-management/UpdateDict.md) |
 | `dict get` | console | `POST /api/v1/GetDict` | [GetDict](./api-references/modules/dictionary-management/GetDict.md) |
@@ -353,21 +355,60 @@ SearchCLI sends `--data` or `{}`. The flags `--type`, `--name`, `--application-i
 
 ### `dataset ingest`, `data write`, `data import`
 
-These commands are runtime data-plane writes, not console OpenAPI.
+`dataset ingest` is overloaded and has two distinct backends:
 
-- Runtime path: `POST /api/v1/dataset/{datasetId}/write`
+1. `--file --type` runs the V2 control-plane workflow:
+   - `POST /open/GetPresignedImportUrlV2`
+   - HTTP `PUT` to the returned presigned URL
+   - `POST /open/AddInferDatasetSchemaTaskV2`
+   - repeated `POST /open/GetInferDatasetSchemaResultV2`
+   - `POST /open/CreateDatasetV2`
+2. `--dataset-id --fields` is a runtime data-plane write, equivalent to `data import`.
+
+Runtime write path:
+
+- `POST /api/v1/dataset/{datasetId}/write`
 - `data import` is only a simpler wrapper around the same runtime write.
+
+#### `dataset ingest` file mode (`--file --type`)
+
+| CLI flag | Workflow stage / request field | Required | Format / notes |
+| --- | --- | --- | --- |
+| `--file` | local upload source -> `FileName` -> PUT body | yes | Local JSON / JSONL / CSV file path. |
+| `--type` | `AddInferDatasetSchemaTaskV2.Type` and `CreateDatasetV2.Type` | yes | Dataset type string. |
+| `--dataset-name` | `AddInferDatasetSchemaTaskV2.Name`, `CreateDatasetV2.Name` | no | Reused across infer + create. |
+| `--industry` | `AddInferDatasetSchemaTaskV2.Industry`, `CreateDatasetV2.Industry` | no | String enum / alias. |
+| `--language` | `AddInferDatasetSchemaTaskV2.Language`, `CreateDatasetV2.Language` | no | `zh`, `en`, `ja`. |
+| `--schema-wait-timeout-ms` | local polling control | no | Not uploaded; timeout for infer-result polling. |
+| `--schema-poll-interval-ms` | local polling control | no | Not uploaded; poll interval. |
+| `--dry-run` | `CreateDatasetV2.DryRun` | no | Validate without persisting. |
+| `--project-name` | `ProjectName` where supported | no | Uploaded on V2 control-plane calls. |
+
+#### `dataset ingest` runtime mode (`--dataset-id --fields`)
+
+| CLI flag | Runtime payload field | Required | Format / range |
+| --- | --- | --- | --- |
+| `--dataset-id` | path param | yes | Dataset ID. |
+| `--fields` | `fields` | yes | Inline JSON array, `@file`, or JSON file path. |
+
+#### `data write`, `data import`
 
 | Command | CLI flag | Runtime payload field | Required | Format / range |
 | --- | --- | --- | --- | --- |
-| `dataset ingest` | `--dataset-id` | path param | yes | Dataset ID. |
-| `dataset ingest` | `--fields` | `fields` | yes | Inline JSON array, `@file`, or JSON file path. |
 | `data write` | `--dataset-id` | path param | yes | Dataset ID. |
 | `data write` | `--fields` | `fields` | yes if `--data` absent | Inline JSON array, `@file`, or JSON file path. |
 | `data write` | `--data` | whole runtime payload | yes if `--fields` absent | Full JSON object; if provided it overrides synthesized `{ fields: ... }`. |
 | `data import` | `--dataset-id` | path param | yes | Dataset ID. |
 | `data import` | `--fields` | `fields` | yes if `--data` absent | Same format as `data write`. |
 | `data import` | `--data` | whole runtime payload | yes if `--fields` absent | Same override rule as `data write`. |
+
+### `connector export`, `connector init`, `connector run`, `connector status`, `connector stop`, `connector inspect`
+
+These commands are primarily local connector lifecycle helpers, not console OpenAPI.
+
+- `connector export` reads a supported source locally and writes `/tmp/viking/connector/<job>/bootstrap/items.jsonl` plus local metadata files. It does **not** call a backend API.
+- `connector init`, `connector status`, `connector stop`, and `connector inspect` only read/write local config or runtime state under `/tmp/viking/connector/<job>/`.
+- `connector run` is mixed: it reads the configured source locally, then batches records into the runtime data-plane write path `POST /api/v1/dataset/{datasetId}/write`.
 
 ### `search scene create`, `search scene list`, `search scene get`, `search scene delete`
 

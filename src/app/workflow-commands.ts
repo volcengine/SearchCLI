@@ -64,6 +64,20 @@ interface WorkflowStepResult {
   response?: unknown;
 }
 
+interface DatasetIngestV2ExecutionResult {
+  ok: true;
+  mode: 'v2';
+  file: string;
+  fileKey: string;
+  taskId: string;
+  datasetId?: string;
+  dryRun: boolean;
+  schema: unknown;
+  fieldDescMap: unknown;
+  dataFieldConfig: unknown;
+  steps: WorkflowStepResult[];
+}
+
 import { isUserEventDatasetType } from '../core/types';
 import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
 
@@ -282,11 +296,32 @@ export async function runDatasetIngestWorkflowCommand(options: DatasetIngestWork
     return;
   }
   throw new Error(
-    'dataset ingest requires either V2 chain inputs (--file --type) or legacy data-write inputs (--dataset-id --fields).'
+    'dataset ingest requires one of: V2 chain inputs (--file --type) or legacy data-write inputs (--dataset-id --fields). Use connector export to turn a data source into JSONL first.'
   );
 }
 
 async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions): Promise<void> {
+  const result = await executeDatasetIngestV2Command(options);
+  await printWorkflowResult(
+    'dataset ingest (V2)',
+    [
+      ['file', result.file],
+      ['file_key', result.fileKey],
+      ['task_id', result.taskId],
+      ['dataset_id', result.datasetId ?? '(dry-run)'],
+      ['dry_run', result.dryRun ? 'true' : 'false']
+    ],
+    result,
+    {
+      ok: true,
+      mode: 'v2',
+      datasetId: result.datasetId,
+      dryRun: result.dryRun
+    }
+  );
+}
+
+async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptions): Promise<DatasetIngestV2ExecutionResult> {
   if (!options.file) throw new Error('--file is required for V2 dataset ingest.');
   if (!options.type) throw new Error('--type is required for V2 dataset ingest.');
   const normalizedType = parseDatasetTypeV2Value(options.type, INFER_SCHEMA_DATASET_TYPES);
@@ -371,41 +406,28 @@ async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions):
     await client.post('/open/CreateDatasetV2', datasetCreatePayload)
   );
   const datasetId = stringField(datasetCreateResponse, ['DatasetID', 'DatasetId']);
+  if (!options.dryRun && !datasetId) {
+    throw new Error('CreateDatasetV2 did not return DatasetID.');
+  }
   steps.push({
     step: 'create_dataset',
     ok: true,
     detail: options.dryRun ? 'dry_run=true' : `dataset_id=${datasetId ?? '(unknown)'}`
   });
 
-  await printWorkflowResult(
-    'dataset ingest (V2)',
-    [
-      ['file', options.file],
-      ['file_key', fileKey],
-      ['task_id', taskId],
-      ['dataset_id', datasetId ?? '(dry-run)'],
-      ['dry_run', options.dryRun ? 'true' : 'false']
-    ],
-    {
-      ok: true,
-      mode: 'v2',
-      file: options.file,
-      fileKey,
-      taskId,
-      datasetId,
-      dryRun: Boolean(options.dryRun),
-      schema: inferResult.Schema,
-      fieldDescMap: inferResult.FieldDescMap,
-      dataFieldConfig: inferResult.DataFieldConfig ?? inferResult.FieldConfig,
-      steps
-    },
-    {
-      ok: true,
-      mode: 'v2',
-      datasetId,
-      dryRun: Boolean(options.dryRun)
-    }
-  );
+  return {
+    ok: true,
+    mode: 'v2',
+    file: options.file,
+    fileKey,
+    taskId,
+    datasetId,
+    dryRun: Boolean(options.dryRun),
+    schema: inferResult.Schema,
+    fieldDescMap: inferResult.FieldDescMap,
+    dataFieldConfig: inferResult.DataFieldConfig ?? inferResult.FieldConfig,
+    steps
+  };
 }
 
 function unwrapResult(value: unknown): Record<string, unknown> {

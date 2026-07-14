@@ -7,6 +7,12 @@ export type ConnectorSourceType = 'mysql' | 'mongo' | 'redis-stream';
 export type ConnectorCursorType = 'timestamp' | 'number' | 'string';
 export type ConnectorOperation = 'upsert' | 'delete';
 
+export interface ConnectorEnvRequirement {
+  key: string;
+  required: boolean;
+  description: string;
+}
+
 export interface ConnectorBatchConfig {
   maxRows: number;
   intervalMs: number;
@@ -108,8 +114,6 @@ export interface ConnectorRuntime {
   statePath: string;
   stopPath: string;
   runtimePath: string;
-  stdoutPath?: string;
-  stderrPath?: string;
   lastError?: string;
   stopReason?: string;
 }
@@ -133,6 +137,25 @@ export interface ConnectorRunInput extends ServiceConfigInput {
   once?: boolean;
   daemon?: boolean;
   worker?: boolean;
+}
+
+export interface ConnectorExportInput {
+  job?: string;
+  datasetName?: string;
+  source: ConnectorSourceType;
+  envPrefix?: string;
+  idField?: string;
+  cursorField?: string;
+  cursorType?: ConnectorCursorType;
+  initialCursor?: string;
+  table?: string;
+  where?: string;
+  database?: string;
+  collection?: string;
+  stream?: string;
+  fields?: string;
+  batchSize?: number;
+  intervalMs?: number;
 }
 
 export interface ConnectorInitInput {

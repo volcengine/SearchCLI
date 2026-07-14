@@ -10,7 +10,7 @@ import {
 } from './helpers';
 
 type MySqlConnection = {
-  execute(sql: string, values: unknown[]): Promise<[Record<string, unknown>[]]>;
+  query(sql: string, values: unknown[]): Promise<[Record<string, unknown>[]]>;
   end(): Promise<void>;
 };
 
@@ -28,6 +28,7 @@ export class MySqlConnectorSource implements ConnectorSource {
       user: readEnv(this.config.envPrefix, 'USER'),
       password: readEnv(this.config.envPrefix, 'PASSWORD'),
       database: readEnv(this.config.envPrefix, 'DATABASE'),
+      charset: 'utf8mb4',
       timezone: 'Z',
       supportBigNumbers: true,
       bigNumberStrings: true,
@@ -61,7 +62,11 @@ export class MySqlConnectorSource implements ConnectorSource {
       'LIMIT ?'
     ].filter(Boolean).join(' ');
 
-    const [rows] = await this.connection.execute(sql, params);
+    // Use text-protocol query execution here instead of server-side prepared
+    // statements. Some MySQL deployments reject the prepared-statement form
+    // used by `execute(...)` for this connector query shape with
+    // `Incorrect arguments to mysqld_stmt_execute`.
+    const [rows] = await this.connection.query(sql, params);
     for (const row of rows) {
       const id = row[this.config.idField];
       if (id === undefined || id === null) {
