@@ -18,11 +18,11 @@ export interface InferSchemaArtifactsWithConsoleOptions extends ServiceConfigInp
 export interface ConsoleSchemaArtifactsResult {
   schema: unknown;
   dataFieldConfig: unknown;
+  fieldDescMap?: Record<string, string>;
   taskId: string;
   upload: {
     fileUrl: string;
     fileKey: string;
-    tosBucket?: string;
     httpMethod?: string;
     expiresInSeconds?: number;
   };
@@ -46,13 +46,11 @@ export async function inferSchemaArtifactsWithConsole(
   });
   const fileUrl = uploadResult.fileUrl;
   const fileKey = uploadResult.fileKey;
-  const tosBucket = uploadResult.tosBucket;
 
   const addTaskResponse = unwrapResultEnvelope(
-    await openapi.post('/api/v1/AddInferDatasetSchemaTask', compactObject({
-      TosBucket: tosBucket,
+    await openapi.post('/open/AddInferDatasetSchemaTaskV2', compactObject({
       TosKey: fileKey,
-      Type: options.datasetType === 'video' ? 3 : 1,
+      Type: options.datasetType === 'video' ? 'video' : 'item',
       Language: options.language ?? DEFAULT_LANGUAGE,
       ProjectName: options.projectName ?? config.projectName
     }))
@@ -64,7 +62,7 @@ export async function inferSchemaArtifactsWithConsole(
 
   while (Date.now() <= deadline) {
     const resultResponse = unwrapResultEnvelope(
-      await openapi.post('/api/v1/GetInferDatasetSchemaResult', {
+      await openapi.post('/open/GetInferDatasetSchemaResultV2', {
         TaskID: taskId,
         ProjectName: options.projectName ?? config.projectName
       })
@@ -74,11 +72,11 @@ export async function inferSchemaArtifactsWithConsole(
       return {
         schema: requiredField(resultResponse, ['Schema']),
         dataFieldConfig: resultResponse.DataFieldConfig ?? resultResponse.FieldConfig ?? {},
+        fieldDescMap: extractFieldDescMap(resultResponse.FieldDescMap),
         taskId,
         upload: {
           fileUrl,
           fileKey,
-          tosBucket,
           httpMethod: uploadResult.httpMethod,
           expiresInSeconds: uploadResult.expiresInSeconds
         }
@@ -175,6 +173,17 @@ function readTaskStatus(value: unknown): 'processing' | 'success' | 'failed' {
     if (normalized === 'failed' || normalized === 'taskstatustype_failed') return 'failed';
   }
   return 'processing';
+}
+
+function extractFieldDescMap(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'string') {
+      result[key] = entry;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function ensurePositiveInt(value: number, flagName: string): number {

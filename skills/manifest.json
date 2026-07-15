@@ -1,12 +1,6 @@
 {
   "skills": [
     {
-      "name": "vs-app-dataset-bind",
-      "files": [
-        "vs-app-dataset-bind/SKILL.md"
-      ]
-    },
-    {
       "name": "vs-chat",
       "files": [
         "vs-chat/SKILL.md"
@@ -16,14 +10,7 @@
       "name": "vs-item-onboarding",
       "files": [
         "vs-item-onboarding/SKILL.md",
-        "vs-item-onboarding/references/agent-confirmation-ux.md",
-        "vs-item-onboarding/references/agent-prompt-template.md",
-        "vs-item-onboarding/references/recovery.md",
-        "vs-item-onboarding/references/review-checklist.md",
-        "vs-item-onboarding/references/video-field-constraints.md",
-        "vs-item-onboarding/references/workflow.md",
-        "vs-item-onboarding/references/walkthrough-card-full.md",
-        "vs-item-onboarding/references/walkthrough-csv.md"
+        "vs-item-onboarding/references/worked-example.md"
       ]
     },
     {
@@ -58,6 +45,18 @@
       "name": "vs-search-tuning",
       "files": [
         "vs-search-tuning/SKILL.md"
+      ]
+    },
+    {
+      "name": "vs-search-tuning-partial-case",
+      "files": [
+        "vs-search-tuning-partial-case/SKILL.md"
+      ]
+    },
+    {
+      "name": "vs-search-tuning-specify-policy-direction",
+      "files": [
+        "vs-search-tuning-specify-policy-direction/SKILL.md"
       ]
     },
     {

@@ -1,11 +1,16 @@
 ---
 name: vs-search-tuning-partial-case
 description: "Use when the user provides 1-50 concrete bad-case search queries for one Viking Search app and wants local deterministic fixes. This skill only verifies request-level fine-operation interventions against a read-only baseline scene and delivers a console-ready configuration sheet, validated payloads, and a replay script. It must not mutate scenes, apps, dictionaries, datasets, recall core parameters, or online defaults."
+category: search
+applies_to: codex, agents, external-agent
+requires_cli: ">=0.2.0"
+keywords: search case tuning, partial case tuning, bad-case queries, fine-grained operations, request-level validation
+commands: auth status, llm status, app status, app get, app online-config get, app dataset-config get, search scene list, search scene get, search run, search tune run, search tune plan, search tune validate
 ---
 
 # Viking Search Partial Case Tuning
 
-## 1. Scope
+## When to Use
 
 Use this skill when the user provides a small number of concrete bad-case queries, usually 1-50, and asks to "optimize the search results for these queries."
 
@@ -15,7 +20,15 @@ This skill only performs local, highly deterministic, fine-grained operational f
 - It does not change online configuration; it only validates candidates through request-level payloads.
 - The final deliverables are a fine-grained operations configuration sheet that can be copied into the console, validated payloads, and a replay script.
 
-## 2. Hard Boundaries
+## Preconditions
+
+- A Viking Search application id is available.
+- A dataset id and baseline search scene id are either provided by the user or can be resolved from read-only CLI checks.
+- The user has provided 1-50 concrete bad-case queries for the same application.
+- `vs auth status --json` succeeds before any runtime search probe.
+- The work can be completed with request-level candidate payloads and offline deliverables only.
+
+## Constraints
 
 1. Do not change core recall parameters: `user_defined_recall_mode`, `dense_weight`, `text_weight`, `query_keyword_match_percent`, or `max_retrieved_num`.
 2. The baseline scene is read-only; do not create, modify, derive, publish, or switch scenes.
@@ -31,6 +44,16 @@ This skill only performs local, highly deterministic, fine-grained operational f
 - File names and report references should use "query + strategy name"; do not use internal aliases such as `C1`, `case-3`, or `cand-1`.
 - File-name slug: keep the first few words of the query, convert spaces to hyphens, and remove symbols that are unsuitable for file names.
 - When referring to a plan in the report, use readable names such as `filter item scope(category=Light Sports,product_type=SHOE)`.
+
+## Commands
+
+- `auth status`: verify local Viking authentication before runtime probes.
+- `llm status`: check whether optional LLM-assisted analysis is configured.
+- `app status` / `app get`: inspect app readiness and metadata without modifying it.
+- `app online-config get` / `app dataset-config get`: read current online and dataset-facing configuration.
+- `search scene list` / `search scene get`: find and lock a read-only baseline scene.
+- `search run`: run baseline and request-level candidate probes using full `--data` payloads.
+- `search tune run` / `search tune plan` / `search tune validate`: inspect existing tuning command capability and validate query files when useful.
 
 ## 4. Known CLI Behaviors and Pitfalls
 
@@ -161,7 +184,7 @@ Candidates must first pass capability confirmation. Fields must come from the da
 
 If an action-library item has no CLI request-level entry point, write "Not evaluated: the CLI does not expose an equivalent request entry point" in the report; do not generate fake payloads.
 
-## 6. Standard Flow
+## Workflow
 
 ### Step 1. Preflight Checks
 

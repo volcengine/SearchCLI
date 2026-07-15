@@ -6,6 +6,8 @@ import { runItemProvisionCommand } from '../../app/item-commands';
 import { workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class ItemProvision extends Command {
+  static override hidden = true;
+
   static override description =
     'Provision item onboarding resources up to dataset binding and activation start, without waiting for readiness, indexing, or search/chat verification. Use --skip-app to preserve the dataset-only boundary and stop after dataset provisioning.';
 

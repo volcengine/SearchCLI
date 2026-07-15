@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { formatMissingVikingAuthMessage } from './auth-errors';
 import { resolveCliDefaults } from './user-config';
+import { setDebugMode } from './debug-logger';
 
 export interface ServiceConfig {
   controlPlaneBaseUrl: string;
@@ -18,6 +19,7 @@ export interface ServiceConfig {
   projectName: string;
   region: string;
   timeoutMs: number;
+  debug: boolean;
 }
 
 export interface ServiceConfigInput {
@@ -33,6 +35,7 @@ export interface ServiceConfigInput {
   projectName?: string;
   region?: string;
   timeoutMs?: number;
+  debug?: boolean;
 }
 
 const serviceConfigSchema = z.object({
@@ -46,7 +49,8 @@ const serviceConfigSchema = z.object({
   secretKey: z.string().optional(),
   projectName: z.string().min(1),
   region: z.string().min(1),
-  timeoutMs: z.number().int().positive()
+  timeoutMs: z.number().int().positive(),
+  debug: z.boolean()
 });
 
 export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
@@ -74,11 +78,16 @@ export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
     secretKey: defaults.secretKey,
     projectName: defaults.projectName,
     region: defaults.region,
-    timeoutMs: defaults.timeoutMs
+    timeoutMs: defaults.timeoutMs,
+    debug: input.debug ?? false
   });
 
   if (!resolved.apiKey && (!resolved.accessKeyId || !resolved.secretKey)) {
     throw new Error(formatMissingVikingAuthMessage());
+  }
+
+  if (resolved.debug) {
+    setDebugMode(true);
   }
 
   return {

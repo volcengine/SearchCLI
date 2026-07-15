@@ -1,0 +1,3 @@
+{"video_id":"acc-video-1","title":"Acceptance Demo Video","description":"acceptance fixture video 1","duration":42,"tags":["demo"],"cover_url":"http://example.test/cover/1.jpg"}
+{"video_id":"acc-video-2","title":"Acceptance Tutorial","description":"acceptance fixture video 2","duration":68,"tags":["tutorial"],"cover_url":"http://example.test/cover/2.jpg"}
+{"video_id":"acc-video-3","title":"Acceptance Highlight","description":"acceptance fixture video 3","duration":15,"tags":["highlight"],"cover_url":"http://example.test/cover/3.jpg"}

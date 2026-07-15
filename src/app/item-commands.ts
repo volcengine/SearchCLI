@@ -23,6 +23,7 @@ import { printOutput } from '../core/output-format';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
+import { parseApplicationIndustryV2Value, parseDatasetTypeV2Value } from './product-commands';
 
 export interface ItemProfileCommandOptions {
   file: string;
@@ -389,16 +390,19 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
     const datasetCreatePayload = compactObject({
       ...datasetCreateArtifact,
       Name: options.datasetName ?? asOptionalString(datasetCreateArtifact.Name) ?? plan.names.dataset,
-      Type: plan.defaults.datasetType === 'video' ? 3 : 1,
+      Type: parseDatasetTypeV2Value(
+        datasetCreateArtifact.Type
+          ?? (plan.defaults.datasetType === 'video' ? 'video' : 'item')
+      ),
       Schema: schema,
       DataFieldConfig: fieldConfig,
       ProjectName: projectName
     });
     validateFieldDescriptionsForApply(datasetCreatePayload);
-    const datasetCreateResponse = await openapi.post('/api/v1/CreateDataset', datasetCreatePayload);
+    const datasetCreateResponse = await openapi.post('/open/CreateDatasetV2', datasetCreatePayload);
     datasetId = extractStringField(datasetCreateResponse, ['DatasetID', 'DatasetId']);
     if (!datasetId) {
-      throw new Error('CreateDataset did not return DatasetID.');
+      throw new Error('CreateDatasetV2 did not return DatasetID.');
     }
     steps.push({ step: 'create_dataset', ok: true, response: datasetCreateResponse });
   } else {
@@ -452,13 +456,14 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
     const appCreatePayload = compactObject({
       ...appCreateArtifact,
       Name: options.applicationName ?? asOptionalString(appCreateArtifact.Name) ?? plan.names.application,
-      Industry: plan.defaults.datasetType === 'video' ? 3 : 1,
+      Industry: parseApplicationIndustryV2Value(appCreateArtifact.Industry)
+        ?? (plan.defaults.datasetType === 'video' ? 'video' : 'e_commerce'),
       ProjectName: projectName
     });
-    const appCreateResponse = await openapi.post('/api/v1/CreateApplication', appCreatePayload);
+    const appCreateResponse = await openapi.post('/open/CreateApplicationV2', appCreatePayload);
     applicationId = extractStringField(appCreateResponse, ['AppID', 'AppId', 'ApplicationId']);
     if (!applicationId) {
-      throw new Error('CreateApplication did not return AppID.');
+      throw new Error('CreateApplicationV2 did not return AppID.');
     }
     steps.push({ step: 'create_application', ok: true, response: appCreateResponse });
   } else {
@@ -466,12 +471,12 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
   }
 
   const bindResponse = await openapi.post(
-    '/api/v1/BindAppDataset',
+    '/open/AttachDatasetToApplicationV2',
     compactObject({
-      AppID: applicationId,
-      DatasetIDs: [datasetId],
+      ApplicationId: applicationId,
+      DatasetId: datasetId,
       DataConfig: bindingFieldConfig,
-      OnlySave: false,
+      DryRun: false,
       ProjectName: projectName
     })
   );

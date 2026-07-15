@@ -2,8 +2,17 @@ node_modules/
 dist/
 release/
 .viking/
-tmp-acceptance/
+.pkg-cache/
 
 # macOS metadata
 .DS_Store
 **/.DS_Store
+tmp*/
+tmp-acceptance/
+
+# Trae agent workspace
+.trae/
+._agent/
+
+# IDE
+.idea/

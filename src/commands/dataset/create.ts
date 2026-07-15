@@ -7,13 +7,12 @@ import { serviceFlags } from '../../command-support/service-flags';
 
 export default class DatasetCreate extends Command {
   static override description =
-    'Create a Viking dataset. For plan-driven dataset-only onboarding, prefer `--data @dataset-create.json` when the plan emitted that artifact so Schema and DataFieldConfig stay together; use `--name/--type/--schema` as the manual schema-only path.';
+    'Create a Viking dataset via V2 CreateDatasetV2. For plan-driven onboarding, prefer `--data @dataset-create.json` so Schema, DataFieldConfig, and FieldDescMap stay together; use the inline flags for the manual schema path.';
 
   static override examples = [
-    '<%= config.bin %> dataset create --name demo-items --type item --schema @schema.json',
-    '<%= config.bin %> dataset create --data @dataset-create.json',
-    '<%= config.bin %> item plan --file ./items.json --type item --goal "Build item search" --skip-app',
-    '<%= config.bin %> dataset create --data ./.viking/item-plans/<plan>/dataset-create.json'
+    '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json',
+    '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json --field-desc-map @field-desc-map.json --industry ecommerce --dry-run',
+    '<%= config.bin %> dataset create --data @dataset-create.json'
   ];
 
   static override flags = {
@@ -22,12 +21,36 @@ export default class DatasetCreate extends Command {
       description: 'Dataset name. Required unless --data already provides Name.'
     }),
     type: Flags.string({
-      description: 'Dataset type enum value. Required unless --data already provides Type.'
+      description: 'Dataset type: item|video|user_event|document|multi_modal|query. Required unless --data already provides Type.'
     }),
     description: Flags.string({ description: 'Dataset description when building the payload from flags.' }),
+    'schema-json': Flags.string({
+      description:
+        'Inline JSON, @file path, or JSON file path for Schema. Preferred over the legacy --schema alias.'
+    }),
     schema: Flags.string({
       description:
-        'Inline JSON, @file path, or JSON file path for Schema. Use this for schema-only creation; when a plan already emitted dataset-create.json, prefer --data so DataFieldConfig is also submitted.'
+        'Deprecated alias for --schema-json. Retained for back-compat; prefer --schema-json.',
+      hidden: true
+    }),
+    industry: Flags.string({
+      description: 'Industry hint forwarded to the dataset (e.g. ecommerce|video|news).'
+    }),
+    language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
+    'abnormal-image-policy': Flags.string({
+      description: 'ProcessConfig.AbnormalImageDataProcessPolicy (e.g. drop|keep).'
+    }),
+    'video-auto-delete': Flags.boolean({
+      description: 'ProcessConfig.VideoAutoDelete: when set, the backend auto-deletes source videos after processing.'
+    }),
+    'dry-run': Flags.boolean({
+      description: 'Validate the request without persisting the dataset (DryRun=true).'
+    }),
+    'field-desc-map': Flags.string({
+      description: 'Inline JSON, @file path, or JSON file path for FieldDescMap (field path -> description).'
+    }),
+    'project-name': Flags.string({
+      description: 'Viking project name when the API requires project scoping.'
     })
   };
 
@@ -46,7 +69,15 @@ export default class DatasetCreate extends Command {
       name: flags.name,
       type: flags.type,
       description: flags.description,
-      schema: flags.schema
+      schema: flags.schema,
+      schemaJson: flags['schema-json'],
+      industry: flags.industry,
+      language: flags.language,
+      abnormalImagePolicy: flags['abnormal-image-policy'],
+      videoAutoDelete: flags['video-auto-delete'],
+      dryRun: flags['dry-run'],
+      fieldDescMap: flags['field-desc-map'],
+      projectName: flags['project-name']
     });
   }
 }

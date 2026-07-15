@@ -6,6 +6,8 @@ import { runItemApplyCommand } from '../../app/item-commands';
 import { workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class ItemApply extends Command {
+  static override hidden = true;
+
   static override description =
     'Compatibility wrapper around item provision / verify. Defaults to phase=provision unless --run-trials or --phase all is passed. Use --confirm-review for a real apply after schema and bind-time field review; use --skip-app to preserve the dataset-only boundary.';
 

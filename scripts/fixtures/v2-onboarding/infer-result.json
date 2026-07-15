@@ -1,0 +1,39 @@
+{
+  "Status": "Success",
+  "Schema": [
+    { "FieldName": "item_id", "FieldType": "string", "BizAttr": "QueryPK", "IsPK": true },
+    { "FieldName": "title", "FieldType": "string", "BizAttr": "Title" },
+    { "FieldName": "description", "FieldType": "string", "BizAttr": "Description" },
+    { "FieldName": "brand", "FieldType": "string", "BizAttr": "Brand" },
+    { "FieldName": "tags", "FieldType": "array<string>" },
+    { "FieldName": "price", "FieldType": "float" },
+    { "FieldName": "image_url", "FieldType": "string", "BizAttr": "ImagePK" }
+  ],
+  "FieldDescMap": {
+    "item_id": "Primary key of the item",
+    "title": "Display title shown in search results",
+    "description": "Long text describing the item",
+    "brand": "Brand name",
+    "tags": "Free-form tags",
+    "price": "Price in USD",
+    "image_url": "Cover image for the item"
+  },
+  "DataFieldConfig": {
+    "IndexFields": ["title", "description", "brand", "tags"],
+    "FilterFields": ["brand", "tags", "price"],
+    "SuggestFields": ["title"],
+    "ChatFields": ["title", "description"],
+    "FilterFieldsMap": {
+      "brand": { "Type": "string" },
+      "tags": { "Type": "array<string>" },
+      "price": { "Type": "float" }
+    },
+    "FieldDescMap": {
+      "title": "Display title shown in search results",
+      "description": "Long text describing the item",
+      "brand": "Brand name",
+      "tags": "Free-form tags",
+      "price": "Price in USD"
+    }
+  }
+}

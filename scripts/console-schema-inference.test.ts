@@ -30,10 +30,10 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
     } as T;
   }
 
-  if (pathname === '/api/v1/AddInferDatasetSchemaTask') {
+  if (pathname === '/open/AddInferDatasetSchemaTaskV2') {
     assert.deepEqual(payload, {
       TosKey: 'dataset-import/2103180626/sample-items-abcd1234efgh5678',
-      Type: 1,
+      Type: 'item',
       Language: 'zh',
       ProjectName: 'demo-project'
     });
@@ -44,7 +44,7 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
     } as T;
   }
 
-  if (pathname === '/api/v1/GetInferDatasetSchemaResult') {
+  if (pathname === '/open/GetInferDatasetSchemaResultV2') {
     assert.deepEqual(payload, {
       TaskID: 'task-123',
       ProjectName: 'demo-project'
@@ -76,6 +76,10 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
         DataFieldConfig: {
           IndexFields: ['title'],
           FilterFields: ['item_id']
+        },
+        FieldDescMap: {
+          item_id: 'Unique identifier of the item',
+          title: 'Display title of the item'
         }
       }
     } as T;
@@ -117,7 +121,6 @@ async function main(): Promise<void> {
 
   assert.equal(result.taskId, 'task-123');
   assert.equal(result.upload.fileKey, 'dataset-import/2103180626/sample-items-abcd1234efgh5678');
-  assert.equal(result.upload.tosBucket, undefined);
   assert.deepEqual(result.schema, [
     { Name: 'item_id', Type: 1, BizAttr: 11 },
     { Name: 'title', Type: 1 }
@@ -126,12 +129,16 @@ async function main(): Promise<void> {
     IndexFields: ['title'],
     FilterFields: ['item_id']
   });
+  assert.deepEqual(result.fieldDescMap, {
+    item_id: 'Unique identifier of the item',
+    title: 'Display title of the item'
+  });
   assert.deepEqual(callOrder, [
     '/open/GetPresignedImportUrlV2',
     'UPLOAD',
-    '/api/v1/AddInferDatasetSchemaTask',
-    '/api/v1/GetInferDatasetSchemaResult',
-    '/api/v1/GetInferDatasetSchemaResult'
+    '/open/AddInferDatasetSchemaTaskV2',
+    '/open/GetInferDatasetSchemaResultV2',
+    '/open/GetInferDatasetSchemaResultV2'
   ]);
 }
 

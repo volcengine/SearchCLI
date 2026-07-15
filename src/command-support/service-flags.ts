@@ -65,6 +65,9 @@ const connectionFlags = {
   }),
   'timeout-ms': Flags.integer({
     default: 15000
+  }),
+  debug: Flags.boolean({
+    description: 'Enable debug logging. Prints HTTP requests, responses, and internal state to stderr.'
   })
 } as const;
 
@@ -90,6 +93,7 @@ export interface ServiceConnectionFlags {
   sk?: string;
   region?: string;
   'timeout-ms'?: number;
+  debug?: boolean;
 }
 
 export interface ServiceConnectionOptions {
@@ -102,6 +106,7 @@ export interface ServiceConnectionOptions {
   secretKey?: string;
   region?: string;
   timeoutMs?: number;
+  debug?: boolean;
 }
 
 export function extractServiceConnectionOptions(
@@ -116,6 +121,7 @@ export function extractServiceConnectionOptions(
     accessKeyId: flags.ak,
     secretKey: flags.sk,
     region: flags.region,
-    timeoutMs: flags['timeout-ms']
+    timeoutMs: flags['timeout-ms'],
+    debug: flags.debug
   };
 }
