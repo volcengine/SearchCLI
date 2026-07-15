@@ -504,7 +504,7 @@ async function testSearchTuneRunHelp() {
   assert.match(stdout, /Default: 18/);
   assert.match(stdout, /--llm-concurrency/);
   assert.match(stdout, /Default: 100/);
-  assert.doesNotMatch(stdout, /--scene-id/);
+  assert.match(stdout, /--scene-id/);
   assert.match(stdout, /--resume-run-id/);
   assert.match(stdout, /--label-source/);
   assert.match(stdout, /--llm-retries/);
@@ -1149,24 +1149,37 @@ async function testAuthImportEnv() {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-auth-'));
   const homeDir = path.join(workspace, 'home');
   fs.mkdirSync(homeDir, { recursive: true });
-
-  await runCli(['auth', 'import-env', '--profile', 'acceptance', '--json'], {
-    env: {
-      HOME: homeDir,
-      VIKING_AK: 'acceptance-ak',
-      VIKING_SK: 'acceptance-sk'
+  const server = await startV2MockServer({
+    responses: {
+      GetBillingOrder: () => ({ ResponseMetadata: { RequestId: 'req-auth-status' }, Result: { Status: 'ok' } })
     }
   });
 
-  const { stdout } = await runCli(['auth', 'status', '--profile', 'acceptance', '--json'], {
-    env: {
-      HOME: homeDir
-    }
-  });
-  const payload = JSON.parse(stdout);
-  assert.equal(payload.activeProfile, 'acceptance');
-  assert.equal(payload.loggedIn, true);
-  return `${command.prefix} auth import-env --profile acceptance --json`;
+  try {
+    await runCli(['auth', 'import-env', '--profile', 'acceptance', '--json'], {
+      env: {
+        HOME: homeDir,
+        VIKING_AK: 'acceptance-ak',
+        VIKING_SK: 'acceptance-sk',
+        VIKING_CONTROL_PLANE_BASE_URL: server.baseUrl,
+        VIKING_DATA_PLANE_BASE_URL: server.baseUrl
+      }
+    });
+
+    const { stdout } = await runCli(['auth', 'status', '--profile', 'acceptance', '--json'], {
+      env: {
+        HOME: homeDir,
+        VIKING_CONTROL_PLANE_BASE_URL: server.baseUrl,
+        VIKING_DATA_PLANE_BASE_URL: server.baseUrl
+      }
+    });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.activeProfile, 'acceptance');
+    assert.equal(payload.loggedIn, true);
+    return `${command.prefix} auth import-env --profile acceptance --json`;
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 }
 
 async function testLlmOpenAiCompatibleCredentialFlow() {

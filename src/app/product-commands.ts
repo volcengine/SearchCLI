@@ -1794,7 +1794,7 @@ function printDomainHelp(domain: string): void {
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     dataset: `${renderUsageBlock(
       [
         'vs dataset create --name <name> --type <item|video|user_event|document> [--description <text>] [--schema @schema.json] [--industry <type>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--dry-run] [service flags]',
@@ -1812,7 +1812,7 @@ COMMON FLAGS
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     data: `${renderUsageBlock(
       [
         'vs data write --dataset-id <id> --fields @fields.json [service flags]',
@@ -1822,7 +1822,7 @@ COMMON FLAGS
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
     dict: `${renderUsageBlock(
       [
         'vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]',
@@ -1837,7 +1837,7 @@ COMMON FLAGS
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     item: `DEPRECATED
   The legacy V1 \`vs item\` onboarding (profile / plan / review / provision / verify / apply)
   has been replaced by the V2 \`vs dataset\` + \`vs app\` flow.
@@ -1874,7 +1874,7 @@ MORE HELP
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output
+  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output
 
 SEARCH SCENE ENUMS
   RetrieveConfigs[].Mode
@@ -1905,7 +1905,7 @@ SEARCH SCENE ENUMS
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     chat: `${renderUsageBlock(
       [
         'vs chat run --application-id <id> [--session-id <id>] [--message <text>|--opening-remarks true] [--pretty] [service flags]'
@@ -1913,7 +1913,7 @@ COMMON FLAGS
     )}
 
 COMMON FLAGS
-  --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+  --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
     purchase: `${renderUsageBlock(
       [
         'vs purchase link [--environment-id <environment-id>]',
@@ -1928,7 +1928,7 @@ DESCRIPTION
 
 COMMON FLAGS
   link: --environment-id
-  order: --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  order: --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
   };
 
   console.log(helpByDomain[domain] ?? `Unknown domain: ${domain}`);
@@ -2640,9 +2640,9 @@ EXAMPLES
 USAGE
   vs search tune llm-check [--live] [service flags]
   vs search tune validate --queries <file> [--query-count <n>] [service flags]
-  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--query-count <n>] [--retrievable-field-only] [service flags]
-  vs search tune plan --application-id <id> [--dataset-id <id>] [--queries <file>] [service flags]
-  vs search tune run --application-id <id> [--dataset-id <id>] [--queries <file>] [service flags]
+  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--query-count <n>] [--retrievable-field-only] [service flags]
+  vs search tune plan --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [service flags]
+  vs search tune run --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [service flags]
   vs search tune report --run-id <id> [--output-dir <dir>] [service flags]
   vs search tune compare (--run-ids <a,b> | --application-id <id> --dataset-id <id> --scene-ids <a,b> --queries <file>) [service flags]
   vs search tune apply --application-id <id> --run-id <id> [--dry-run | --confirm-create-scene] [service flags]
@@ -2682,7 +2682,7 @@ EXAMPLES
     'tune:plan': `Plan first-version automated search evaluation and similarity tuning.
 
 USAGE
-  vs search tune plan --application-id <id> [--dataset-id <id>] [--queries <file>] [--optimizer <matrix|spa>] [--profile similarity-only] [service flags]
+  vs search tune plan --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [--optimizer <matrix|spa>] [--profile similarity-only] [service flags]
 
 DESCRIPTION
   Prints the fixed scope, query source, candidate strategy count, cost estimate, and strategy coverage.
@@ -2691,6 +2691,7 @@ DESCRIPTION
 KEY FLAGS
   --application-id  Target application ID.
   --dataset-id      Dataset ID.
+  --scene-id        Search scene ID used as the runtime search entry.
   --queries         JSON, JSONL, or CSV query set. If omitted, the plan assumes CLI-generated queries.
   --query-count     Maximum query count. Defaults to all queries from --queries, or 100 generated queries when --queries is omitted.
   --top-k           Results judged per query and strategy. Default: 20.
@@ -2703,7 +2704,7 @@ EXAMPLES
     'tune:query-generate': `Generate a reusable synthetic query set for search tuning.
 
 USAGE
-  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--query-count <n>] [--min-query-count <n>] [--sample-size <n>] [--query-batch-size <n>] [--llm-concurrency <n>] [--retrievable-field-only] [--output-dir <dir>] [service flags]
+  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--query-count <n>] [--min-query-count <n>] [--sample-size <n>] [--query-batch-size <n>] [--llm-concurrency <n>] [--retrievable-field-only] [--output-dir <dir>] [service flags]
 
 DESCRIPTION
   Uses paged dataset samples and the configured CLI LLM to generate a JSONL query set in multiple
@@ -2713,6 +2714,7 @@ DESCRIPTION
 KEY FLAGS
   --application-id  Target application ID.
   --dataset-id      Dataset ID. If omitted, the CLI tries to infer a unique search dataset.
+  --scene-id        Search scene ID used when inspecting application context.
   --query-count     Maximum query count. Default: 100.
   --min-query-count Minimum acceptable query count. Defaults to query-count for <=10, otherwise max(10, ceil(query-count * 0.8)).
   --sample-size     Dataset sample items to load across pages. Default: 200.
@@ -2727,7 +2729,7 @@ EXAMPLES
     'tune:run': `Run first-version automated search evaluation and similarity tuning.
 
 USAGE
-  vs search tune run --application-id <id> [--dataset-id <id>] [--queries <file>] [--resume-run-id <id>] [--optimizer <matrix|spa>] [--label-source <llm|source-item|auto>] [--judge-input <text|text-image>] [--profile similarity-only] [--search-concurrency <n>] [--llm-concurrency <n>] [--timeout-ms <ms>] [service flags]
+  vs search tune run --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [--resume-run-id <id>] [--optimizer <matrix|spa>] [--label-source <llm|source-item|auto>] [--judge-input <text|text-image>] [--profile similarity-only] [--search-concurrency <n>] [--llm-concurrency <n>] [--timeout-ms <ms>] [service flags]
 
 DESCRIPTION
   Runs text-query similarity tuning with CLI-managed LLM query generation and pointwise relevance judging.
@@ -2739,6 +2741,7 @@ DESCRIPTION
 KEY FLAGS
   --application-id  Target application ID.
   --dataset-id      Dataset ID. If omitted, the CLI tries to infer a unique search dataset.
+  --scene-id        Search scene ID used as the runtime search entry.
   --queries         JSON, JSONL, or CSV query set. If omitted, the CLI generates queries from sample items.
   --query-count     Maximum query count. Defaults to all queries from --queries, or 100 generated queries when --queries is omitted.
   --top-k           Results judged per query and strategy. Default: 20.
@@ -3458,6 +3461,7 @@ async function runSearchCli(argv: string[]): Promise<void> {
             projectName: optionalString(values['project-name']),
             applicationId: requiredString(values['application-id'], '--application-id'),
             datasetId: optionalString(values['dataset-id']),
+            sceneId: optionalString(values['scene-id']),
             profile: optionalString(values.profile),
             queries: optionalString(values.queries),
             queryCount: parseOptionalInt(optionalString(values['query-count'])),
@@ -3472,6 +3476,7 @@ async function runSearchCli(argv: string[]): Promise<void> {
             projectName: optionalString(values['project-name']),
             applicationId: requiredString(values['application-id'], '--application-id'),
             datasetId: optionalString(values['dataset-id']),
+            sceneId: optionalString(values['scene-id']),
             queryCount: parseOptionalInt(optionalString(values['query-count'])),
             minQueryCount: parseOptionalInt(optionalString(values['min-query-count'])),
             sampleSize: parseOptionalInt(optionalString(values['sample-size'])),
@@ -3487,6 +3492,7 @@ async function runSearchCli(argv: string[]): Promise<void> {
             projectName: optionalString(values['project-name']),
             applicationId: requiredString(values['application-id'], '--application-id'),
             datasetId: optionalString(values['dataset-id']),
+            sceneId: optionalString(values['scene-id']),
             profile: optionalString(values.profile),
             queries: optionalString(values.queries),
             queryCount: parseOptionalInt(optionalString(values['query-count'])),
@@ -3764,6 +3770,7 @@ function parseStandaloneOptions(argv: string[]) {
       'base-url': { type: 'string' },
       'control-plane-base-url': { type: 'string' },
       'data-plane-base-url': { type: 'string' },
+      'api-key': { type: 'string' },
       ak: { type: 'string' },
       sk: { type: 'string' },
       region: { type: 'string' },
@@ -3912,6 +3919,7 @@ function toStandaloneServiceOptions(values: StandaloneValues): ServiceCommandOpt
     baseUrl: optionalString(values['base-url']),
     controlPlaneBaseUrl: optionalString(values['control-plane-base-url']),
     dataPlaneBaseUrl: optionalString(values['data-plane-base-url']),
+    apiKey: optionalString(values['api-key']),
     accessKeyId: optionalString(values.ak),
     secretKey: optionalString(values.sk),
     projectName: optionalString(values['project-name']),
@@ -3960,6 +3968,7 @@ function toServiceConfigInput(options: ServiceCommandOptions): ServiceConfigInpu
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: (options as ProjectScopedOptions).projectName,
@@ -4314,7 +4323,7 @@ export interface DatasetInferResultOptions extends ServiceCommandOptions {
 
 export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
   const fallbackPayload = compactObject({
-    TaskId: options.taskId,
+    TaskID: options.taskId,
     ProjectName: options.projectName
   });
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;

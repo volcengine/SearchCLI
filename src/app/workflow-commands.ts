@@ -342,7 +342,7 @@ async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions):
   let inferResult: Record<string, unknown> | undefined;
   while (Date.now() <= deadline) {
     const polled = unwrapResult(
-      await client.post('/open/GetInferDatasetSchemaResultV2', { TaskId: taskId, ProjectName: projectName })
+      await client.post('/open/GetInferDatasetSchemaResultV2', { TaskID: taskId, ProjectName: projectName })
     );
     const status = readStatus(polled.Status);
     if (status === 'success') {
@@ -510,6 +510,7 @@ function toServiceConfigInput(options: WorkflowServiceOptions): ServiceConfigInp
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,

@@ -102,6 +102,7 @@ export interface ItemPlanOptions {
   baseUrl?: string;
   controlPlaneBaseUrl?: string;
   dataPlaneBaseUrl?: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   file: string;
@@ -716,6 +717,7 @@ async function maybeInferSchemaArtifactsWithConsole(
       baseUrl: options.baseUrl,
       controlPlaneBaseUrl: options.controlPlaneBaseUrl,
       dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+      apiKey: options.apiKey,
       accessKeyId: options.accessKeyId,
       secretKey: options.secretKey,
       projectName: options.projectName,

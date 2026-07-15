@@ -26,6 +26,7 @@ export default class SearchTuneLlmCheck extends Command {
       dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
+      apiKey: flags['api-key'],
       projectName: flags['project-name'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],

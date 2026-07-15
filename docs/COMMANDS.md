@@ -202,5 +202,5 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 ---
 
 **Note:**
-*   `[service flags]` typically includes: `--base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`.
+*   `[service flags]` typically includes: `--base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`.
 *   Parameters with an `@` prefix (e.g., `@items.json`) indicate that JSON content can be read from a local file.

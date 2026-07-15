@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+.viking/
 .pkg-cache/
 
 # macOS metadata

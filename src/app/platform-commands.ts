@@ -120,6 +120,7 @@ export async function runAuthLoginCommand(options: AuthLoginOptions): Promise<vo
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -459,6 +460,7 @@ export async function runAuthStatusCommand(options: AuthStatusOptions = {}): Pro
     recovery: recoveryForAuthStatus(authClassification.reason),
     activeProfile: defaults.activeProfile,
     source: defaults.authSource,
+    apiKeyConfigured: Boolean(defaults.apiKey),
     accessKeyId: defaults.accessKeyId ? maskCredential(defaults.accessKeyId) : null,
     baseUrl: defaults.baseUrl,
     controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
@@ -495,6 +497,18 @@ export async function runAuthStatusCommand(options: AuthStatusOptions = {}): Pro
 }
 
 async function classifyAuthStatus(defaults: ResolvedCliDefaults): Promise<AuthStatusClassification> {
+  if (defaults.apiKey && (!defaults.accessKeyId || !defaults.secretKey)) {
+    return {
+      status: 'ok',
+      reason: null,
+      reasonDetail: null,
+      serviceProbe: {
+        ok: true,
+        detail: 'API key configured for runtime access; AK/SK billing probe skipped.'
+      }
+    };
+  }
+
   if (!defaults.accessKeyId || !defaults.secretKey) {
     return {
       status: 'failed',
@@ -717,6 +731,7 @@ export async function runDoctorCommand(options: DoctorOptions = {}): Promise<voi
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -739,9 +754,11 @@ export async function runDoctorCommand(options: DoctorOptions = {}): Promise<voi
     },
     {
       name: 'service_auth',
-      ok: Boolean(resolved.accessKeyId && resolved.secretKey),
+      ok: Boolean(resolved.apiKey || (resolved.accessKeyId && resolved.secretKey)),
       detail:
-        resolved.accessKeyId && resolved.secretKey
+        resolved.apiKey
+          ? `API key configured via ${resolved.authSource}`
+          : resolved.accessKeyId && resolved.secretKey
           ? `AK/SK configured via ${resolved.authSource}`
           : 'missing AK/SK'
     },
@@ -782,6 +799,8 @@ export async function runDoctorCommand(options: DoctorOptions = {}): Promise<voi
         detail: error instanceof Error ? error.message.split('\n')[0] : String(error)
       };
     }
+  } else if (resolved.apiKey) {
+    auth = { ok: true, detail: 'API key configured for runtime access; billing/order probe skipped.' };
   }
 
   const ok = checks.every(check => check.ok) && (auth?.ok ?? true);
@@ -961,6 +980,7 @@ function parseStandaloneAuthOptions(argv: string[]): AuthLoginOptions & { positi
       'control-plane-base-url': { type: 'string' },
       'data-plane-base-url': { type: 'string' },
       'project-name': { type: 'string' },
+      'api-key': { type: 'string' },
       ak: { type: 'string' },
       sk: { type: 'string' },
       region: { type: 'string' },
@@ -975,6 +995,7 @@ function parseStandaloneAuthOptions(argv: string[]): AuthLoginOptions & { positi
     baseUrl: optionalString(values['base-url']),
     controlPlaneBaseUrl: optionalString(values['control-plane-base-url']),
     dataPlaneBaseUrl: optionalString(values['data-plane-base-url']),
+    apiKey: optionalString(values['api-key']),
     accessKeyId: optionalString(values.ak),
     secretKey: optionalString(values.sk),
     projectName: optionalString(values['project-name']),

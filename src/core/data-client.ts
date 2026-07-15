@@ -3,6 +3,7 @@
 
 import './node-bootstrap';
 import type { RuntimeConfig } from './types';
+import { formatMissingVikingAuthMessage } from './auth-errors';
 import { buildSignedRequestHeaders } from './http';
 
 export interface DatasetItemDetail {
@@ -50,10 +51,8 @@ export class VikingDataClient {
   }
 
   private buildHeaders(urlString: string, body: string): Record<string, string> {
-    if (!this.config.accessKeyId || !this.config.secretKey) {
-      throw new Error(
-        'Missing Viking auth. Run `vs auth import-env`, `vs auth login`, set VIKING_AK/VIKING_SK, or pass --ak/--sk.'
-      );
+    if (!this.config.apiKey && (!this.config.accessKeyId || !this.config.secretKey)) {
+      throw new Error(formatMissingVikingAuthMessage());
     }
 
     const url = new URL(urlString);

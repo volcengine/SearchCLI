@@ -26,6 +26,7 @@ export default class Doctor extends Command {
       baseUrl: flags['base-url'],
       controlPlaneBaseUrl: flags['control-plane-base-url'],
       dataPlaneBaseUrl: flags['data-plane-base-url'],
+      apiKey: flags['api-key'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
       projectName: flags['project-name'],

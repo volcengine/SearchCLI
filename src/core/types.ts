@@ -425,6 +425,7 @@ export interface RuntimeConfig {
   applicationId: string;
   datasetId: string;
   sceneId?: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   region: string;

@@ -184,6 +184,8 @@ vs search tune apply --application-id <app> --run-id <run-id> --dry-run
 vs search tune apply --application-id <app> --run-id <run-id> --confirm-create-scene
 ```
 
+For runtime-only search access, a Viking API key can be used instead of AK/SK by passing `--api-key <key>` or setting `VIKING_API_KEY`. When using API-key-only search tuning, pass `--application-id` and `--dataset-id` explicitly; dataset inference and scene/app management may require control-plane permissions.
+
 The first version fixes `mode=UserDefined` and tunes only user-defined recall mode, recall weights, keyword match ratio, and max retrieved count. `search tune apply` creates a new candidate scene; it does not switch the default entrance.
 If the query file has `sourceItemIds`, `search tune plan` reports source-item coverage and a suggested first-pass shape. For a fast pruning pass, run `search tune run ... --label-source source-item --json`; this does not call the LLM judge and should be presented as source-item silver-label evaluation, not final human-grade relevance.
 For LLM judging, use `--llm-retries`, `--max-label-failure-rate`, and `--verbose` when diagnosing provider long tails.
