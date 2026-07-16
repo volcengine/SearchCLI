@@ -38,7 +38,8 @@ export function getSourceEnvRequirements(
         { key: `${envPrefix}_PORT`, required: false, description: 'MySQL port. Defaults to 3306.' },
         { key: `${envPrefix}_USER`, required: true, description: 'MySQL username.' },
         { key: `${envPrefix}_PASSWORD`, required: true, description: 'MySQL password.' },
-        { key: `${envPrefix}_DATABASE`, required: true, description: 'MySQL database name.' }
+        { key: `${envPrefix}_DATABASE`, required: true, description: 'MySQL database name.' },
+        { key: `${envPrefix}_CHARSET`, required: false, description: 'Optional MySQL connection charset/collation override. Defaults to utf8mb4.' }
       ];
     case 'mongo':
       return [

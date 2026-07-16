@@ -22,13 +22,14 @@ export class MySqlConnectorSource implements ConnectorSource {
 
   async open(): Promise<void> {
     const mysql = await dynamicImport<{ createConnection(options: Record<string, unknown>): Promise<MySqlConnection> }>('mysql2/promise');
+    const charset = readEnv(this.config.envPrefix, 'CHARSET', false)?.trim() || 'utf8mb4';
     this.connection = await mysql.createConnection({
       host: readEnv(this.config.envPrefix, 'HOST'),
       port: Number(readEnv(this.config.envPrefix, 'PORT', false) ?? 3306),
       user: readEnv(this.config.envPrefix, 'USER'),
       password: readEnv(this.config.envPrefix, 'PASSWORD'),
       database: readEnv(this.config.envPrefix, 'DATABASE'),
-      charset: 'utf8mb4',
+      charset,
       timezone: 'Z',
       supportBigNumbers: true,
       bigNumberStrings: true,

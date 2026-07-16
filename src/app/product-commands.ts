@@ -1859,7 +1859,7 @@ COMMON FLAGS
     )}
 
 SOURCE ENVIRONMENT
-  mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default.
+  mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default. Optional MYSQL_CHARSET overrides the connection charset (default utf8mb4).
   mongo        Uses MONGO_URI by default.
   redis-stream Uses REDIS_URL by default.
   Override prefixes with --env-prefix.
