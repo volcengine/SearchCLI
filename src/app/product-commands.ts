@@ -1843,11 +1843,7 @@ COMMON FLAGS
     connector: `${renderUsageBlock(
       [
         'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
-        'vs connector export --source mongo --database <db> --collection <collection> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
-        'vs connector export --source redis-stream --stream <key> --id-field <field> [--dataset-name <name> --job <job>] [connector flags]',
         'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
-        'vs connector init --name <job> --source mongo --dataset-id <id> --database <db> --collection <collection> --id-field <field> --cursor-field <field> [connector flags]',
-        'vs connector init --name <job> --source redis-stream --dataset-id <id> --stream <key> --id-field <field> [connector flags]',
         'vs connector run --job <job> [--once] [service flags]',
         'vs connector run --job <job> --daemon [service flags]',
         'vs connector status --job <job>',
@@ -1860,8 +1856,6 @@ COMMON FLAGS
 
 SOURCE ENVIRONMENT
   mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default. Optional MYSQL_CHARSET overrides the connection charset (default utf8mb4).
-  mongo        Uses MONGO_URI by default.
-  redis-stream Uses REDIS_URL by default.
   Override prefixes with --env-prefix.
 
 NOTES

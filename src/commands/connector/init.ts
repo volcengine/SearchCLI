@@ -14,9 +14,7 @@ export default class ConnectorInit extends Command {
   ].join('\n\n');
 
   static override examples = [
-    '<%= config.bin %> connector init --name product_mysql --source mysql --dataset-id ds_xxx --source-table products --id-field id --cursor-field updated_at',
-    '<%= config.bin %> connector init --name product_mongo --source mongo --dataset-id ds_xxx --database shop --collection products --id-field _id --cursor-field updatedAt',
-    '<%= config.bin %> connector init --name product_stream --source redis-stream --dataset-id ds_xxx --stream products:changes --id-field id'
+    '<%= config.bin %> connector init --name product_mysql --source mysql --dataset-id ds_xxx --source-table products --id-field id --cursor-field updated_at'
   ];
 
   static override flags = {
@@ -24,12 +22,12 @@ export default class ConnectorInit extends Command {
     name: Flags.string({ required: true, description: 'Local connector job name. It determines the runtime directory /tmp/viking/connector/<name>/.' }),
     source: Flags.string({
       required: true,
-      options: ['mysql', 'mongo', 'redis-stream'],
-      description: 'External source connector type.'
+      options: ['mysql'],
+      description: 'External source connector type. Currently only mysql is supported.'
     }),
     'dataset-id': Flags.string({ required: true, description: 'Target Viking dataset ID.' }),
     'env-prefix': Flags.string({
-      description: 'Environment variable prefix for source credentials, for example MYSQL or MONGO.'
+      description: 'Environment variable prefix for source credentials. Defaults to MYSQL.'
     }),
     'id-field': Flags.string({ description: 'Source record ID field. Defaults to id for MySQL and _id otherwise.' }),
     fields: Flags.string({ description: 'Comma-separated source fields to write. Defaults to all fields.' }),
@@ -54,6 +52,9 @@ export default class ConnectorInit extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ConnectorInit);
+    if (flags.source !== 'mysql') {
+      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" is supported.`);
+    }
     await runConnectorInitCommand({
       name: flags.name,
       source: flags.source as ConnectorSourceType,

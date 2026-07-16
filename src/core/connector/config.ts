@@ -149,6 +149,9 @@ export function buildConnectorJobConfig(input: ConnectorInitInput): ConnectorJob
 }
 
 function buildSourceConfig(input: ConnectorInitInput): ConnectorSourceConfig {
+  if (input.source !== 'mysql') {
+    throw new Error(`Unsupported --source "${input.source}". Currently only "mysql" is supported.`);
+  }
   const envPrefix = input.envPrefix ?? defaultEnvPrefix(input.source);
   const idField = input.idField ?? '_id';
   const fields = parseFields(input.fields);

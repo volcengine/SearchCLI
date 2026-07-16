@@ -15,17 +15,15 @@ export default class ConnectorExport extends Command {
 
   static override examples = [
     '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items',
-    '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field id --cursor-type number --dataset-name demo-items --job demo-items-sync',
-    '<%= config.bin %> connector export --source mongo --database shop --collection products --id-field _id --cursor-field updatedAt --job shop-products',
-    '<%= config.bin %> connector export --source redis-stream --stream products:changes --id-field id --job stream-bootstrap'
+    '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field id --cursor-type number --dataset-name demo-items --job demo-items-sync'
   ];
 
   static override flags = {
     ...outputFormatFlags,
     source: Flags.string({
       required: true,
-      options: ['mysql', 'mongo', 'redis-stream'],
-      description: 'External source type to export from.'
+      options: ['mysql'],
+      description: 'External source type to export from. Currently only mysql is supported.'
     }),
     job: Flags.string({
       description: 'Optional local bootstrap job name. It determines /tmp/viking/connector/<job>/bootstrap/items.jsonl. Defaults to dataset name or source object name.'
@@ -34,7 +32,7 @@ export default class ConnectorExport extends Command {
       description: 'Optional dataset name hint used when deriving the bootstrap job name when --job is omitted.'
     }),
     'env-prefix': Flags.string({
-      description: 'Environment variable prefix for source credentials, for example MYSQL or MONGO.'
+      description: 'Environment variable prefix for source credentials. Defaults to MYSQL.'
     }),
     'id-field': Flags.string({
       description: 'Source record ID field. Defaults to id for MySQL and _id otherwise.'
@@ -81,6 +79,9 @@ export default class ConnectorExport extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ConnectorExport);
+    if (flags.source !== 'mysql') {
+      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" is supported.`);
+    }
     await runConnectorExportCommand({
       source: flags.source as ConnectorSourceType,
       job: flags.job,
