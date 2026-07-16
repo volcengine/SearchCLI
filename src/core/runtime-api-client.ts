@@ -9,7 +9,7 @@ export class VikingRuntimeApiClient {
 
   search(applicationId: string, sceneId: string | undefined, payload: unknown): Promise<unknown> {
     const scene = sceneId ? `/${sceneId}` : '';
-    return postJson(this.config, `/api/v1/application/${applicationId}/search${scene}`, payload);
+    return postJson(this.config, `/api/v1/application/${applicationId}/search/${scene}`, payload);
   }
 
   queryCompletion(applicationId: string, sceneId: string, payload: unknown): Promise<unknown> {
