@@ -70,6 +70,12 @@
       "files": [
         "vs-alias-mapping/SKILL.md"
       ]
+    },
+    {
+      "name": "vs-crawler",
+      "files": [
+        "vs-crawler/SKILL.md"
+      ]
     }
   ]
 }

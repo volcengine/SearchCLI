@@ -1843,7 +1843,9 @@ COMMON FLAGS
     connector: `${renderUsageBlock(
       [
         'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
+        'vs connector export --source jsonl --file <path/to/items.jsonl> [--dataset-name <name> --job <job>] [connector flags]',
         'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
+        'vs connector init --name <job> --source jsonl --dataset-id <id> --file <path/to/items.jsonl> [connector flags]',
         'vs connector run --job <job> [--once] [service flags]',
         'vs connector run --job <job> --daemon [service flags]',
         'vs connector status --job <job>',
@@ -1856,6 +1858,7 @@ COMMON FLAGS
 
 SOURCE ENVIRONMENT
   mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default. Optional MYSQL_CHARSET overrides the connection charset (default utf8mb4).
+  jsonl        Reads a local JSONL file. No environment variables required.
   Override prefixes with --env-prefix.
 
 NOTES
@@ -1863,6 +1866,7 @@ NOTES
   The exported records always land at /tmp/viking/connector/<job>/bootstrap/items.jsonl.
   \`--output\` only redirects the rendered command result; it does not change the bootstrap JSONL path.
   When a MySQL cursor field is an integer id (for example \`id\`), pass \`--cursor-type number\`.
+  For jsonl sources, the cursor is the file line number; new lines appended to the file are picked up on each poll.
   Use \`connector init + connector run --daemon\` to keep incremental sync running in the background.
 
 KEY FLAGS
@@ -1871,8 +1875,9 @@ KEY FLAGS
   --name          Init only. Controls the local runtime directory /tmp/viking/connector/<name>/.
   --dataset-id    Init only. Target dataset that later \`connector run\` writes into.
   --source-table  Required for mysql export/init.
-  --cursor-field  Checkpoint field used for bootstrap/export progress and later incremental sync.
-  --cursor-type   Use \`number\` for integer IDs such as mysql \`id\`; defaults to \`timestamp\`.
+  --file          Required for jsonl export/init. Path to the JSONL file.
+  --cursor-field  Checkpoint field used for bootstrap/export progress and later incremental sync (mysql only).
+  --cursor-type   Use \`number\` for integer IDs such as mysql \`id\`; defaults to \`timestamp\` (mysql only).
   --output        Redirects the rendered command result only; it does not change bootstrap/config file paths.
 
 COMMON FLAGS
@@ -3232,7 +3237,7 @@ async function runConnectorCli(argv: string[]): Promise<void> {
         datasetName: optionalString(values['dataset-name']),
         envPrefix: optionalString(values['env-prefix']),
         idField: optionalString(values['id-field']),
-        fields: optionalString(values.fields),
+        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
         cursorField: optionalString(values['cursor-field']),
         cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
         initialCursor: optionalString(values['initial-cursor']),
@@ -3241,6 +3246,7 @@ async function runConnectorCli(argv: string[]): Promise<void> {
         database: optionalString(values.database),
         collection: optionalString(values.collection),
         stream: optionalString(values.stream),
+        file: optionalString(values.file),
         batchSize: parseOptionalInt(optionalString(values['batch-size'])),
         intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
       });
@@ -3252,7 +3258,7 @@ async function runConnectorCli(argv: string[]): Promise<void> {
         datasetId: requiredString(values['dataset-id'], '--dataset-id'),
         envPrefix: optionalString(values['env-prefix']),
         idField: optionalString(values['id-field']),
-        fields: optionalString(values.fields),
+        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
         cursorField: optionalString(values['cursor-field']),
         cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
         initialCursor: optionalString(values['initial-cursor']),
@@ -3261,6 +3267,7 @@ async function runConnectorCli(argv: string[]): Promise<void> {
         database: optionalString(values.database),
         collection: optionalString(values.collection),
         stream: optionalString(values.stream),
+        file: optionalString(values.file),
         batchSize: parseOptionalInt(optionalString(values['batch-size'])),
         intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
       });

@@ -3,7 +3,7 @@
 
 import type { ServiceConfigInput } from '../service-config';
 
-export type ConnectorSourceType = 'mysql' | 'mongo' | 'redis-stream';
+export type ConnectorSourceType = 'mysql' | 'mongo' | 'redis-stream' | 'jsonl';
 export type ConnectorCursorType = 'timestamp' | 'number' | 'string';
 export type ConnectorOperation = 'upsert' | 'delete';
 
@@ -56,10 +56,16 @@ export interface RedisStreamConnectorSourceConfig extends BaseConnectorSourceCon
   stream: string;
 }
 
+export interface JsonlConnectorSourceConfig extends BaseConnectorSourceConfig {
+  type: 'jsonl';
+  file: string;
+}
+
 export type ConnectorSourceConfig =
   | MySqlConnectorSourceConfig
   | MongoConnectorSourceConfig
-  | RedisStreamConnectorSourceConfig;
+  | RedisStreamConnectorSourceConfig
+  | JsonlConnectorSourceConfig;
 
 export interface ConnectorJobConfig {
   version: 1;
@@ -153,6 +159,7 @@ export interface ConnectorExportInput {
   database?: string;
   collection?: string;
   stream?: string;
+  file?: string;
   fields?: string;
   batchSize?: number;
   intervalMs?: number;
@@ -172,6 +179,7 @@ export interface ConnectorInitInput {
   database?: string;
   collection?: string;
   stream?: string;
+  file?: string;
   fields?: string;
   batchSize?: number;
   intervalMs?: number;

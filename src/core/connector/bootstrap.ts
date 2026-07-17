@@ -36,6 +36,7 @@ export interface SourceBootstrapOptions {
   database?: string;
   collection?: string;
   stream?: string;
+  file?: string;
   sourceFields?: string;
   batchSize?: number;
   intervalMs?: number;
@@ -71,6 +72,7 @@ export async function bootstrapSourceToJsonl(options: SourceBootstrapOptions): P
     database: options.database,
     collection: options.collection,
     stream: options.stream,
+    file: options.file,
     fields: options.sourceFields,
     batchSize: options.batchSize,
     intervalMs: options.intervalMs
@@ -180,6 +182,7 @@ function resolveBootstrapJobName(options: SourceBootstrapOptions): string {
     options.table ??
     options.collection ??
     options.stream ??
+    (options.file ? path.basename(options.file, path.extname(options.file)) : undefined) ??
     `${options.source}-ingest`;
   const value = slugify(preferred);
   return value || `${options.source}-ingest`;

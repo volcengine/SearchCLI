@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ConnectorSource, ConnectorSourceConfig } from '../types';
+import { JsonlConnectorSource } from './jsonl';
 import { MongoConnectorSource } from './mongo';
 import { MySqlConnectorSource } from './mysql';
 import { RedisStreamConnectorSource } from './redis-stream';
@@ -14,6 +15,8 @@ export function createConnectorSource(config: ConnectorSourceConfig): ConnectorS
       return new MongoConnectorSource(config);
     case 'redis-stream':
       return new RedisStreamConnectorSource(config);
+    case 'jsonl':
+      return new JsonlConnectorSource(config);
     default:
       throw new Error(`Unsupported connector source type: ${(config as { type?: string }).type}`);
   }

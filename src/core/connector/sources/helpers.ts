@@ -49,6 +49,8 @@ export function getSourceEnvRequirements(
       return [
         { key: `${envPrefix}_URL`, required: true, description: 'Redis connection URL.' }
       ];
+    case 'jsonl':
+      return [];
     default:
       return [];
   }

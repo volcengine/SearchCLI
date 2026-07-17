@@ -43,6 +43,7 @@ export async function runConnectorExportCommand(input: ConnectorExportInput): Pr
     database: input.database,
     collection: input.collection,
     stream: input.stream,
+    file: input.file,
     sourceFields: input.fields,
     batchSize: input.batchSize,
     intervalMs: input.intervalMs

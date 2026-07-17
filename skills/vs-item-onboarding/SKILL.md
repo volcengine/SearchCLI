@@ -1,14 +1,14 @@
 ---
 name: vs-item-onboarding
-description: "V2 onboarding workflow for raw local item files and source-backed onboarding through JSONL export. Use it when the user wants to create a dataset or application from a local JSON, JSONL, or CSV file, or from mysql by first exporting a bootstrap JSONL file and then optionally enabling connector-based sync in Viking AI Search."
+description: "onboarding workflow for creating datasets and applications in Viking AI Search. Supports one-time import from local files (JSON, JSONL, CSV) and MySQL databases, plus scheduled incremental sync for append-only JSONL files and MySQL. All sources are first exported to a bootstrap JSONL file; backend-driven schema inference handles field detection, and optional background sync keeps the dataset up to date as new data arrives."
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: item onboarding v2, dataset onboarding v2, V2 OpenAPI, presigned upload, AddInferDatasetSchemaTaskV2, GetInferDatasetSchemaResultV2, CreateDatasetV2, AttachDatasetToApplicationV2, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, schema confirmation, vs-schema-confirm, source export, database import, mysql import, connector sync
+keywords: item onboarding, dataset onboarding, OpenAPI, presigned upload, AddInferDatasetSchemaTask, GetInferDatasetSchemaResult, CreateDataset, AttachDatasetToApplication, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, schema confirmation, vs-schema-confirm, source export, database import, mysql import, jsonl import, file import, connector sync
 commands: dataset import-url, dataset infer-schema, dataset infer-result, dataset create, dataset ingest, data write, app create, app attach-dataset, connector export, connector init, connector run, connector status, connector stop, connector inspect
 ---
 
-# Viking Item Onboarding (V2)
+# Viking Item Onboarding
 
 ## Language Matching (apply throughout)
 
@@ -32,8 +32,9 @@ If you are unsure which language the user used (e.g. only emoji or only an attac
 
 Use this skill when the user is operating against the V2 control-plane (`/open/*V2`) and wants to onboard a dataset (optionally followed by an application) from either:
 
-- a raw local item file (`JSON` / `JSONL` / `CSV`), or
-- a connected source (`mysql`) that should first be exported to a bootstrap `JSONL` file and may later continue with connector-based sync.
+- a local `JSONL` file, either as a one-time import or with ongoing incremental sync for append-only files (e.g. crawler output where new lines are continuously appended);
+- a local `JSON` (array) or `CSV` file, as a one-time import only (ongoing sync is not supported for these formats);
+- a MySQL database, either as a one-time snapshot import or with ongoing incremental sync.
 
 The hallmark of V2 is that schema inference is fully backend-driven: the CLI uploads the file, the backend infers the `Schema` (with `BizAttr` already set on the primary-key / title / URL fields) plus a per-field `FieldDescMap`, and the agent's only jobs are to (a) persist that inference artifact locally, (b) render it for one round of human confirmation, and (c) drive the remaining persistence + ingest steps without re-inventing field decisions.
 
@@ -64,9 +65,10 @@ Do not use this skill when:
 | Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact) |
 | Create dataset | `vs dataset create --data @dataset-create.json [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr` |
 | Write data | `vs data write --dataset-id <DatasetId> --fields @items.json` | Push the actual records into the dataset |
-| Source export | `vs connector export --source mysql ...` | Export a MySQL source snapshot into `/tmp/viking/connector/<job>/bootstrap/items.jsonl` |
-| Connector sync config | `vs connector init --name <job> --source mysql --dataset-id <id> ...` | Persist the local connector job config for later sync |
-| Connector sync run | `vs connector run --job <job> --daemon` | Start background incremental sync into the dataset |
+| Export (MySQL) | `vs connector export --source mysql ...` | Export a MySQL table snapshot into `/tmp/viking/connector/<job>/bootstrap/items.jsonl` |
+| Export (local file) | `vs connector export --source jsonl --file <path>` | Export a local JSONL file snapshot into the bootstrap directory. For `JSON` (array) or `CSV` inputs, convert to JSONL (one object per line) before running this command. |
+| Sync config | `vs connector init --name <job> --source mysql|jsonl --dataset-id <id> ...` | Persist the local sync job config for later incremental runs |
+| Sync run | `vs connector run --job <job> --daemon` | Start background incremental sync into the dataset |
 | Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--dry-run]` | Optional, only when the user asks for app-level setup |
 | Attach dataset | `vs app attach-dataset --data @attach.json [--dry-run]` | Optional, links a created dataset to an application. The `DataConfig` block is the `DataFieldConfig` straight out of the persisted infer artifact |
 
@@ -76,23 +78,44 @@ The "All-in-one" shortcut `vs dataset ingest --file <path> --type <type> --indus
 
 Run strictly in order. Each step depends on output from the previous one; an inference artifact persisted in step 6 is reused all the way through step 13.
 
-1. **Confirm input source and mode** — determine which branch applies:
-   - **Local file** (`JSON` / `JSONL` / `CSV`): confirm the file path, dataset type, industry, and language. Continue at step 3.
-   - **Connected source — new dataset — one-time import** (`mysql`): identify the table name, infer dataset name / dataset type / language / primary key, and require explicit confirmation before any real write. Continue at step 2.
-   - **Connected source — new dataset — ongoing sync**: same as above, plus the user must explicitly confirm the incremental cursor field itself. After step 10 continue at step 11.
-   - **Connected source — existing dataset — ongoing sync**: validate the dataset with `vs dataset get --id <DatasetId> --full`, confirm the source config (especially the incremental cursor field), then jump directly to step 11.
-   - **Existing dataset + one-time source import**: not supported as a single workflow. Explain that the current CLI split supports either `connector export → file-style onboarding` for a new dataset or `connector init/run --daemon` for ongoing sync, then let the user choose which branch to switch to.
+1. **Confirm input source and mode** — first identify the source type from the user's request, then **explicitly ask the user to choose the import mode** when multiple options exist. Do not silently pick a mode.
 
-   Source environment configuration (applies to every source-backed branch):
-   - Supported sources and their default environment variables:
-     - `mysql`: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, optional `MYSQL_CHARSET`
+   **Source identification**:
+   - If the user provided a database connection or table name → MySQL.
+   - If the user provided a file path ending in `.jsonl` or described a line-delimited/append-only file → JSONL.
+   - If the user provided a file path ending in `.json` (JSON array) or `.csv` → JSON/CSV (one-time only).
+   - If the source is unclear, ask the user which source type they want to onboard from before proceeding.
+
+   **Import mode selection**:
+   - For **MySQL** and **JSONL**, resolve whether the user wants one-time import or one-time + ongoing sync. **Only skip the question when the request contains an explicit, unambiguous signal** for one side (apply this detection to whatever language the user is writing in — English, Chinese, etc.):
+     - **Explicit one-time**: phrases carrying "once", "one-time", "snapshot only", "just this time", or equivalent single-import semantics.
+     - **Explicit ongoing**: phrases carrying "sync", "keep in sync", "auto-import", "scheduled", "incremental", "keep updated", or equivalent recurring-sync semantics.
+   - If the request is **neutral** — e.g. "import this file", "import this data", bare "import", mentions only a file path with an import verb but says nothing about scheduling/increment/once — **you MUST ask the user to choose**. The bare import verb is NOT a one-time signal; it is ambiguous. **Never silently default to one-time.**
+   - For **JSON (array)** and **CSV**, only one-time import is supported. No question needed.
+
+   After the source type and mode are confirmed, follow the matching branch:
+
+   - **MySQL — one-time import**: identify the table name, infer dataset name / dataset type / language / primary key, and require explicit confirmation before any real write. Continue at step 2.
+   - **MySQL — ongoing sync**: same as above, plus the user must explicitly confirm the incremental cursor field itself. After step 10 continue at step 11.
+   - **MySQL — existing dataset — ongoing sync**: validate the dataset with `vs dataset get --id <DatasetId> --full`, confirm the source config (especially the incremental cursor field), then jump directly to step 11.
+   - **JSONL file — one-time import**: confirm the file path, dataset type, industry, and language. Continue at step 2.
+   - **JSONL file — ongoing sync**: confirm the file path, dataset type, industry, and language. You MUST also **interactively ask the user to confirm** that new records will only be appended to the end of the file (append-only). Present the constraint clearly — sync only supports files that grow by adding new lines; edits or deletions of existing lines are not tracked and may cause duplicate or missing records. Wait for explicit user confirmation before proceeding. After step 10 continue at step 11.
+   - **JSON (array) or CSV file — one-time import**: confirm the file path, dataset type, industry, and language. These formats are one-time import only; ongoing sync is not supported because they do not provide a stable append-only cursor. Convert the input to JSONL (one JSON object per line) before continuing. Continue at step 2.
+   - **Existing dataset + one-time source import**: not supported as a single workflow. Explain that the current CLI split supports either source export → new dataset onboarding for a one-time import, or background sync for ongoing updates, then let the user choose which branch to switch to.
+
+   Source environment configuration (applies to MySQL branches only; local files require no credentials):
+   - MySQL uses these environment variables by default: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` (optional: `MYSQL_CHARSET`).
    - Render a **bash export template snippet** with placeholder values (for example `MYSQL_PASSWORD=your_password`) and ask the user to fill in real values in their own terminal or shell session, then run `export` on each variable.
    - **Never** display actual database credential values in chat. **Never** ask the user to paste or submit database credentials into the chat dialog.
    - **Never** list "connection config" / "连接配置" blocks with concrete host/user/password values inside the chat. The only allowed format is a bash template with placeholder values.
-   - The `vs connector export`, `vs connector init`, and `vs connector run` commands read source credentials **only from environment variables**. They do not accept credentials via flags or chat input.
-   - This is a human checkpoint. Wait for explicit confirmation that the local source environment is configured before running `vs connector export`, `vs connector init`, or `vs connector run`.
+   - The export, init, and run commands read MySQL credentials **only from environment variables**. They do not accept credentials via flags or chat input.
+   - This is a human checkpoint. Wait for explicit confirmation that the local source environment is configured before proceeding.
 
-2. **(Source-backed only) Export source snapshot to JSONL** — run `vs connector export --source mysql ...` to produce the bootstrap file. The file is always written to `/tmp/viking/connector/<job>/bootstrap/items.jsonl`. Do not use `--output` to try to override that path; `--output` only redirects the rendered command result. After export, use the emitted `items.jsonl` as the input file and continue at step 3.
+2. **Export source snapshot to JSONL** — run `vs connector export` for the selected source to produce a bootstrap JSONL file:
+   - MySQL: `vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [other flags]`
+   - Local file: `vs connector export --source jsonl --file <path/to/items.jsonl> [other flags]` (convert JSON arrays or CSV to JSONL first if needed)
+
+   The bootstrap file is always written to `/tmp/viking/connector/<job>/bootstrap/items.jsonl`. Do not use `--output` to try to override that path; `--output` only redirects the rendered command result. After export, use the emitted `items.jsonl` as the input file and continue at step 3.
 
 3. **Get upload URL** — `vs dataset import-url --file-name <basename>`. Capture `Result.FileUrl` and `Result.FileKey`. Keep `FileKey` for step 5.
 4. **PUT upload** — upload the raw item file to `FileUrl` (e.g. `curl -X PUT --data-binary "@<local-path>" "<FileUrl>"`). Expect HTTP 200 with empty body. Do not add an `Authorization` header — `FileUrl` is already presigned.
@@ -183,8 +206,8 @@ Run strictly in order. Each step depends on output from the previous one; an inf
    ```
 
 9. **Real create** — re-run step 8 without `DryRun`. Capture `Result.Dataset.Id` as `DatasetId` and persist it next to the artifact (e.g. `./.viking/item-plans/<dataset-name>/dataset.json`).
-10. **Write data** — `vs data write --dataset-id <DatasetId> --fields @items.json` to push the records (the same item file you uploaded in step 4, converted to a JSON array if it was JSONL). Expect a `request_id` in the response.
-11. **(Source-backed sync mode only) Start background incremental sync** — run `vs connector init --name <job> --source mysql --dataset-id <DatasetId> ...` to persist the job config, then `vs connector run --job <job> --daemon` to start the background sync. In the hand-off, surface `job`, `pid`, `trace.ndjson`, `imported-records.log`, `vs connector status --job <job>`, and `vs connector stop --job <job>`. Skip this step for one-time import or local-file workflows.
+10. **Write data** — `vs data write --dataset-id <DatasetId> --fields @/tmp/viking/connector/<job>/bootstrap/items.jsonl` to push the records from the bootstrap JSONL file. Expect a `request_id` in the response.
+11. **(Ongoing sync mode only) Start background incremental sync** — run `vs connector init --name <job> --source <mysql|jsonl> --dataset-id <DatasetId> ...` to persist the job config, then `vs connector run --job <job> --daemon` to start the background sync. For MySQL, pass `--source-table`, `--id-field`, `--cursor-field`; for local files, pass `--file <path>`. In the hand-off, surface `job`, `pid`, `trace.ndjson`, `imported-records.log`, `vs connector status --job <job>`, and `vs connector stop --job <job>`. Skip this step for one-time import workflows.
 12. **Optional: create application** — only if the user explicitly asks for app-level setup: `vs app create --name <app-name> --description "<text>" --industry <alias> --language <lang>`. Capture `Result.Application.Id` as `AppId`.
 13. **Optional: attach dataset** — read `DataFieldConfig` straight from the persisted artifact and assemble:
 
@@ -244,9 +267,9 @@ Run strictly in order. Each step depends on output from the previous one; an inf
     | `<RUNTIME_NOTE>` | `` 生效之后即可使用 `vs search`、`vs chat`、`vs recommend` 等运行时接口进行体验。 `` | `` Once they report Ready, you can exercise the runtime APIs via `vs search`, `vs chat`, `vs recommend`. `` | `` Ready になると `vs search` / `vs chat` / `vs recommend` などのランタイム API を利用できます。 `` |
 
     For other languages, translate the same intent and keep IDs / URLs / `vs ...` commands verbatim. The agent must surface this block as the final output of the workflow; do not omit it even if the user has not asked. If only the dataset was created (no app branch, no sync), still print the dataset link and the readiness reminder (chat / search will require attaching to an app afterwards).
-## V2 Enum Reference
+## Enum Reference
 
-V2 enum fields are **strings**. Pass the CLI alias (case-insensitive) and let the CLI normalize to the backend wire value.
+enum fields are **strings**. Pass the CLI alias (case-insensitive) and let the CLI normalize to the backend wire value.
 
 | Field | CLI alias (recommended) | Backend wire value (snake_case) |
 |---|---|---|
@@ -301,10 +324,13 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 8. **Preserve `FieldDescMap` and `DataConfig`.** Forward the inferred `FieldDescMap` to `CreateDatasetV2`, and forward the inferred `DataConfig` verbatim to `AttachDatasetToApplicationV2`. Do not regenerate or strip them locally.
 9. **No `Authorization` header on the TOS PUT.** `FileUrl` is presigned; adding auth headers will break the upload.
 10. **Always end with the console hand-off block.** The agent's final message in this workflow must include the dataset (and app, if created) console URLs derived from the active profile (`volcengine.com` for Volc, `byteplus.com` for BytePlus) plus a reminder that runtime APIs (`search`, `chat`, recommend) can only be used once the console shows the resource as Ready. Never skip this step — the user has no other clue where to monitor readiness.
-11. **Source-backed new-dataset onboarding must go through `connector export`.** Do not claim `dataset ingest --source ...` exists in the supported workflow. First export to JSONL, then reuse the emitted file path in the normal V2 onboarding flow.
-12. **Source-backed sync must go through connector lifecycle commands.** Use `connector init` + `connector run --daemon`, then surface runtime artifacts (`trace.ndjson`, `imported-records.log`, `runtime.json`, `state.json`) plus the status/stop commands.
-13. **Incremental cursor confirmation is a hard gate.** In `sync` mode, never silently accept an inferred cursor field. Show the basis for the guess and require explicit user confirmation before starting the background job.
-14. **Do not invent a one-shot source import into an existing dataset.** If the user wants `existing_dataset + once`, explain the current CLI split and let them choose between creating a new dataset from exported JSONL or enabling connector-based sync.
+11. **All new-dataset onboarding must go through the export step.** Both MySQL and local file sources must first be exported to a bootstrap JSONL file via `vs connector export`. Do not claim `dataset ingest --source ...` exists in the supported workflow, and do not bypass the export step by uploading the raw user file directly. After export, reuse the emitted bootstrap file path in the normal V2 onboarding flow.
+12. **Ongoing sync must go through the sync lifecycle commands.** Use `connector init` + `connector run --daemon`, then surface runtime artifacts (`trace.ndjson`, `imported-records.log`, `runtime.json`, `state.json`) plus the status/stop commands. This applies to both MySQL and local file sources.
+13. **Incremental cursor confirmation is a hard gate for MySQL sync.** In MySQL `sync` mode, never silently accept an inferred cursor field. Show the basis for the guess and require explicit user confirmation before starting the background job. For local file sync, new lines appended to the file are automatically detected; no cursor field confirmation is needed.
+14. **Append-only confirmation is a hard gate for JSONL file sync.** In JSONL `ongoing sync` mode, you MUST interactively ask the user to confirm that the file will only grow by appending new lines. Explain clearly that edits or deletions of existing lines are not tracked and may cause duplicate or missing records. Do not start the background sync job until the user explicitly confirms this constraint. This confirmation must be an interactive question — never silently assume the file is append-only.
+15. **Resolve import mode before proceeding for MySQL and JSONL.** Only skip the question when the request contains an explicit one-time or ongoing signal. The bare import verb without further qualification is neutral and you MUST ask. Never silently default to one-time. JSON/CSV are one-time only with no question needed.
+16. **Do not invent a one-shot source import into an existing dataset.** If the user wants `existing_dataset + once`, explain the current CLI split and let them choose between creating a new dataset from exported JSONL or enabling connector-based sync.
+17. **Never block waiting for readiness.** After printing the hand-off block, end your turn immediately. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
 
 ## Recovery Hints
 

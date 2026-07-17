@@ -15,15 +15,16 @@ export default class ConnectorExport extends Command {
 
   static override examples = [
     '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items',
-    '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field id --cursor-type number --dataset-name demo-items --job demo-items-sync'
+    '<%= config.bin %> connector export --source mysql --source-table products --id-field id --cursor-field id --cursor-type number --dataset-name demo-items --job demo-items-sync',
+    '<%= config.bin %> connector export --source jsonl --file /tmp/crawler/items.jsonl --dataset-name crawler-items'
   ];
 
   static override flags = {
     ...outputFormatFlags,
     source: Flags.string({
       required: true,
-      options: ['mysql'],
-      description: 'External source type to export from. Currently only mysql is supported.'
+      options: ['mysql', 'jsonl'],
+      description: 'External source type to export from. Supported: mysql, jsonl.'
     }),
     job: Flags.string({
       description: 'Optional local bootstrap job name. It determines /tmp/viking/connector/<job>/bootstrap/items.jsonl. Defaults to dataset name or source object name.'
@@ -32,20 +33,20 @@ export default class ConnectorExport extends Command {
       description: 'Optional dataset name hint used when deriving the bootstrap job name when --job is omitted.'
     }),
     'env-prefix': Flags.string({
-      description: 'Environment variable prefix for source credentials. Defaults to MYSQL.'
+      description: 'Environment variable prefix for source credentials. Defaults to MYSQL for mysql, JSONL for jsonl.'
     }),
     'id-field': Flags.string({
-      description: 'Source record ID field. Defaults to id for MySQL and _id otherwise.'
+      description: 'Source record ID field. Defaults to id.'
     }),
     fields: Flags.string({
       description: 'Comma-separated subset of source fields to export. Defaults to all fields.'
     }),
     'cursor-field': Flags.string({
-      description: 'Source cursor/watermark field used to record the exported checkpoint. For integer MySQL IDs such as id, pair it with --cursor-type number.'
+      description: 'Source cursor/watermark field used to record the exported checkpoint for mysql sources. For integer MySQL IDs such as id, pair it with --cursor-type number. Not used for jsonl.'
     }),
     'cursor-type': Flags.string({
       options: ['timestamp', 'number', 'string'],
-      description: 'Cursor value type. Use number for integer IDs such as MySQL auto-increment id. Defaults to timestamp for polling sources.'
+      description: 'Cursor value type for mysql sources. Use number for integer IDs such as MySQL auto-increment id. Defaults to timestamp.'
     }),
     'initial-cursor': Flags.string({
       description: 'Optional initial cursor value.'
@@ -56,17 +57,11 @@ export default class ConnectorExport extends Command {
     where: Flags.string({
       description: 'Optional MySQL WHERE clause without the WHERE keyword.'
     }),
-    database: Flags.string({
-      description: 'Mongo database name.'
-    }),
-    collection: Flags.string({
-      description: 'Mongo collection name.'
-    }),
-    stream: Flags.string({
-      description: 'Redis Stream key.'
+    file: Flags.string({
+      description: 'Path to the JSONL file. Required when --source jsonl.'
     }),
     'batch-size': Flags.integer({
-      description: 'Maximum source rows/messages per bootstrap batch.'
+      description: 'Maximum records per bootstrap batch.'
     }),
     'interval-ms': Flags.integer({
       description: 'Polling interval metadata recorded for later sync setup.'
@@ -79,8 +74,8 @@ export default class ConnectorExport extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ConnectorExport);
-    if (flags.source !== 'mysql') {
-      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" is supported.`);
+    if (flags.source !== 'mysql' && flags.source !== 'jsonl') {
+      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" and "jsonl" are supported.`);
     }
     await runConnectorExportCommand({
       source: flags.source as ConnectorSourceType,
@@ -94,9 +89,7 @@ export default class ConnectorExport extends Command {
       initialCursor: flags['initial-cursor'],
       table: flags['source-table'],
       where: flags.where,
-      database: flags.database,
-      collection: flags.collection,
-      stream: flags.stream,
+      file: flags.file,
       batchSize: flags['batch-size'],
       intervalMs: flags['interval-ms']
     });

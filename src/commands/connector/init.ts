@@ -14,7 +14,8 @@ export default class ConnectorInit extends Command {
   ].join('\n\n');
 
   static override examples = [
-    '<%= config.bin %> connector init --name product_mysql --source mysql --dataset-id ds_xxx --source-table products --id-field id --cursor-field updated_at'
+    '<%= config.bin %> connector init --name product_mysql --source mysql --dataset-id ds_xxx --source-table products --id-field id --cursor-field updated_at',
+    '<%= config.bin %> connector init --name crawler_jsonl --source jsonl --dataset-id ds_xxx --file /tmp/crawler/items.jsonl'
   ];
 
   static override flags = {
@@ -22,27 +23,25 @@ export default class ConnectorInit extends Command {
     name: Flags.string({ required: true, description: 'Local connector job name. It determines the runtime directory /tmp/viking/connector/<name>/.' }),
     source: Flags.string({
       required: true,
-      options: ['mysql'],
-      description: 'External source connector type. Currently only mysql is supported.'
+      options: ['mysql', 'jsonl'],
+      description: 'External source connector type. Supported: mysql, jsonl.'
     }),
     'dataset-id': Flags.string({ required: true, description: 'Target Viking dataset ID.' }),
     'env-prefix': Flags.string({
-      description: 'Environment variable prefix for source credentials. Defaults to MYSQL.'
+      description: 'Environment variable prefix for source credentials. Defaults to MYSQL for mysql, JSONL for jsonl.'
     }),
-    'id-field': Flags.string({ description: 'Source record ID field. Defaults to id for MySQL and _id otherwise.' }),
+    'id-field': Flags.string({ description: 'Source record ID field. Defaults to id.' }),
     fields: Flags.string({ description: 'Comma-separated source fields to write. Defaults to all fields.' }),
-    'cursor-field': Flags.string({ description: 'Incremental cursor/watermark field for polling sources. For integer MySQL IDs such as id, pair it with --cursor-type number.' }),
+    'cursor-field': Flags.string({ description: 'Incremental cursor/watermark field for mysql sources. For integer MySQL IDs such as id, pair it with --cursor-type number. Not used for jsonl (cursor is line number).' }),
     'cursor-type': Flags.string({
       options: ['timestamp', 'number', 'string'],
-      description: 'Cursor value type. Use number for integer IDs such as MySQL auto-increment id. Defaults to timestamp for polling sources.'
+      description: 'Cursor value type for mysql sources. Use number for integer IDs such as MySQL auto-increment id. Defaults to timestamp.'
     }),
     'initial-cursor': Flags.string({ description: 'Initial cursor value when no state exists.' }),
     'source-table': Flags.string({ description: 'MySQL table name, optionally schema-qualified. Required when --source mysql.' }),
     where: Flags.string({ description: 'Additional MySQL WHERE clause without the WHERE keyword.' }),
-    database: Flags.string({ description: 'Mongo database name.' }),
-    collection: Flags.string({ description: 'Mongo collection name.' }),
-    stream: Flags.string({ description: 'Redis Stream key.' }),
-    'batch-size': Flags.integer({ description: 'Maximum source rows/messages per polling batch.' }),
+    file: Flags.string({ description: 'Path to the JSONL file. Required when --source jsonl. The connector tracks new lines appended to this file.' }),
+    'batch-size': Flags.integer({ description: 'Maximum records per polling batch.' }),
     'interval-ms': Flags.integer({ description: 'Polling interval for continuous runs.' }),
     output: Flags.string({
       char: 'o',
@@ -52,8 +51,8 @@ export default class ConnectorInit extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ConnectorInit);
-    if (flags.source !== 'mysql') {
-      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" is supported.`);
+    if (flags.source !== 'mysql' && flags.source !== 'jsonl') {
+      this.error(`Unsupported --source "${flags.source}". Currently only "mysql" and "jsonl" are supported.`);
     }
     await runConnectorInitCommand({
       name: flags.name,
@@ -67,9 +66,7 @@ export default class ConnectorInit extends Command {
       initialCursor: flags['initial-cursor'],
       table: flags['source-table'],
       where: flags.where,
-      database: flags.database,
-      collection: flags.collection,
-      stream: flags.stream,
+      file: flags.file,
       batchSize: flags['batch-size'],
       intervalMs: flags['interval-ms']
     });

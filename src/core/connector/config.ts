@@ -56,6 +56,10 @@ const sourceSchema = z.discriminatedUnion('type', [
   baseSourceSchema.extend({
     type: z.literal('redis-stream'),
     stream: z.string().min(1)
+  }),
+  baseSourceSchema.extend({
+    type: z.literal('jsonl'),
+    file: z.string().min(1)
   })
 ]);
 
@@ -149,11 +153,7 @@ export function buildConnectorJobConfig(input: ConnectorInitInput): ConnectorJob
 }
 
 function buildSourceConfig(input: ConnectorInitInput): ConnectorSourceConfig {
-  if (input.source !== 'mysql') {
-    throw new Error(`Unsupported --source "${input.source}". Currently only "mysql" is supported.`);
-  }
   const envPrefix = input.envPrefix ?? defaultEnvPrefix(input.source);
-  const idField = input.idField ?? '_id';
   const fields = parseFields(input.fields);
 
   if (input.source === 'mysql') {
@@ -174,37 +174,18 @@ function buildSourceConfig(input: ConnectorInitInput): ConnectorSourceConfig {
     };
   }
 
-  if (input.source === 'mongo') {
-    if (!input.database) throw new Error('--database is required for mongo connector jobs.');
-    if (!input.collection) throw new Error('--collection is required for mongo connector jobs.');
-    if (!input.cursorField) throw new Error('--cursor-field is required for mongo connector jobs.');
+  if (input.source === 'jsonl') {
+    if (!input.file) throw new Error('--file is required for jsonl connector jobs.');
     return {
-      type: 'mongo',
+      type: 'jsonl',
       envPrefix,
-      idField,
-      database: input.database,
-      collection: input.collection,
-      fields,
-      cursor: {
-        field: input.cursorField,
-        type: input.cursorType ?? 'timestamp',
-        initial: parseInitialCursor(input.initialCursor, input.cursorType)
-      }
-    };
-  }
-
-  if (input.source === 'redis-stream') {
-    if (!input.stream) throw new Error('--stream is required for redis-stream connector jobs.');
-    return {
-      type: 'redis-stream',
-      envPrefix,
-      idField,
-      stream: input.stream,
+      idField: input.idField ?? 'id',
+      file: path.resolve(input.file),
       fields
     };
   }
 
-  throw new Error(`Unsupported connector source: ${input.source satisfies never}`);
+  throw new Error(`Unsupported --source "${input.source}". Currently only "mysql" and "jsonl" are supported.`);
 }
 
 function sanitizeJobName(value: string): string {
