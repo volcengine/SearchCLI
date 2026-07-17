@@ -27,6 +27,7 @@ export default class AppDiagnose extends Command {
       dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
+      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       applicationId: flags['application-id'],

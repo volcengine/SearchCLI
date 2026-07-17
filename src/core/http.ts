@@ -3,7 +3,7 @@
 
 import './node-bootstrap';
 import { Signer } from '@volcengine/openapi';
-import { formatMissingVikingAuthMessage } from './auth-errors';
+import { formatMissingVikingAuthMessage, formatMissingVikingControlPlaneAuthMessage } from './auth-errors';
 import type { ServiceConfig } from './service-config';
 import { debugLog } from './debug-logger';
 
@@ -162,6 +162,10 @@ async function buildHeaders(
     headers['content-type'] = 'application/json';
   }
 
+  if (!includeControlPlaneHeaders && config.apiKey) {
+    return buildApiKeyRequestHeaders(config.apiKey, headers);
+  }
+
   if (config.accessKeyId && config.secretKey) {
     headers.host = signedHost;
     const signer = new Signer(
@@ -185,16 +189,20 @@ async function buildHeaders(
     return headers;
   }
 
-  throw new Error(formatMissingVikingAuthMessage());
+  throw new Error(includeControlPlaneHeaders ? formatMissingVikingControlPlaneAuthMessage() : formatMissingVikingAuthMessage());
 }
 
 export function buildSignedRequestHeaders(
-  config: Pick<ServiceConfig, 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
+  config: Pick<ServiceConfig, 'apiKey' | 'accessKeyId' | 'secretKey' | 'region' | 'service' | 'dataPlaneBaseUrl' | 'dataPlaneHost'>,
   method: SignedHttpMethod,
   url: URL,
   body?: string,
   initialHeaders?: Record<string, string>
 ): Record<string, string> {
+  if (config.apiKey) {
+    return buildApiKeyRequestHeaders(config.apiKey, initialHeaders);
+  }
+
   if (!config.accessKeyId || !config.secretKey) {
     throw new Error(formatMissingVikingAuthMessage());
   }
@@ -224,6 +232,14 @@ export function buildSignedRequestHeaders(
   });
 
   return headers;
+}
+
+export function buildApiKeyRequestHeaders(apiKey: string, initialHeaders?: Record<string, string>): Record<string, string> {
+  return {
+    ...createBaseHeaders(),
+    ...initialHeaders,
+    authorization: `Bearer ${apiKey}`
+  };
 }
 
 function createBaseHeaders(): Record<string, string> {

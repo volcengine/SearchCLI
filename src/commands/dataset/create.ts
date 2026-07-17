@@ -40,8 +40,8 @@ export default class DatasetCreate extends Command {
     'abnormal-image-policy': Flags.string({
       description: 'ProcessConfig.AbnormalImageDataProcessPolicy (e.g. drop|keep).'
     }),
-    'video-auto-delete': Flags.string({
-      description: 'ProcessConfig.VideoAutoDeletePolicy (e.g. on|off).'
+    'video-auto-delete': Flags.boolean({
+      description: 'ProcessConfig.VideoAutoDelete: when set, the backend auto-deletes source videos after processing.'
     }),
     'dry-run': Flags.boolean({
       description: 'Validate the request without persisting the dataset (DryRun=true).'
@@ -62,6 +62,7 @@ export default class DatasetCreate extends Command {
       dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
+      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

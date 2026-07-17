@@ -192,7 +192,7 @@ export async function runSearchTuneRunCommand(options: SearchTuneRunOptions): Pr
     timeoutMs: effectiveTimeoutMs,
     applicationId: options.applicationId,
     datasetId: context.datasetId,
-    sceneId: '',
+    sceneId: options.sceneId ?? '',
     defaultPageSize: effectiveTopK
   });
   const report = await runSearchTuning({
@@ -526,6 +526,7 @@ function toServiceConfigInput(options: SearchTuneServiceOptions): ServiceConfigI
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -539,6 +540,7 @@ function toRuntimeConfigInput(options: SearchTuneRunOptions) {
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     region: options.region,

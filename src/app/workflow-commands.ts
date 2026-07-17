@@ -532,6 +532,7 @@ function toServiceConfigInput(options: WorkflowServiceOptions): ServiceConfigInp
     baseUrl: options.baseUrl,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl,
     dataPlaneBaseUrl: options.dataPlaneBaseUrl,
+    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,

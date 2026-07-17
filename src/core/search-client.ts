@@ -68,7 +68,7 @@ export class VikingSearchClient {
   }
 
   private buildHeaders(urlString: string, body: string): Record<string, string> {
-    if (!this.config.accessKeyId || !this.config.secretKey) {
+    if (!this.config.apiKey && (!this.config.accessKeyId || !this.config.secretKey)) {
       throw new Error(formatMissingVikingAuthMessage());
     }
 

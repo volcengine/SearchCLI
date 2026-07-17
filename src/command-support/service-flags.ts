@@ -51,6 +51,9 @@ const connectionFlags = {
   'project-name': Flags.string({
     description: 'Viking project name. Defaults to VIKING_PROJECT_NAME or default.'
   }),
+  'api-key': Flags.string({
+    description: 'Viking runtime API key. Overrides VIKING_API_KEY.'
+  }),
   ak: Flags.string({
     description: 'Viking Access Key ID. Overrides auth store and VIKING_AK.'
   }),
@@ -85,6 +88,7 @@ export interface ServiceConnectionFlags {
   'control-plane-base-url'?: string;
   'data-plane-base-url'?: string;
   'project-name'?: string;
+  'api-key'?: string;
   ak?: string;
   sk?: string;
   region?: string;
@@ -97,6 +101,7 @@ export interface ServiceConnectionOptions {
   controlPlaneBaseUrl?: string;
   dataPlaneBaseUrl?: string;
   projectName?: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   region?: string;
@@ -112,6 +117,7 @@ export function extractServiceConnectionOptions(
     controlPlaneBaseUrl: flags['control-plane-base-url'],
     dataPlaneBaseUrl: flags['data-plane-base-url'],
     projectName: flags['project-name'],
+    apiKey: flags['api-key'],
     accessKeyId: flags.ak,
     secretKey: flags.sk,
     region: flags.region,

@@ -54,6 +54,7 @@ const cliConfigSchema = z.object({
   xTtBackend: z.string().min(1).optional(),
   environmentId: z.string().min(1).optional(),
   service: z.string().min(1).optional(),
+  apiKey: z.string().min(1).optional(),
   accessKeyId: z.string().min(1).optional(),
   secretKey: z.string().min(1).optional(),
   activeProfile: z.string().min(1).optional(),
@@ -88,11 +89,12 @@ export interface ResolvedCliDefaults {
   xTtBackend?: string;
   environmentId?: EnvironmentId;
   service: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   credentialStore: CredentialStoreMode;
   resolvedCredentialStoreMode: CredentialStoreBackend;
-  authSource: 'flag' | 'env' | 'secure-store' | 'none';
+  authSource: 'api-key' | 'flag' | 'env' | 'secure-store' | 'none';
   projectName: string;
   region: string;
   timeoutMs: number;
@@ -118,6 +120,7 @@ const configKeySpecs = {
   'x-tt-backend': { property: 'xTtBackend', type: 'string', secret: false, visible: false },
   'environment-id': { property: 'environmentId', type: 'string', secret: false },
   'project-name': { property: 'projectName', type: 'string', secret: false },
+  'api-key': { property: 'apiKey', type: 'string', secret: true },
   ak: { property: 'accessKeyId', type: 'string', secret: false, visible: false, managedBy: 'auth' },
   sk: { property: 'secretKey', type: 'string', secret: true, visible: false, managedBy: 'auth' },
   'credentials-store': { property: 'credentialStore', type: 'string', secret: false },
@@ -227,6 +230,7 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
   const stored = loadCliConfigSync(customPath);
   const envProfile = optionalEnvString(process.env.VIKING_PROFILE);
   const envCredentialStore = optionalEnvString(process.env.VIKING_CREDENTIALS_STORE);
+  const envApiKey = optionalEnvString(process.env.VIKING_API_KEY);
   const envAk = optionalEnvString(process.env.VIKING_AK);
   const envSk = optionalEnvString(process.env.VIKING_SK);
   const envLlmAk = optionalEnvString(process.env.VIKING_LLM_AK);
@@ -255,8 +259,12 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
   }
   const llmAccessKeyId = input.llmAccessKeyId ?? envLlmAk ?? stored.llmAccessKeyId;
   const llmApiKey = input.llmApiKey ?? envLlmApiKey ?? llmCredentialLookup.credentials?.apiKey ?? stored.llmApiKey;
+  const explicitAkSk = Boolean(input.accessKeyId || input.secretKey);
+  const apiKey = explicitAkSk ? undefined : input.apiKey ?? envApiKey ?? stored.apiKey;
   const authSource: ResolvedCliDefaults['authSource'] =
-    input.accessKeyId || input.secretKey
+    apiKey
+      ? 'api-key'
+      : input.accessKeyId || input.secretKey
       ? 'flag'
       : envAk || envSk
         ? 'env'
@@ -308,6 +316,7 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     xTtBackend: profileConfig.xTtBackend ?? stored.xTtBackend,
     environmentId: endpoints.envId,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
+    apiKey,
     accessKeyId:
       input.accessKeyId ??
       envAk ??

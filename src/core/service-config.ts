@@ -12,9 +12,10 @@ export interface ServiceConfig {
   dataPlaneHost?: string;
   xTtBackend?: string;
   service: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
-  authSource?: 'flag' | 'env' | 'secure-store' | 'none';
+  authSource?: 'api-key' | 'flag' | 'env' | 'secure-store' | 'none';
   projectName: string;
   region: string;
   timeoutMs: number;
@@ -28,6 +29,7 @@ export interface ServiceConfigInput {
   dataPlaneHost?: string;
   xTtBackend?: string;
   service?: string;
+  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   projectName?: string;
@@ -42,6 +44,7 @@ const serviceConfigSchema = z.object({
   dataPlaneHost: z.string().min(1).optional(),
   xTtBackend: z.string().min(1).optional(),
   service: z.string().min(1),
+  apiKey: z.string().optional(),
   accessKeyId: z.string().optional(),
   secretKey: z.string().optional(),
   projectName: z.string().min(1),
@@ -56,6 +59,7 @@ export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
     controlPlaneBaseUrl: input.controlPlaneBaseUrl,
     dataPlaneBaseUrl: input.dataPlaneBaseUrl,
     service: input.service,
+    apiKey: input.apiKey,
     accessKeyId: input.accessKeyId,
     secretKey: input.secretKey,
     projectName: input.projectName,
@@ -69,6 +73,7 @@ export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
     dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
     xTtBackend: input.xTtBackend ?? defaults.xTtBackend,
     service: defaults.service,
+    apiKey: defaults.apiKey,
     accessKeyId: defaults.accessKeyId,
     secretKey: defaults.secretKey,
     projectName: defaults.projectName,
@@ -77,7 +82,7 @@ export function resolveServiceConfig(input: ServiceConfigInput): ServiceConfig {
     debug: input.debug ?? false
   });
 
-  if (!resolved.accessKeyId || !resolved.secretKey) {
+  if (!resolved.apiKey && (!resolved.accessKeyId || !resolved.secretKey)) {
     throw new Error(formatMissingVikingAuthMessage());
   }
 
