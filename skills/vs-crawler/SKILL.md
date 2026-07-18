@@ -27,36 +27,32 @@ All crawled records MUST conform to this schema. Every record is a flat JSON obj
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | string | yes | Unique identifier. Use a SHA-256 hash of the canonical URL, or a source-native stable ID (e.g., arXiv ID, GitHub `owner/repo`). Must be deterministic so re-crawling the same URL produces the same ID. |
+| `id` | string | yes | Unique identifier. Use a source-native stable ID (e.g., arXiv ID, GitHub `owner/repo`, post slug) when available; otherwise derive a deterministic ID from title + author + published_at. Must be deterministic so re-crawling the same item produces the same ID. |
 | `title` | string | yes | Content title (headline, post title, paper title, repo name, doc page title). |
 | `summary` | string | yes | Short abstract or description (100-500 characters recommended). |
-| `content` | string | yes | Full text body with HTML stripped to plain text. For GitHub repos, concatenate README content. |
+| `content` | string | yes | Full text body with HTML stripped to plain text. For GitHub repos, concatenate README content. For PDF/DOC documents, extract the text content directly into this field. |
 | `category` | string | yes | One of: `news`, `blog`, `paper`, `github`, `docs`, `other`. |
-| `source` | string | yes | Canonical URL of the content (source link). |
-| `site` | string | no | Human-readable source site name, e.g. `"Hacker News"`, `"arXiv"`, `"Viking Docs"`. |
+| `source` | string | yes | Human-readable source name, e.g. `"Hacker News"`, `"arXiv"`, `"Viking Docs"`. |
 | `author` | string | no | Author name(s); multiple authors separated by commas. |
 | `published_at` | string | no | ISO 8601 datetime, e.g. `"2026-07-16T10:30:00Z"`. Use crawl time if unavailable. |
 | `tags` | array\<string\> | no | Tags, keywords, or topics. |
 | `language` | string | no | ISO 639-1 code: `"en"`, `"zh"`, `"ja"`, etc. |
-| `image_url` | string | no | Cover image or thumbnail URL. |
-| `metadata` | object | no | Flexible source-specific key-value data (stars, citations, venue, read_time, etc.). Keep it flat. |
+| `metadata` | object | no | Flexible source-specific key-value data (stars, citations, venue, read_time, etc.). Keep it flat. Do NOT store URLs in metadata. |
 
 ### Example Record
 
 ```json
 {
-  "id": "sha256:abc123...",
+  "id": "viking-blog-introducing-viking-ai-search",
   "title": "Introducing Viking AI Search",
   "summary": "Viking AI Search is a new generation of hybrid search engine combining BM25 and vector search...",
   "content": "Full article text with HTML removed and paragraphs separated by newlines...",
   "category": "blog",
-  "source": "https://example.com/blog/introducing-viking",
-  "site": "Viking Blog",
+  "source": "Viking Blog",
   "author": "Jane Doe",
   "published_at": "2026-07-15T08:00:00Z",
   "tags": ["search", "vector database", "hybrid search"],
   "language": "en",
-  "image_url": "https://example.com/images/cover.jpg",
   "metadata": { "read_time": "8 min" }
 }
 ```
@@ -92,9 +88,11 @@ Run in strict order.
    - For scheduled mode: support incremental crawling — track the last crawl cursor (most recent `published_at` or last seen item IDs) in `/tmp/viking/crawler/<job-name>/state.json` so subsequent runs only fetch new content.
    - Deduplicate by `id` within each run and against previous state.
    - Strip HTML to plain text; never include raw HTML in `content`.
+   - When encountering PDF, DOC, or other document links, download the document and extract its text content directly into the `content` field. Use available libraries (e.g. `PyPDF2`/`pypdf` for PDF, `python-docx` for DOCX, `beautifulsoup4` for HTML) to extract readable text. Do not store document links in records; put the extracted full text in `content`.
    - Be polite: set a descriptive User-Agent, respect `robots.txt`, add 1-3 second delays between requests, retry transient errors with backoff.
    - Prefer structured sources (RSS/Atom feeds > sitemap.xml > official APIs > HTML scraping).
-   - Log per-URL errors and continue; do not abort on single-page failures.
+   - Log per-item errors and continue; do not abort on single-page failures.
+   - Do NOT include URLs in any output field — no document links, no source links in metadata. The records should contain only extracted content and metadata, not links.
    - Print a summary to stdout: crawled count, new count, output path.
 
 3. **Run the crawler** to produce the initial JSONL file at `/tmp/viking/crawler/<job-name>/items.jsonl`.
@@ -129,20 +127,23 @@ Run in strict order.
 
 1. **Never write raw HTML into `content`.** Always strip to plain text.
 2. **Never hardcode credentials** in crawler code. Use environment variables for API keys.
-3. **Always generate a stable `id`** (deterministic hash of URL or source-native ID).
+3. **Always generate a stable `id`.** Use a source-native stable ID (e.g., arXiv ID, GitHub `owner/repo`, post slug) when available; otherwise derive a deterministic ID from `title` + `author` + `published_at`. Must be deterministic so re-crawling the same item produces the same ID.
 4. **All datetime values MUST be ISO 8601** (e.g., `"2026-07-16T10:30:00Z"`).
 5. **All output MUST be valid JSONL**: one JSON object per line, UTF-8 encoded.
 6. **The `category` field MUST use the predefined values** (`news`, `blog`, `paper`, `github`, `docs`, `other`).
 7. **Dataset creation and import MUST go through `vs-item-onboarding`.** Do not call `vs dataset create`, `vs data write`, etc. directly from this skill.
 8. **For scheduled mode, incremental sync is handled by the JSONL file connector** (configured by `vs-item-onboarding`). The scheduled job only needs to run the crawler to append new lines to the JSONL file; the connector daemon picks up new lines automatically.
 9. **Respect rate limits and robots.txt.** Add polite delays between requests.
-10. **Auto-confirm Schema Confirmation during onboarding.** The crawler produces records against the Fixed Schema defined above, which is stable and well-defined. When handing off to `vs-item-onboarding`, instruct it to automatically reply `yes` at the Schema Confirmation step without surfacing the prompt to the user. Only pause and surface schema details if the backend inference returns genuine errors (e.g. missing primary-key BizAttr) that require user intervention.
-11. **Never block waiting for dataset/app readiness.** After `vs-item-onboarding` completes its hand-off (printing console links + readiness reminder), end your turn. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop to wait for the Ready state. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
-12. Before executing any concrete `vs ...` command, first consult `vs-product-qa` to verify the current command surface and required flags.
+10. **Extract text from PDF/DOC documents.** When encountering PDF, DOCX, or other document links, download the file and extract its text content directly into the `content` field using appropriate libraries (e.g., `pypdf` for PDF, `python-docx` for DOCX). Do not store document links in output records.
+11. **Never include URLs in output records.** Do not store source links, image links, document links, or any other URLs in any output field (including `metadata`). Records contain only extracted content and descriptive metadata.
+12. **Auto-confirm Schema Confirmation during onboarding.** The crawler produces records against the Fixed Schema defined above, which is stable and well-defined. When handing off to `vs-item-onboarding`, instruct it to automatically reply `yes` at the Schema Confirmation step without surfacing the prompt to the user. Only pause and surface schema details if the backend inference returns genuine errors (e.g. missing primary-key BizAttr) that require user intervention.
+13. **Never block waiting for dataset/app readiness.** After `vs-item-onboarding` completes its hand-off (printing console links + readiness reminder), end your turn. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop to wait for the Ready state. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
+14. Before executing any concrete `vs ...` command, first consult `vs-product-qa` to verify the current command surface and required flags.
 
 ## Recovery Hints
 
-- Crawler returns zero records → verify target URL/feed accessibility, check for rate limiting (HTTP 429), review error logs.
-- Duplicate records appear → verify `id` generation is deterministic (same URL always produces same hash).
+- Crawler returns zero records → verify target site/feed accessibility, check for rate limiting (HTTP 429), review error logs.
+- Duplicate records appear → verify `id` generation is deterministic (same item always produces the same ID).
 - Content extraction produces garbled text → ensure HTTP response encoding is correctly detected.
+- PDF text extraction fails or is garbled → try a different PDF library (e.g., switch from `pypdf` to `pdfplumber`) or fall back to extracting abstract/metadata only.
 - Sync is not picking up new lines → verify the JSONL connector daemon is running via `vs connector status --job <job>`.
