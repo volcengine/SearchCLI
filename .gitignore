@@ -3,12 +3,12 @@ dist/
 release/
 .viking/
 .pkg-cache/
+templates/project-web/apps/api/src/env.ts
 
 # macOS metadata
 .DS_Store
 **/.DS_Store
 tmp*/
-tmp-acceptance/
 
 # Trae agent workspace
 .trae/

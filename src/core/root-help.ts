@@ -1,42 +1,50 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-import { renderHelpLines, type HelpLine } from './help-utils';
+import { renderHelpLines, type HelpLine } from "./help-utils";
 
 const CORE_COMMANDS: HelpLine[] = [
-  { text: 'skill              Manage installable Viking skills' },
-  { text: 'auth               Manage Viking credentials' },
-  { text: 'llm                Manage LLM credentials for tuning' },
-  { text: 'doctor             Check auth, config, and local dependencies' }
+  { text: "skill              Manage installable Viking skills" },
+  { text: "auth               Manage Viking credentials" },
+  { text: "llm                Manage LLM credentials for tuning" },
+  { text: "doctor             Check auth, config, and local dependencies" },
+  { text: "project            Create and deploy full-stack web projects" },
 ];
 
 const PRODUCT_COMMANDS: HelpLine[] = [
-  { text: 'dataset            Onboard data and manage datasets (V2 backend-driven schema inference; primary onboarding entry)' },
-  { text: 'app                Manage applications, activation, and readiness' },
-  { text: 'data               Write and inspect dataset items directly' },
-  { text: 'connector          Export source snapshots to JSONL and run incremental sync into datasets' },
-  { text: 'search             Run search and manage search scenes' },
-  { text: 'chat               Run conversational search' },
-  { text: 'recommend          Run recommend and manage scenes and rules' }
+  {
+    text: "dataset            Onboard data and manage datasets (V2 backend-driven schema inference; primary onboarding entry)",
+  },
+  { text: "app                Manage applications, activation, and readiness" },
+  { text: "data               Write and inspect dataset items directly" },
+  {
+    text: "connector          Export source snapshots to JSONL and run incremental sync into datasets",
+  },
+  { text: "search             Run search and manage search scenes" },
+  { text: "chat               Run conversational search" },
+  { text: "recommend          Run recommend and manage scenes and rules" },
 ];
 
 const ADVANCED_COMMANDS: HelpLine[] = [
-  { text: 'version            Print the current CLI version' }
+  { text: "version            Print the current CLI version" },
 ];
 
 export function printRootHelp(): void {
-  const coreCommands = renderHelpLines(CORE_COMMANDS, false).join('\n  ');
-  const productCommands = renderHelpLines(PRODUCT_COMMANDS, false).join('\n  ');
-  const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join('\n  ');
+  const coreCommands = renderHelpLines(CORE_COMMANDS, false).join("\n  ");
+  const productCommands = renderHelpLines(PRODUCT_COMMANDS, false).join("\n  ");
+  const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join(
+    "\n  ",
+  );
   const moreHelpLines = [
-    'vs <command> --help',
-    'vs dataset --help',
-    'vs app --help',
-    'vs item --help',
-    'vs connector --help',
-    'vs skill --help',
-    'vs auth --help',
-    'vs llm --help'
+    "vs <command> --help",
+    "vs dataset --help",
+    "vs app --help",
+    "vs item --help",
+    "vs connector --help",
+    "vs project --help",
+    "vs skill --help",
+    "vs auth --help",
+    "vs llm --help",
   ];
 
   console.log(`SearchCLI
@@ -75,6 +83,10 @@ QUICK START
     vs search tune run --application-id <app> --resume-run-id <run-id>
     vs search tune apply --application-id <app> --run-id <run-id> --dry-run
 
+  Create and deploy a starter web project
+    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>
+    vs project deploy --provider cloudflare --project-dir ./demo
+
 CORE
   ${coreCommands}
 
@@ -85,5 +97,5 @@ ADVANCED
   ${advancedCommands}
 
 MORE HELP
-  ${moreHelpLines.join('\n  ')}`);
+  ${moreHelpLines.join("\n  ")}`);
 }

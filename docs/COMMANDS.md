@@ -117,6 +117,15 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 *   `vs data delete --dataset-id <id> --id <item-id>`
     *   Parameters: `[service flags]`
 
+### `project` - Web Project Creation and Deployment
+*   `vs project create [project-name] --app-id <id> --features <search,recommend,chat> [--profile <name>] [--search-scene-id <id> --search-dataset-id <id>] [--rec-scene-id <id>]`
+    *   Description: create a web project for an existing app with one or more explicit features. Search requires both search IDs, recommendation requires a recommend scene ID, and chat needs no additional resource ID. The command reuses `VIKING_API_KEY` when configured, otherwise AK/SK from the selected or active `vs auth` profile.
+    *   Defaults: `project-name` defaults to `viking-web-app` and auto-increments when needed
+*   `vs project deploy`
+    *   Usage: `vs project deploy --provider <provider> [--project-dir <dir>] [--dry-run] [output flags]`
+    *   Description: deploy a generated project and print the URL
+    *   Providers: `cloudflare`
+
 ### `search` - Search Runtime and Scenes
 *   `vs search run --application-id <id> --scene-id <id> --query <text>`
     *   Usage: `vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]`

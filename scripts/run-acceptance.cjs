@@ -78,6 +78,7 @@ async function runCoreSuite() {
   await runTest('root-help', testRootHelp);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
+  await runTest('project-skill-workflow', testProjectSkillWorkflow);
   await runTest('validate-skills-space-path', testValidateSkillsSpacePath);
   await runTest('search-tune-help', testSearchTuneHelp);
   await runTest('search-run-requires-scene-help', testSearchRunRequiresSceneHelp);
@@ -93,6 +94,10 @@ async function runCoreSuite() {
   await runTest('app-list-help', testAppListHelp);
   await runTest('dataset-list-help', testDatasetListHelp);
   await runTest('data-delete-mock', testDataDeleteMock);
+  await runTest('project-help', testProjectHelp);
+  await runTest('project-create', testProjectCreate);
+  await runTest('project-deploy-rejects-uncreated', testProjectDeployRejectsUncreated);
+  await runTest('project-deploy-fake', testProjectDeployFake);
   await runTest('config-summary-help', testConfigSummaryHelp);
   await runTest('item-profile', testItemProfile);
   await runTest('item-plan', testItemPlan);
@@ -197,7 +202,7 @@ async function runCli(argv, options = {}) {
   };
 
   return execFileAsync(file, [...extraArgs, ...argv], {
-    cwd: root,
+    cwd: options.cwd ?? root,
     env,
     maxBuffer: 16 * 1024 * 1024
   });
@@ -225,6 +230,7 @@ async function testRootHelp() {
   const { stdout } = await runCli(['--help']);
   assert.match(stdout, /SearchCLI/);
   assert.match(stdout, /\bitem\b/);
+  assert.match(stdout, /\bproject\b/);
   assert.match(stdout, /\bllm\b/);
   assert.doesNotMatch(stdout, /\bchat-mode\b/);
   assert.doesNotMatch(stdout, /\bchat-skill\b/);
@@ -240,6 +246,7 @@ async function testSkillList() {
     'vs-chat',
     'vs-item-onboarding',
     'vs-product-qa',
+    'vs-project',
     'vs-recommend',
     'vs-search',
     'vs-search-tuning',
@@ -257,6 +264,30 @@ async function testSkillShow() {
   assert.equal(payload.name, 'vs-item-onboarding');
   assert.match(payload.description, /item-level onboarding/i);
   return `${command.prefix} skill show --name vs-item-onboarding --json`;
+}
+
+async function testProjectSkillWorkflow() {
+  const { stdout } = await runCli(['skill', 'show', '--name', 'vs-project', '--json']);
+  const payload = JSON.parse(stdout);
+  const workflow = JSON.stringify(payload.workflow ?? '');
+  assert.equal(payload.name, 'vs-project');
+  assert.match(workflow, /select one or more features from `search`, `recommend`, and `chat`/i);
+  assert.match(workflow, /vs app list --full --json/i);
+  assert.match(workflow, /Every supported feature requires at least one bound dataset/i);
+  assert.match(workflow, /bound user-event dataset/i);
+  assert.match(workflow, /regardless of dataset state or application state/i);
+  assert.match(workflow, /vs dataset list --application-id <app-id> --json/i);
+  assert.doesNotMatch(workflow, /vs dataset list[^`]*--type item/i);
+  assert.match(workflow, /--features <comma-separated-features>/i);
+  assert.match(workflow, /npm install/i);
+  assert.match(workflow, /npm run dev/i);
+  assert.match(workflow, /persistent terminal or background session/i);
+  assert.match(workflow, /Vite's actual `Local:` output/i);
+  assert.match(workflow, /curl -fsS[\s\S]*\/api\/config/i);
+  assert.match(workflow, /development service is still running/i);
+  assert.ok(workflow.indexOf('select one or more features') < workflow.indexOf('vs auth status --json'));
+  assert.ok(workflow.indexOf('then run it') < workflow.indexOf('Read the generated `projectDir`'));
+  return `${command.prefix} skill show --name vs-project --json`;
 }
 
 async function testValidateSkillsSpacePath() {
@@ -338,6 +369,613 @@ async function testDataDeleteMock() {
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+}
+
+async function testProjectHelp() {
+  const { stdout } = await runCli(['project', '--help']);
+  assert.match(stdout, /project create \[project-name\]/i);
+  assert.match(stdout, /--features <search,recommend,chat>/i);
+  assert.match(stdout, /--profile <name>/i);
+  assert.match(stdout, /VIKING_API_KEY/i);
+  assert.match(stdout, /selected or active auth profile/i);
+  assert.doesNotMatch(stdout, /--api-key|--ak|--sk|--region/i);
+  assert.match(stdout, /project deploy --provider <provider> \[--project-dir <dir>\]/i);
+  assert.doesNotMatch(stdout, /skip-install/i);
+  return `${command.prefix} project --help`;
+}
+
+async function testProjectCreate() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-project-create-'));
+  const apiKeyEnv = {
+    ...emptyAuthEnv(path.join(workspace, 'api-key-home')),
+    VIKING_API_KEY: 'secret-1',
+    VIKING_CREDENTIALS_STORE: 'file'
+  };
+  try {
+    const { stdout } = await runCli([
+      'project',
+      'create',
+      'demo-app',
+      '--app-id',
+      'app-1',
+      '--features',
+      'CHAT,search,recommend,search',
+      '--search-scene-id',
+      'search-1',
+      '--search-dataset-id',
+      'dataset-1',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], { cwd: workspace, env: apiKeyEnv });
+    const payload = JSON.parse(stdout);
+    const projectDir = path.join(workspace, 'demo-app');
+    assert.equal(payload.ok, true);
+    assert.equal(fs.realpathSync(payload.result.projectDir), fs.realpathSync(projectDir));
+    assert.equal(payload.result.deploymentName, 'demo-app');
+    assert.deepEqual(payload.result.features, ['search', 'recommend', 'chat']);
+    assert.equal(payload.result.nextSteps[2], 'npm run dev');
+    assert.equal(payload.result.authMode, 'api-key');
+    assert.equal(payload.result.authSource, 'api-key');
+    assert.equal(payload.result.authProfile, 'default');
+    assert.equal(payload.result.region, 'cn-beijing');
+    assert.doesNotMatch(stdout, /secret-1/);
+    assert.equal(Object.hasOwn(payload.result, 'workerName'), false);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps', 'web', 'src', 'App.tsx')), true);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps', 'api', 'src', 'index.ts')), true);
+
+    const marker = fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim();
+    assert.equal(marker, 'templateVersion=1.0.0');
+
+    const configSource = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'src', 'env.ts'), 'utf8');
+    const appSource = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'src', 'app.ts'), 'utf8');
+    const webSource = fs.readFileSync(path.join(projectDir, 'apps', 'web', 'src', 'App.tsx'), 'utf8');
+    assert.match(configSource, /app-1/);
+    assert.match(configSource, /secret-1/);
+    assert.match(configSource, /VIKING_API_KEY/);
+    assert.match(configSource, /apiKey/);
+    assert.match(configSource, /authMode: "api-key"/);
+    assert.match(configSource, /optionalEnv/);
+    assert.match(configSource, /VIKING_AK/);
+    assert.match(configSource, /secretAccessKey/);
+    assert.match(configSource, /VIKING_REGION/);
+    assert.match(configSource, /features: "search,recommend,chat"\.split\(","\)/);
+    assert.doesNotMatch(configSource, /publicApiEnv/);
+    assert.match(configSource, /search-1/);
+    assert.match(configSource, /apiEnv/);
+    assert.doesNotMatch(configSource, /\{\{APP_ID\}\}/);
+    assert.doesNotMatch(configSource, /\{\{AUTH_MODE\}\}/);
+    assert.doesNotMatch(configSource, /\{\{API_KEY\}\}/);
+    assert.doesNotMatch(configSource, /\{\{ACCESS_KEY_ID\}\}/);
+    assert.doesNotMatch(configSource, /\{\{SECRET_ACCESS_KEY\}\}/);
+    assert.doesNotMatch(configSource, /\{\{REGION\}\}/);
+    assert.match(appSource, /createSearchClient/);
+    assert.match(appSource, /accessKeyId/);
+    assert.match(appSource, /secretAccessKey/);
+    assert.doesNotMatch(appSource, /hasRuntime/);
+    assert.doesNotMatch(appSource, /Set either VIKING_API_KEY/);
+    assert.match(appSource, /response\.json\(result\)/);
+    assert.match(appSource, /\/api\/config/);
+    assert.match(appSource, /features/);
+    assert.match(appSource, /requireFeature\("chat"\)/);
+    assert.match(appSource, /requireFeature\("search"\)/);
+    assert.match(appSource, /requireFeature\("recommend"\)/);
+    assert.match(appSource, /status\(404\)/);
+    assert.doesNotMatch(appSource, /response\.on\("close"/);
+    assert.doesNotMatch(appSource, /\/api\/health/);
+    assert.doesNotMatch(appSource, /\/api\/hello/);
+    assert.doesNotMatch(appSource, /Missing userId/);
+    assert.match(webSource, /search_results/);
+    assert.match(webSource, /rec_results/);
+    assert.match(webSource, /receivedDone/);
+    assert.match(webSource, /type FeatureId = "search" \| "recommend" \| "chat"/);
+    assert.match(webSource, /features\.includes\("recommend"\)/);
+    assert.doesNotMatch(webSource, /CapabilityNotice|value="rec"/);
+    assert.match(webSource, /对话响应未完整返回/);
+    assert.doesNotMatch(webSource, /aria-|role=|getResultTitle|未配置场景/);
+    assert.doesNotMatch(webSource, /Random user|createRandomUserId|userId/);
+    assert.doesNotMatch(webSource, /@viking-project\/api-env/);
+    assert.doesNotMatch(webSource, /Cloudflare deployment/);
+
+    const packageSource = fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8');
+    const apiPackageSource = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'package.json'), 'utf8');
+    const apiIndexSource = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'src', 'index.ts'), 'utf8');
+    const wrangler = fs.readFileSync(path.join(projectDir, 'wrangler.jsonc'), 'utf8');
+    const cloudflareEntry = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'src', 'cloudflare.ts'), 'utf8');
+    const gitignoreSource = fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8');
+    const npmrcSource = fs.readFileSync(path.join(projectDir, '.npmrc'), 'utf8');
+    const lockfileSource = fs.readFileSync(path.join(projectDir, 'package-lock.json'), 'utf8');
+    assert.doesNotMatch(packageSource, /wrangler/);
+    assert.doesNotMatch(packageSource, /"deploy"/);
+    assert.match(apiPackageSource, /@volcengine\/search-node/);
+    assert.match(apiPackageSource, /"\^0\.7\.0"/);
+    assert.doesNotMatch(apiPackageSource, /"start"/);
+    assert.match(npmrcSource, /@volcengine:registry=https:\/\/bnpm\.byted\.org\//);
+    assert.match(lockfileSource, /"lockfileVersion": 3/);
+    assert.doesNotMatch(apiIndexSource, /cloudflare:node/);
+    assert.match(wrangler, /"main": "\.\/apps\/api\/src\/cloudflare\.ts"/);
+    assert.match(wrangler, /"nodejs_compat"/);
+    assert.match(wrangler, /"\/api\/\*"/);
+    assert.match(cloudflareEntry, /cloudflare:node/);
+    assert.match(gitignoreSource, /\.wrangler/);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps', 'api', 'src', 'app.ts')), true);
+
+    const chatOnlyCreate = await runCli([
+      'project',
+      'create',
+      'chat-only-demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'chat',
+      '--json'
+    ], { cwd: workspace, env: apiKeyEnv });
+    const chatOnlyPayload = JSON.parse(chatOnlyCreate.stdout);
+    const chatOnlyConfig = fs.readFileSync(path.join(workspace, 'chat-only-demo', 'apps', 'api', 'src', 'env.ts'), 'utf8');
+    assert.deepEqual(chatOnlyPayload.result.features, ['chat']);
+    assert.match(chatOnlyConfig, /features: "chat"\.split\(","\)/);
+    assert.match(chatOnlyConfig, /searchSceneId: process\.env\.VIKING_SEARCH_SCENE_ID \?\? ""/);
+    assert.match(chatOnlyConfig, /recSceneId: process\.env\.VIKING_REC_SCENE_ID \?\? ""/);
+
+    const defaultProjectDir = path.join(workspace, 'viking-web-app');
+    fs.mkdirSync(defaultProjectDir, { recursive: true });
+    fs.writeFileSync(path.join(defaultProjectDir, 'existing.txt'), 'keep\n');
+    const defaultCreate = await runCli([
+      'project',
+      'create',
+      '--app-id',
+      'app-1',
+      '--features',
+      'recommend',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], { cwd: workspace, env: apiKeyEnv });
+    const defaultPayload = JSON.parse(defaultCreate.stdout);
+    const incrementedProjectDir = path.join(workspace, 'viking-web-app2');
+    assert.equal(defaultPayload.result.projectName, 'viking-web-app2');
+    assert.equal(defaultPayload.result.deploymentName, 'viking-web-app2');
+    assert.equal(fs.realpathSync(defaultPayload.result.projectDir), fs.realpathSync(incrementedProjectDir));
+    assert.equal(fs.existsSync(path.join(incrementedProjectDir, 'apps', 'web', 'src', 'App.tsx')), true);
+
+    await runCli([
+      'project',
+      'create',
+      'both-demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'search,recommend',
+      '--search-scene-id',
+      'search-1',
+      '--search-dataset-id',
+      'dataset-1',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], { cwd: workspace, env: apiKeyEnv });
+
+    const envAkCreate = await runCli([
+      'project',
+      'create',
+      'env-auth-demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'recommend',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], {
+      cwd: workspace,
+      env: {
+        ...emptyAuthEnv(path.join(workspace, 'env-auth-home')),
+        VIKING_AK: 'env-ak',
+        VIKING_SK: 'env-sk',
+        VIKING_REGION: 'ap-southeast-1',
+        VIKING_CREDENTIALS_STORE: 'file'
+      }
+    });
+    const envAkPayload = JSON.parse(envAkCreate.stdout);
+    const envAkConfig = fs.readFileSync(path.join(workspace, 'env-auth-demo', 'apps', 'api', 'src', 'env.ts'), 'utf8');
+    assert.equal(envAkPayload.result.authMode, 'ak-sk');
+    assert.equal(envAkPayload.result.authSource, 'env');
+    assert.equal(envAkPayload.result.region, 'ap-southeast-1');
+    assert.match(envAkConfig, /env-ak/);
+    assert.match(envAkConfig, /env-sk/);
+
+    const homeDir = path.join(workspace, 'home');
+    fs.mkdirSync(homeDir, { recursive: true });
+    await runCli([
+      'auth',
+      'login',
+      '--ak',
+      'stored-ak',
+      '--sk',
+      'stored-sk',
+      '--profile',
+      'project-create',
+      '--store',
+      'file',
+      '--no-prompt',
+      '--json'
+    ], { cwd: workspace, env: emptyAuthEnv(homeDir) });
+    const storedAuthCreate = await runCli([
+      'project',
+      'create',
+      'stored-auth-demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'recommend',
+      '--profile',
+      'project-create',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], {
+      cwd: workspace,
+      env: {
+        ...emptyAuthEnv(homeDir),
+        VIKING_CREDENTIALS_STORE: 'file'
+      }
+    });
+    const storedAuthPayload = JSON.parse(storedAuthCreate.stdout);
+    const storedAuthConfig = fs.readFileSync(path.join(workspace, 'stored-auth-demo', 'apps', 'api', 'src', 'env.ts'), 'utf8');
+    assert.equal(storedAuthPayload.result.authMode, 'ak-sk');
+    assert.equal(storedAuthPayload.result.authSource, 'secure-store');
+    assert.equal(storedAuthPayload.result.authProfile, 'project-create');
+    assert.match(storedAuthConfig, /stored-ak/);
+    assert.match(storedAuthConfig, /stored-sk/);
+
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'create',
+        'bad-demo',
+        '--app-id',
+        'app-1',
+        '--features',
+        'search',
+        '--search-scene-id',
+        'search-1',
+        '--json'
+      ], { cwd: workspace, env: apiKeyEnv }),
+      /must be provided together/
+    );
+    for (const testCase of [
+      {
+        name: 'missing-features',
+        args: [],
+        expected: /Missing required flag: --features[\s\S]*--features search[\s\S]*--features search,recommend/i
+      },
+      {
+        name: 'empty-features',
+        args: ['--features', ''],
+        expected: /Missing required flag: --features[\s\S]*--features chat[\s\S]*--features search,recommend,chat/i
+      },
+      {
+        name: 'unknown-feature',
+        args: ['--features', 'chat,unknown'],
+        expected: /Unsupported project feature: unknown/i
+      },
+      {
+        name: 'search-without-resources',
+        args: ['--features', 'search'],
+        expected: /Feature "search" requires --search-scene-id and --search-dataset-id/i
+      },
+      {
+        name: 'recommend-without-scene',
+        args: ['--features', 'recommend'],
+        expected: /Feature "recommend" requires --rec-scene-id/i
+      },
+      {
+        name: 'chat-with-search-resources',
+        args: [
+          '--features',
+          'chat',
+          '--search-scene-id',
+          'search-1',
+          '--search-dataset-id',
+          'dataset-1'
+        ],
+        expected: /search-scene-id and --search-dataset-id require "search" in --features/i
+      },
+      {
+        name: 'chat-with-recommend-scene',
+        args: ['--features', 'chat', '--rec-scene-id', 'rec-1'],
+        expected: /rec-scene-id requires "recommend" in --features/i
+      }
+    ]) {
+      await assert.rejects(
+        () => runCli([
+          'project',
+          'create',
+          testCase.name,
+          '--app-id',
+          'app-1',
+          ...testCase.args,
+          '--json'
+        ], { cwd: workspace, env: apiKeyEnv }),
+        testCase.expected
+      );
+    }
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'create',
+        'missing-auth-demo',
+        '--app-id',
+        'app-1',
+        '--features',
+        'recommend',
+        '--rec-scene-id',
+        'rec-1',
+        '--json'
+      ], {
+        cwd: workspace,
+        env: {
+          ...emptyAuthEnv(path.join(workspace, 'missing-home')),
+          VIKING_CREDENTIALS_STORE: 'file'
+        }
+      }),
+      /Missing project auth/
+    );
+    for (const [flag, value] of [
+      ['--api-key', 'legacy-api-key'],
+      ['--ak', 'legacy-ak'],
+      ['--sk', 'legacy-sk'],
+      ['--region', 'ap-southeast-1']
+    ]) {
+      await assert.rejects(
+        () => runCli([
+          'project',
+          'create',
+          `legacy-${flag.slice(2)}-demo`,
+          '--app-id',
+          'app-1',
+          '--features',
+          'recommend',
+          flag,
+          value,
+          '--rec-scene-id',
+          'rec-1',
+          '--json'
+        ], { cwd: workspace, env: apiKeyEnv }),
+        error => {
+          assert.match(error.message, new RegExp(flag.slice(2), 'i'));
+          return true;
+        }
+      );
+    }
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'create',
+        'demo-app',
+        '--app-id',
+        'app-1',
+        '--features',
+        'recommend',
+        '--rec-scene-id',
+        'rec-1',
+        '--json'
+      ], { cwd: workspace, env: apiKeyEnv }),
+      /Project directory already exists and is not empty/
+    );
+    return `${command.prefix} project create demo-app --app-id app-1 --features search,recommend,chat --json`;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+async function testProjectDeployRejectsUncreated() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-project-reject-'));
+  try {
+    const projectDir = path.join(workspace, 'plain-project');
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, 'package.json'), '{"private":true}\n');
+
+    await assert.rejects(
+      () => runCli(['project', 'deploy', '--provider', 'cloudflare', '--project-dir', projectDir, '--json']),
+      /Only projects created by "vs project create" can be deployed/
+    );
+    return `${command.prefix} project deploy rejects plain project`;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+async function testProjectDeployFake() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-project-deploy-'));
+  try {
+    await runCli([
+      'project',
+      'create',
+      'deploy-demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'recommend',
+      '--rec-scene-id',
+      'rec-1',
+      '--json'
+    ], {
+      cwd: workspace,
+      env: {
+        ...emptyAuthEnv(path.join(workspace, 'api-key-home')),
+        VIKING_API_KEY: 'secret-1',
+        VIKING_CREDENTIALS_STORE: 'file'
+      }
+    });
+
+    const fakeBin = path.join(workspace, 'fake-bin');
+    const commandLog = path.join(workspace, 'commands.log');
+    fs.mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(path.join(fakeBin, 'npm'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+fs.appendFileSync(process.env.VIKING_FAKE_COMMAND_LOG, ['npm', ...process.argv.slice(2)].join(' ') + '\\n');
+if (process.argv[2] === 'install') fs.mkdirSync(path.join(process.cwd(), 'node_modules'), { recursive: true });
+`);
+    writeExecutable(path.join(fakeBin, 'npx'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.VIKING_FAKE_COMMAND_LOG, ['npx', ...args].join(' ') + '\\n');
+if (args.includes('whoami')) {
+  if (process.env.VIKING_FAKE_WRANGLER_WHOAMI_LOGGED_OUT_ZERO === '1') {
+    console.log('You are not authenticated. Please run \`wrangler login\`.');
+    process.exit(0);
+  }
+  if (process.env.VIKING_FAKE_WRANGLER_WHOAMI_FAIL === '1') {
+    console.error('Not logged in. Run wrangler login.');
+    process.exit(1);
+  }
+  console.log('Logged in as test@example.com');
+  process.exit(0);
+}
+console.log('Deployed deploy-demo');
+console.log('https://deploy-demo.example.workers.dev');
+console.error('Version Preview URL: https://abc-deploy-demo.example.workers.dev');
+`);
+
+    const projectDir = path.join(workspace, 'deploy-demo');
+
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'deploy',
+        '--project-dir',
+        projectDir,
+        '--dry-run',
+        '--json'
+      ], {
+        env: {
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+          VIKING_FAKE_COMMAND_LOG: commandLog
+        }
+      }),
+      /Missing required flag: --provider[\s\S]*\nExample: `?vs project deploy --provider cloudflare`?/
+    );
+    assert.equal(fs.existsSync(commandLog), false);
+
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'deploy',
+        '--project-dir',
+        projectDir,
+        '--provider',
+        'unsupported',
+        '--dry-run',
+        '--json'
+      ], {
+        env: {
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+          VIKING_FAKE_COMMAND_LOG: commandLog
+        }
+      }),
+      /Unsupported deployment provider: unsupported/
+    );
+    assert.equal(fs.existsSync(commandLog), false);
+
+    const { stdout } = await runCli([
+      'project',
+      'deploy',
+      '--project-dir',
+      projectDir,
+      '--provider',
+      'cloudflare',
+      '--dry-run',
+      '--json'
+    ], {
+      env: {
+        PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+        VIKING_FAKE_COMMAND_LOG: commandLog
+      }
+    });
+
+    assert.equal(stdout.trim(), '🚀 Deployment ready:\nhttps://deploy-demo.example.workers.dev');
+    assert.deepEqual(
+      fs.readFileSync(commandLog, 'utf8').trim().split('\n'),
+      ['npm install', 'npm run build', 'npx --yes wrangler whoami', 'npx --yes wrangler deploy --dry-run']
+    );
+
+    fs.writeFileSync(commandLog, '');
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'deploy',
+        '--project-dir',
+        projectDir,
+        '--provider',
+        'cloudflare',
+        '--dry-run',
+        '--json'
+      ], {
+        env: {
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+          VIKING_FAKE_COMMAND_LOG: commandLog,
+          VIKING_FAKE_WRANGLER_WHOAMI_FAIL: '1'
+        }
+      }),
+      error => {
+        assert.match(error.message, /Cloudflare Wrangler is not logged in[\s\S]*npx wrangler login/);
+        assert.doesNotMatch(error.message.toLowerCase(), /api[_\s-]?token/);
+        return true;
+      }
+    );
+    assert.deepEqual(
+      fs.readFileSync(commandLog, 'utf8').trim().split('\n'),
+      ['npm run build', 'npx --yes wrangler whoami']
+    );
+
+    fs.writeFileSync(commandLog, '');
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'deploy',
+        '--project-dir',
+        projectDir,
+        '--provider',
+        'cloudflare',
+        '--dry-run',
+        '--json'
+      ], {
+        env: {
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+          VIKING_FAKE_COMMAND_LOG: commandLog,
+          VIKING_FAKE_WRANGLER_WHOAMI_LOGGED_OUT_ZERO: '1'
+        }
+      }),
+      error => {
+        assert.match(error.message, /Cloudflare Wrangler is not logged in[\s\S]*npx wrangler login/);
+        assert.doesNotMatch(error.message.toLowerCase(), /api[_\s-]?token/);
+        return true;
+      }
+    );
+    assert.deepEqual(
+      fs.readFileSync(commandLog, 'utf8').trim().split('\n'),
+      ['npm run build', 'npx --yes wrangler whoami']
+    );
+
+    const wrangler = fs.readFileSync(path.join(projectDir, 'wrangler.jsonc'), 'utf8');
+    const cloudflareEntry = fs.readFileSync(path.join(projectDir, 'apps', 'api', 'src', 'cloudflare.ts'), 'utf8');
+    const gitignoreSource = fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8');
+    assert.match(wrangler, /"main": "\.\/apps\/api\/src\/cloudflare\.ts"/);
+    assert.match(wrangler, /"nodejs_compat"/);
+    assert.match(wrangler, /"\/api\/\*"/);
+    assert.match(cloudflareEntry, /cloudflare:node/);
+    assert.match(gitignoreSource, /\.wrangler/);
+    return `${command.prefix} project deploy --provider cloudflare --dry-run with fake npm/npx`;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+function writeExecutable(filePath, content) {
+  fs.writeFileSync(filePath, content);
+  fs.chmodSync(filePath, 0o755);
 }
 
 async function testSearchTuneHelp() {
@@ -1178,7 +1816,7 @@ async function testAuthImportEnv() {
     assert.equal(payload.loggedIn, true);
     return `${command.prefix} auth import-env --profile acceptance --json`;
   } finally {
-    await new Promise(resolve => server.close(resolve));
+    await server.close();
   }
 }
 
@@ -1258,6 +1896,21 @@ function emptyLlmEnv(homeDir) {
     VIKING_LLM_AK: '',
     VIKING_LLM_SK: '',
     VIKING_LLM_MODEL: ''
+  };
+}
+
+function emptyAuthEnv(homeDir) {
+  return {
+    HOME: homeDir,
+    VIKING_API_KEY: '',
+    VIKING_AK: '',
+    VIKING_SK: '',
+    VIKING_PROFILE: '',
+    VIKING_CREDENTIALS_STORE: '',
+    VIKING_REGION: '',
+    VIKING_BASE_URL: '',
+    VIKING_CONTROL_PLANE_BASE_URL: '',
+    VIKING_DATA_PLANE_BASE_URL: ''
   };
 }
 
