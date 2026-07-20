@@ -29,7 +29,7 @@ export default class AppList extends Command {
       description: 'Filter applications by state, for example ready or not-ready.'
     }),
     full: Flags.boolean({
-      description: 'Return the raw ListApplicationsMeta response instead of the compact summary.'
+      description: 'Return the raw ListApplications response instead of the compact summary.'
     })
   };
 

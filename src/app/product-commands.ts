@@ -588,14 +588,14 @@ export async function runAppGetCommand(options: ResourceIdOptions): Promise<void
 
 export async function runAppListCommand(options: AppListOptions): Promise<void> {
   const payload = (await loadJsonInput(options.data)) ?? {};
-  const response = await callOpenApi('/api/v1/ListApplicationsMeta', payload, options);
+  const response = await callOpenApi('/api/v1/ListApplications', payload, options);
   if (options.full) {
     await printResult(response);
     return;
   }
 
   if (!isRecord(response)) {
-    throw new Error('ListApplicationsMeta returned an unexpected response shape.');
+    throw new Error('ListApplications returned an unexpected response shape.');
   }
 
   await printResult(summarizeAppListResponse(response, options));
