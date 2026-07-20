@@ -57,6 +57,15 @@ import {
   runSearchTuneRunCommand,
   runSearchTuneValidateCommand
 } from './search-tuning-commands';
+import {
+  runConnectorExportCommand,
+  runConnectorInitCommand,
+  runConnectorInspectCommand,
+  runConnectorRunCommand,
+  runConnectorStatusCommand,
+  runConnectorStopCommand
+} from './connector-commands';
+import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -1704,6 +1713,13 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
+    case 'connector':
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runConnectorCli(argv);
+      return true;
     case 'dict':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -1761,6 +1777,7 @@ export function printProductDomainsHelp(): void {
     'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result',
     'vs dataset schema check',
     'vs data write|import|delete',
+    'vs connector init|run|status|stop|inspect',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
     'vs chat run',
@@ -1820,6 +1837,48 @@ COMMON FLAGS
         'vs data delete --dataset-id <id> --id <item-id> [service flags]'
       ]
     )}
+
+COMMON FLAGS
+  --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+    connector: `${renderUsageBlock(
+      [
+        'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
+        'vs connector export --source jsonl --file <path/to/items.jsonl> [--dataset-name <name> --job <job>] [connector flags]',
+        'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
+        'vs connector init --name <job> --source jsonl --dataset-id <id> --file <path/to/items.jsonl> [connector flags]',
+        'vs connector run --job <job> [--once] [service flags]',
+        'vs connector run --job <job> --daemon [service flags]',
+        'vs connector status --job <job>',
+        'vs connector stop --job <job>',
+        'vs connector stop --pid <pid>',
+        'vs connector stop --job <job> --pid <pid>',
+        'vs connector inspect --job <job>'
+      ]
+    )}
+
+SOURCE ENVIRONMENT
+  mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default. Optional MYSQL_CHARSET overrides the connection charset (default utf8mb4).
+  jsonl        Reads a local JSONL file. No environment variables required.
+  Override prefixes with --env-prefix.
+
+NOTES
+  Use \`connector export\` to turn a source snapshot into a local JSONL bootstrap artifact.
+  The exported records always land at /tmp/viking/connector/<job>/bootstrap/items.jsonl.
+  \`--output\` only redirects the rendered command result; it does not change the bootstrap JSONL path.
+  When a MySQL cursor field is an integer id (for example \`id\`), pass \`--cursor-type number\`.
+  For jsonl sources, the cursor is the file line number; new lines appended to the file are picked up on each poll.
+  Use \`connector init + connector run --daemon\` to keep incremental sync running in the background.
+
+KEY FLAGS
+  --job           Export only. Controls <job> in /tmp/viking/connector/<job>/bootstrap/items.jsonl.
+  --dataset-name  Export only. Used to derive the bootstrap job name when --job is omitted.
+  --name          Init only. Controls the local runtime directory /tmp/viking/connector/<name>/.
+  --dataset-id    Init only. Target dataset that later \`connector run\` writes into.
+  --source-table  Required for mysql export/init.
+  --file          Required for jsonl export/init. Path to the JSONL file.
+  --cursor-field  Checkpoint field used for bootstrap/export progress and later incremental sync (mysql only).
+  --cursor-type   Use \`number\` for integer IDs such as mysql \`id\`; defaults to \`timestamp\` (mysql only).
+  --output        Redirects the rendered command result only; it does not change bootstrap/config file paths.
 
 COMMON FLAGS
   --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
@@ -1998,7 +2057,7 @@ EXAMPLES
   vs dataset list
   vs dataset list --type item
   vs dataset list --name catalog --full`,
-    ingest: `Import a batch of records into a dataset with a task-oriented workflow command.
+    ingest: `Complete file-based V2 dataset onboarding or write explicit rows into an existing dataset.
 
 USAGE
   vs dataset ingest --dataset-id <id> --fields @items.json [--project-name <name>] [workflow flags]
@@ -2010,6 +2069,10 @@ DESCRIPTION
 
   The V2 onboarding chain (--file + --type) runs the full pipeline: presigned upload, schema
   inference polling, and CreateDatasetV2. Use --dry-run to validate without persisting the dataset.
+
+  For source-backed onboarding, first run \`vs connector export ...\` to generate a JSONL bootstrap
+  artifact, then reuse the emitted path with \`vs dataset ingest --file ...\`. Background incremental
+  sync is managed separately through \`vs connector init\` + \`vs connector run --daemon\`.
 
 KEY FLAGS
   --dataset-id              Target dataset ID (legacy data-write mode).
@@ -2030,7 +2093,9 @@ KEY FLAGS
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
   vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --language zh
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run`,
+  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run
+  vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
+  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type item --dataset-name demo-items`,
     'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
 
 USAGE
@@ -3158,6 +3223,84 @@ async function runDataCli(argv: string[]): Promise<void> {
   }
 }
 
+async function runConnectorCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('connector');
+    return;
+  }
+  const values = parseStandaloneOptions(argv.slice(1));
+  const serviceOptions = toStandaloneServiceOptions(values);
+
+  switch (action) {
+    case 'export':
+      await runConnectorExportCommand({
+        source: requiredString(values.source, '--source') as ConnectorSourceType,
+        job: optionalString(values.job),
+        datasetName: optionalString(values['dataset-name']),
+        envPrefix: optionalString(values['env-prefix']),
+        idField: optionalString(values['id-field']),
+        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
+        cursorField: optionalString(values['cursor-field']),
+        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
+        initialCursor: optionalString(values['initial-cursor']),
+        table: optionalString(values['source-table']),
+        where: optionalString(values.where),
+        database: optionalString(values.database),
+        collection: optionalString(values.collection),
+        stream: optionalString(values.stream),
+        file: optionalString(values.file),
+        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
+        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+      });
+      return;
+    case 'init':
+      await runConnectorInitCommand({
+        name: requiredString(values.name, '--name'),
+        source: requiredString(values.source, '--source') as ConnectorSourceType,
+        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
+        envPrefix: optionalString(values['env-prefix']),
+        idField: optionalString(values['id-field']),
+        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
+        cursorField: optionalString(values['cursor-field']),
+        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
+        initialCursor: optionalString(values['initial-cursor']),
+        table: optionalString(values['source-table']),
+        where: optionalString(values.where),
+        database: optionalString(values.database),
+        collection: optionalString(values.collection),
+        stream: optionalString(values.stream),
+        file: optionalString(values.file),
+        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
+        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+      });
+      return;
+    case 'run':
+      await runConnectorRunCommand({
+        ...serviceOptions,
+        job: requiredString(values.job, '--job'),
+        once: optionalBoolean(values.once),
+        daemon: optionalBoolean(values.daemon),
+        worker: optionalBoolean(values.worker)
+      });
+      return;
+    case 'status':
+      await runConnectorStatusCommand(requiredString(values.job, '--job'));
+      return;
+    case 'stop':
+      await runConnectorStopCommand(
+        optionalString(values.job),
+        parseOptionalInt(optionalString(values.pid))
+      );
+      return;
+    case 'inspect':
+      await runConnectorInspectCommand(requiredString(values.job, '--job'));
+      return;
+    default:
+      throw new Error(`Unknown connector subcommand: ${action}`);
+  }
+}
+
 async function runDictCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if (hasHelpFlag(argv.slice(1))) {
@@ -3781,8 +3924,28 @@ function parseStandaloneOptions(argv: string[]) {
       goal: { type: 'string' },
       profile: { type: 'string' },
       id: { type: 'string' },
+      job: { type: 'string' },
       'plan-dir': { type: 'string' },
       name: { type: 'string' },
+      source: { type: 'string' },
+      mode: { type: 'string' },
+      'env-prefix': { type: 'string' },
+      'id-field': { type: 'string' },
+      'cursor-field': { type: 'string' },
+      'cursor-type': { type: 'string' },
+      'initial-cursor': { type: 'string' },
+      'source-table': { type: 'string' },
+      'source-fields': { type: 'string' },
+      where: { type: 'string' },
+      database: { type: 'string' },
+      collection: { type: 'string' },
+      stream: { type: 'string' },
+      'batch-size': { type: 'string' },
+      'interval-ms': { type: 'string' },
+      once: { type: 'boolean' },
+      daemon: { type: 'boolean' },
+      worker: { type: 'boolean' },
+      pid: { type: 'string' },
       'application-name': { type: 'string' },
       'dataset-name': { type: 'string' },
       description: { type: 'string' },

@@ -14,6 +14,7 @@ const PRODUCT_COMMANDS: HelpLine[] = [
   { text: 'dataset            Onboard data and manage datasets (V2 backend-driven schema inference; primary onboarding entry)' },
   { text: 'app                Manage applications, activation, and readiness' },
   { text: 'data               Write and inspect dataset items directly' },
+  { text: 'connector          Export source snapshots to JSONL and run incremental sync into datasets' },
   { text: 'search             Run search and manage search scenes' },
   { text: 'chat               Run conversational search' },
   { text: 'recommend          Run recommend and manage scenes and rules' }
@@ -31,6 +32,8 @@ export function printRootHelp(): void {
     'vs <command> --help',
     'vs dataset --help',
     'vs app --help',
+    'vs item --help',
+    'vs connector --help',
     'vs skill --help',
     'vs auth --help',
     'vs llm --help'

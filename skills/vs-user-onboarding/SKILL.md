@@ -5,7 +5,7 @@ description: "Guide a brand-new SearchCLI/vs user from first-time usage question
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: onboarding, sign up, signup, register, purchase, buy, real-name, real name, access key, AK SK, first run, get started, first-time use, first time setup, how to use, start using, downloaded searchcli, installed searchcli, searchcli setup, search cli setup, just installed vs, viking ai search, 下载了searchcli, 安装了searchcli, 如何使用, 怎么使用, 怎么开始用, 刚装了vs, 刚安装vs, 我下载了searchcli，帮我看一下如何使用, 我下载了 searchcli，帮我看一下如何使用, 我下载了 searchcli， 帮我看一下如何使用
+keywords: new user onboarding, sign up, register, purchase, buy, real-name verification, access key, ak sk, first run, first-time setup, get started, how to use, downloaded searchcli, installed searchcli, searchcli setup, vs setup, just installed vs, viking ai search
 commands: auth status, auth login, auth import-env, doctor, skill list, skill show, purchase link, purchase order status, purchase order wait
 ---
 

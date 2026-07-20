@@ -7,7 +7,7 @@ import { workflowServiceFlags } from '../../command-support/service-flags';
 
 export default class DatasetIngest extends Command {
   static override description =
-    'Onboard data into Viking. Two modes: V2 onboarding chain (`--file --type` → import-url → upload → infer-schema → infer-result → dataset create) for first-time dataset creation; legacy data-write (`--dataset-id --fields`) for runtime ingestion into an existing dataset.';
+    'Run the remaining dataset-ingest workflow from a local file (`--file --type`) or write explicit rows into an existing dataset (`--dataset-id --fields`).';
 
   static override examples = [
     '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --dataset-name demo-items',
