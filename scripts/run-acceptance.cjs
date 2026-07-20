@@ -976,10 +976,50 @@ console.error('Version Preview URL: https://abc-deploy-demo.example.workers.dev'
       }
     });
 
-    assert.equal(stdout.trim(), '🚀 Deployment ready:\nhttps://deploy-demo.example.workers.dev');
+    const deployPayload = JSON.parse(stdout);
+    assert.equal(deployPayload.ok, true);
+    assert.equal(deployPayload.result.provider, 'cloudflare');
+    assert.equal(fs.realpathSync(deployPayload.result.projectDir), fs.realpathSync(projectDir));
+    assert.equal(deployPayload.result.dryRun, true);
+    assert.equal(deployPayload.result.deploymentUrl, 'https://deploy-demo.example.workers.dev');
+    assert.equal(deployPayload.result.previewUrl, 'https://abc-deploy-demo.example.workers.dev');
+    assert.deepEqual(deployPayload.result.urls, [
+      'https://deploy-demo.example.workers.dev',
+      'https://abc-deploy-demo.example.workers.dev'
+    ]);
     assert.deepEqual(
       fs.readFileSync(commandLog, 'utf8').trim().split('\n'),
       ['npm install', 'npm run build', 'npx --yes wrangler whoami', 'npx --yes wrangler deploy --dry-run']
+    );
+
+    fs.writeFileSync(commandLog, '');
+    const deploymentUrlOutput = path.join(workspace, 'deployment-url.json');
+    const selectedOutput = await runCli([
+      'project',
+      'deploy',
+      '--project-dir',
+      projectDir,
+      '--provider',
+      'cloudflare',
+      '--dry-run',
+      '--jq',
+      '.result.deploymentUrl',
+      '--output',
+      deploymentUrlOutput
+    ], {
+      env: {
+        PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+        VIKING_FAKE_COMMAND_LOG: commandLog
+      }
+    });
+    assert.equal(selectedOutput.stdout, '');
+    assert.equal(
+      JSON.parse(fs.readFileSync(deploymentUrlOutput, 'utf8')),
+      'https://deploy-demo.example.workers.dev'
+    );
+    assert.deepEqual(
+      fs.readFileSync(commandLog, 'utf8').trim().split('\n'),
+      ['npm run build', 'npx --yes wrangler whoami', 'npx --yes wrangler deploy --dry-run']
     );
 
     fs.writeFileSync(commandLog, '');

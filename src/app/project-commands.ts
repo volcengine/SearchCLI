@@ -221,7 +221,17 @@ export async function runProjectDeployCommand(
     `${deployResult.stdout}\n${deployResult.stderr}`,
   );
 
-  process.stdout.write(renderDeploymentUrl(parsedUrls.deploymentUrl));
+  await printOutput({
+    ok: true,
+    result: {
+      provider,
+      projectDir,
+      dryRun: Boolean(options.dryRun),
+      deploymentUrl: parsedUrls.deploymentUrl ?? null,
+      previewUrl: parsedUrls.previewUrl ?? null,
+      urls: parsedUrls.allUrls,
+    },
+  });
 }
 
 async function runDeploymentProviderCommand(
@@ -452,14 +462,6 @@ function parseDeploymentUrls(output: string): {
     ?.replace(/[.,;:]+$/, "");
   const deploymentUrl = allUrls.find((url) => url !== previewUrl) ?? allUrls[0];
   return { deploymentUrl, previewUrl, allUrls };
-}
-
-function renderDeploymentUrl(deploymentUrl?: string): string {
-  if (!deploymentUrl) {
-    return "\nDeployment completed, but no deployment URL was found in provider output.\n";
-  }
-
-  return `\n🚀 Deployment ready:\n${deploymentUrl}\n`;
 }
 
 function extractUrls(output: string): string[] {
