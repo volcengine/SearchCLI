@@ -76,6 +76,7 @@ async function main() {
 
 async function runCoreSuite() {
   await runTest('root-help', testRootHelp);
+  await runTest('project-feature-flag', testProjectFeatureFlag);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
   await runTest('validate-skills-space-path', testValidateSkillsSpacePath);
@@ -93,6 +94,7 @@ async function runCoreSuite() {
   await runTest('app-list-help', testAppListHelp);
   await runTest('dataset-list-help', testDatasetListHelp);
   await runTest('data-delete-mock', testDataDeleteMock);
+  await runTest('project-create-deploy', testProjectCreateDeploy);
   await runTest('config-summary-help', testConfigSummaryHelp);
   await runTest('item-profile', testItemProfile);
   await runTest('item-plan', testItemPlan);
@@ -193,11 +195,12 @@ async function runCli(argv, options = {}) {
   const extraArgs = command.args ?? [];
   const env = {
     ...process.env,
+    VIKING_ENABLE_PROJECT: '0',
     ...options.env
   };
 
   return execFileAsync(file, [...extraArgs, ...argv], {
-    cwd: root,
+    cwd: options.cwd ?? root,
     env,
     maxBuffer: 16 * 1024 * 1024
   });
@@ -225,10 +228,21 @@ async function testRootHelp() {
   const { stdout } = await runCli(['--help']);
   assert.match(stdout, /SearchCLI/);
   assert.match(stdout, /\bitem\b/);
+  assert.doesNotMatch(stdout, /\bproject\b/);
   assert.match(stdout, /\bllm\b/);
   assert.doesNotMatch(stdout, /\bchat-mode\b/);
   assert.doesNotMatch(stdout, /\bchat-skill\b/);
   return `${command.prefix} --help`;
+}
+
+async function testProjectFeatureFlag() {
+  await assert.rejects(() => runCli(['project', '--help']), /Unknown command: project/);
+  const { stdout } = await runCli(['project', '--help'], {
+    env: { VIKING_ENABLE_PROJECT: '1' }
+  });
+  assert.match(stdout, /project create \[project-name\]/i);
+  assert.match(stdout, /project deploy --provider <provider>/i);
+  return `VIKING_ENABLE_PROJECT=1 ${command.prefix} project --help`;
 }
 
 async function testSkillList() {
@@ -240,6 +254,7 @@ async function testSkillList() {
     'vs-chat',
     'vs-item-onboarding',
     'vs-product-qa',
+    'vs-project',
     'vs-recommend',
     'vs-search',
     'vs-search-tuning',
@@ -338,6 +353,80 @@ async function testDataDeleteMock() {
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+}
+
+async function testProjectCreateDeploy() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-project-'));
+  const featureEnv = { VIKING_ENABLE_PROJECT: '1' };
+  try {
+    const authEnv = {
+      ...featureEnv,
+      VIKING_API_KEY: 'secret-1',
+      VIKING_AK: '',
+      VIKING_SK: '',
+      VIKING_CREDENTIALS_STORE: 'file'
+    };
+    const { stdout } = await runCli([
+      'project',
+      'create',
+      'demo',
+      '--app-id',
+      'app-1',
+      '--features',
+      'chat',
+      '--json'
+    ], { cwd: workspace, env: authEnv });
+    const created = JSON.parse(stdout);
+    const projectDir = path.join(workspace, 'demo');
+    assert.equal(created.ok, true);
+    assert.equal(fs.realpathSync(created.result.projectDir), fs.realpathSync(projectDir));
+    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=1.0.0');
+    assert.match(fs.readFileSync(path.join(projectDir, 'apps/api/src/env.ts'), 'utf8'), /secret-1/);
+    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /apps\/api\/src\/env\.ts/);
+    assert.doesNotMatch(stdout, /secret-1/);
+
+    const fakeBin = path.join(workspace, 'bin');
+    fs.mkdirSync(fakeBin);
+    writeExecutable(path.join(fakeBin, 'npm'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+if (process.argv[2] === 'install') fs.mkdirSync(path.join(process.cwd(), 'node_modules'));
+`);
+    writeExecutable(path.join(fakeBin, 'npx'), `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes('whoami')) process.exit(0);
+console.log('https://demo.example.workers.dev');
+`);
+
+    const outputPath = path.join(workspace, 'deploy.json');
+    const deployed = await runCli([
+      'project',
+      'deploy',
+      '--provider',
+      'cloudflare',
+      '--project-dir',
+      projectDir,
+      '--dry-run',
+      '--json',
+      '--output',
+      outputPath
+    ], {
+      env: {
+        ...featureEnv,
+        PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`
+      }
+    });
+    assert.equal(deployed.stdout, '');
+    assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).result.deploymentUrl, 'https://demo.example.workers.dev');
+    return `${command.prefix} project create/deploy`;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+function writeExecutable(filePath, content) {
+  fs.writeFileSync(filePath, content);
+  fs.chmodSync(filePath, 0o755);
 }
 
 async function testSearchTuneHelp() {
@@ -1178,7 +1267,7 @@ async function testAuthImportEnv() {
     assert.equal(payload.loggedIn, true);
     return `${command.prefix} auth import-env --profile acceptance --json`;
   } finally {
-    await new Promise(resolve => server.close(resolve));
+    await server.close();
   }
 }
 

@@ -3,6 +3,7 @@
 
 import './core/node-bootstrap';
 import { handle, run } from '@oclif/core';
+import { isProjectFeatureEnabled } from './core/feature-flags';
 import { printRootHelp } from './core/root-help';
 import { VERSION } from './version';
 
@@ -13,6 +14,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   printRootHelp();
 } else if (command === '--version' || command === '-v' || command === 'version') {
   console.log(VERSION);
+} else if (command === 'project' && !isProjectFeatureEnabled()) {
+  console.error('Unknown command: project');
+  process.exitCode = 1;
 } else {
   void run().catch(handle);
 }
