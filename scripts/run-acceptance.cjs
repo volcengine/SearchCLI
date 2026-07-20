@@ -26,6 +26,7 @@ const reportPath = path.join(reportDir, 'acceptance.md');
 const command = resolveCommand(mode);
 const tests = [];
 let currentSuite = 'core';
+let projectFeatureEnabled = false;
 
 function parseSuiteArg(argv) {
   for (let index = 0; index < argv.length; index += 1) {
@@ -76,6 +77,8 @@ async function main() {
 
 async function runCoreSuite() {
   await runTest('root-help', testRootHelp);
+  await runTest('root-help-project-enabled', () => withProjectFeatureEnabled(testRootHelpProjectEnabled));
+  await runTest('project-feature-disabled', testProjectFeatureDisabled);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
   await runTest('project-skill-workflow', testProjectSkillWorkflow);
@@ -92,12 +95,13 @@ async function runCoreSuite() {
   await runTest('search-tune-apply-dry-run', testSearchTuneApplyDryRun);
   await runTest('search-tune-run-help', testSearchTuneRunHelp);
   await runTest('app-list-help', testAppListHelp);
+  await runTest('app-list-meta-mock', testAppListMetaMock);
   await runTest('dataset-list-help', testDatasetListHelp);
   await runTest('data-delete-mock', testDataDeleteMock);
-  await runTest('project-help', testProjectHelp);
-  await runTest('project-create', testProjectCreate);
-  await runTest('project-deploy-rejects-uncreated', testProjectDeployRejectsUncreated);
-  await runTest('project-deploy-fake', testProjectDeployFake);
+  await runTest('project-help', () => withProjectFeatureEnabled(testProjectHelp));
+  await runTest('project-create', () => withProjectFeatureEnabled(testProjectCreate));
+  await runTest('project-deploy-rejects-uncreated', () => withProjectFeatureEnabled(testProjectDeployRejectsUncreated));
+  await runTest('project-deploy-fake', () => withProjectFeatureEnabled(testProjectDeployFake));
   await runTest('config-summary-help', testConfigSummaryHelp);
   await runTest('item-profile', testItemProfile);
   await runTest('item-plan', testItemPlan);
@@ -198,7 +202,8 @@ async function runCli(argv, options = {}) {
   const extraArgs = command.args ?? [];
   const env = {
     ...process.env,
-    ...options.env
+    ...options.env,
+    VIKING_ENABLE_PROJECT: projectFeatureEnabled ? '1' : '0'
   };
 
   return execFileAsync(file, [...extraArgs, ...argv], {
@@ -206,6 +211,16 @@ async function runCli(argv, options = {}) {
     env,
     maxBuffer: 16 * 1024 * 1024
   });
+}
+
+async function withProjectFeatureEnabled(fn) {
+  const previous = projectFeatureEnabled;
+  projectFeatureEnabled = true;
+  try {
+    return await fn();
+  } finally {
+    projectFeatureEnabled = previous;
+  }
 }
 
 async function runTest(name, fn) {
@@ -230,11 +245,46 @@ async function testRootHelp() {
   const { stdout } = await runCli(['--help']);
   assert.match(stdout, /SearchCLI/);
   assert.match(stdout, /\bitem\b/);
-  assert.match(stdout, /\bproject\b/);
+  assert.doesNotMatch(stdout, /\bproject\b/);
   assert.match(stdout, /\bllm\b/);
   assert.doesNotMatch(stdout, /\bchat-mode\b/);
   assert.doesNotMatch(stdout, /\bchat-skill\b/);
   return `${command.prefix} --help`;
+}
+
+async function testRootHelpProjectEnabled() {
+  const { stdout } = await runCli(['--help']);
+  assert.match(stdout, /\bproject\b/);
+  assert.match(stdout, /vs project create/);
+  assert.match(stdout, /vs project --help/);
+  return `VIKING_ENABLE_PROJECT=1 ${command.prefix} --help`;
+}
+
+async function testProjectFeatureDisabled() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-project-disabled-'));
+  try {
+    await assert.rejects(() => runCli(['project', '--help']), /Unknown command: project/);
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'create',
+        'blocked-project',
+        '--app-id',
+        'app-1',
+        '--features',
+        'chat'
+      ], { cwd: workspace }),
+      /Unknown command: project/
+    );
+    await assert.rejects(
+      () => runCli(['project', 'deploy', '--provider', 'cloudflare'], { cwd: workspace }),
+      /Unknown command: project/
+    );
+    assert.equal(fs.existsSync(path.join(workspace, 'blocked-project')), false);
+    return `${command.prefix} project is unavailable without VIKING_ENABLE_PROJECT=1`;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
 }
 
 async function testSkillList() {
@@ -270,7 +320,13 @@ async function testProjectSkillWorkflow() {
   const { stdout } = await runCli(['skill', 'show', '--name', 'vs-project', '--json']);
   const payload = JSON.parse(stdout);
   const workflow = JSON.stringify(payload.workflow ?? '');
+  const preconditions = payload.preconditions ?? [];
   assert.equal(payload.name, 'vs-project');
+  assert.match(payload.description, /only after confirming the installed CLI exposes `vs project`/i);
+  assert.match(preconditions[0] ?? '', /before doing anything else, run `vs project --help`/i);
+  assert.match(preconditions[1] ?? '', /stop immediately/i);
+  assert.match(preconditions[1] ?? '', /do not enumerate resources, create files, install dependencies, (?:or )?deploy/i);
+  assert.match(preconditions[1] ?? '', /do not explain how to enable hidden functionality/i);
   assert.match(workflow, /select one or more features from `search`, `recommend`, and `chat`/i);
   assert.match(workflow, /vs app list --full --json/i);
   assert.match(workflow, /Every supported feature requires at least one bound dataset/i);
@@ -323,6 +379,31 @@ async function testAppListHelp() {
   const { stdout } = await runCli(['app', '--help']);
   assert.match(stdout, /app list \[--name <text> --dataset-id <id> --industry <type> --state <state> --full\]/i);
   return `${command.prefix} app --help`;
+}
+
+async function testAppListMetaMock() {
+  const state = {
+    requests: [],
+    responses: {
+      ListApplicationsMeta: {
+        ResponseMetadata: { RequestId: 'req-app-list-meta' },
+        Result: { Apps: [] }
+      }
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const { stdout } = await runCli(
+      ['app', 'list', '--full', '--json', ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    assert.equal(state.requests[0].action, 'ListApplicationsMeta');
+    assert.match(stdout, /req-app-list-meta/);
+    return `${command.prefix} app list uses ListApplicationsMeta`;
+  } finally {
+    await server.close();
+  }
 }
 
 async function testDataDeleteMock() {

@@ -4,8 +4,11 @@
 import { Args, Command, Flags } from '@oclif/core';
 import { runProjectCreateCommand } from '../../app/project-commands';
 import { outputFormatFlags } from '../../command-support/service-flags';
+import { isProjectFeatureEnabled, requireProjectFeatureEnabled } from '../../core/feature-flags';
 
 export default class ProjectCreate extends Command {
+  static override hidden = !isProjectFeatureEnabled();
+
   static override description = 'Create a full-stack Viking web project.';
 
   static override examples = [
@@ -36,6 +39,7 @@ export default class ProjectCreate extends Command {
   };
 
   async run(): Promise<void> {
+    requireProjectFeatureEnabled();
     const { args, flags } = await this.parse(ProjectCreate);
     await runProjectCreateCommand({
       projectName: args['project-name'],

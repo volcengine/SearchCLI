@@ -14,6 +14,7 @@ import {
   PROJECT_WEB_TEMPLATE_FILES,
   PROJECT_WEB_TEMPLATE_VERSION,
 } from "../project/embedded-project-template";
+import { requireProjectFeatureEnabled } from "../core/feature-flags";
 import { printOutput } from "../core/output-format";
 import { resolveCliDefaults } from "../core/user-config";
 
@@ -74,6 +75,7 @@ type ProjectCreateAuth =
 export async function runProjectCreateCommand(
   options: ProjectCreateOptions,
 ): Promise<void> {
+  requireProjectFeatureEnabled();
   const requestedProjectName = normalizeProjectName(options.projectName);
   const appId = normalizeTemplateValue(options.appId, "--app-id");
   const features = parseProjectFeatures(options.features);
@@ -199,6 +201,7 @@ function resolveProjectCreateAuth(
 export async function runProjectDeployCommand(
   options: ProjectDeployOptions,
 ): Promise<void> {
+  requireProjectFeatureEnabled();
   const provider = normalizeDeploymentProvider(options.provider);
   const projectDir = path.resolve(options.projectDir ?? process.cwd());
   await loadAndValidateProjectMarker(projectDir);

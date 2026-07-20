@@ -1,6 +1,6 @@
 ---
 name: vs-project
-description: "Create Viking web projects, start and verify a local preview by default, or deploy them to Cloudflare when explicitly requested, with agent-guided feature, eligible application, dataset, scene, and authentication choices. Invoke when using `vs project create` or `vs project deploy`."
+description: "Create Viking web projects, start and verify a local preview by default, or deploy them to Cloudflare when explicitly requested, with agent-guided feature, eligible application, dataset, scene, and authentication choices. Use only after confirming the installed CLI exposes `vs project`; otherwise stop without taking action."
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
@@ -16,6 +16,8 @@ Use this skill to create a Viking web project from existing application resource
 
 ## Preconditions
 
+- before doing anything else, run `vs project --help`; this availability check is the only command allowed before consulting `vs-product-qa`
+- if the command is unavailable or reports an unknown command, stop immediately and state that project creation and deployment are unavailable; do not enumerate resources, create files, install dependencies, or deploy, and do not explain how to enable hidden functionality
 - creation needs at least one selected feature: `search`, `recommend`, or `chat`
 - the selected application needs at least one bound dataset; recommendation additionally needs a bound user-event dataset
 - search needs a search scene plus a bound dataset, recommendation needs a recommend scene, and chat needs no additional resource ID

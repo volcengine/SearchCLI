@@ -4,8 +4,11 @@
 import { Command, Flags } from '@oclif/core';
 import { runProjectDeployCommand } from '../../app/project-commands';
 import { outputFormatFlags } from '../../command-support/service-flags';
+import { isProjectFeatureEnabled, requireProjectFeatureEnabled } from '../../core/feature-flags';
 
 export default class ProjectDeploy extends Command {
+  static override hidden = !isProjectFeatureEnabled();
+
   static override description = 'Deploy a project created by "vs project create" to the selected provider.';
 
   static override examples = [
@@ -29,6 +32,7 @@ export default class ProjectDeploy extends Command {
   };
 
   async run(): Promise<void> {
+    requireProjectFeatureEnabled();
     const { flags } = await this.parse(ProjectDeploy);
     await runProjectDeployCommand({
       projectDir: flags['project-dir'],

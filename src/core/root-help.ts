@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { renderHelpLines, type HelpLine } from "./help-utils";
+import { isProjectFeatureEnabled } from "./feature-flags";
 
 const CORE_COMMANDS: HelpLine[] = [
   { text: "skill              Manage installable Viking skills" },
   { text: "auth               Manage Viking credentials" },
   { text: "llm                Manage LLM credentials for tuning" },
   { text: "doctor             Check auth, config, and local dependencies" },
-  { text: "project            Create and deploy full-stack web projects" },
 ];
+
+const PROJECT_COMMAND: HelpLine = {
+  text: "project            Create and deploy full-stack web projects",
+};
 
 const PRODUCT_COMMANDS: HelpLine[] = [
   {
@@ -30,7 +34,11 @@ const ADVANCED_COMMANDS: HelpLine[] = [
 ];
 
 export function printRootHelp(): void {
-  const coreCommands = renderHelpLines(CORE_COMMANDS, false).join("\n  ");
+  const projectEnabled = isProjectFeatureEnabled();
+  const coreCommands = renderHelpLines(
+    projectEnabled ? [...CORE_COMMANDS, PROJECT_COMMAND] : CORE_COMMANDS,
+    false,
+  ).join("\n  ");
   const productCommands = renderHelpLines(PRODUCT_COMMANDS, false).join("\n  ");
   const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join(
     "\n  ",
@@ -41,11 +49,17 @@ export function printRootHelp(): void {
     "vs app --help",
     "vs item --help",
     "vs connector --help",
-    "vs project --help",
+    ...(projectEnabled ? ["vs project --help"] : []),
     "vs skill --help",
     "vs auth --help",
     "vs llm --help",
   ];
+  const projectQuickStart = projectEnabled
+    ? `
+  Create and deploy a starter web project
+    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>
+    vs project deploy --provider cloudflare --project-dir ./demo`
+    : "";
 
   console.log(`SearchCLI
 
@@ -82,10 +96,7 @@ QUICK START
     vs search tune run --application-id <app> --dataset-id <dataset> --profile similarity-only
     vs search tune run --application-id <app> --resume-run-id <run-id>
     vs search tune apply --application-id <app> --run-id <run-id> --dry-run
-
-  Create and deploy a starter web project
-    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>
-    vs project deploy --provider cloudflare --project-dir ./demo
+${projectQuickStart}
 
 CORE
   ${coreCommands}

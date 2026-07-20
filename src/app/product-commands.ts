@@ -12,6 +12,7 @@ import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
 import { resolvePurchasePageUrl, type EnvironmentId } from '../core/environment';
 import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import { isProjectFeatureEnabled } from '../core/feature-flags';
 import { ApiRequestError, postJson } from '../core/http';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
@@ -1764,6 +1765,9 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       await runItemCli(argv);
       return true;
     case 'project':
+      if (!isProjectFeatureEnabled()) {
+        return false;
+      }
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
         return true;
@@ -1789,7 +1793,7 @@ export function printProductDomainsHelp(): void {
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
     'vs chat run',
-    'vs project create|deploy',
+    ...(isProjectFeatureEnabled() ? ['vs project create|deploy'] : []),
     'vs purchase link|order status|wait'
   ];
 
