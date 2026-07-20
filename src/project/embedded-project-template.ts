@@ -5,7 +5,7 @@
 export const PROJECT_WEB_TEMPLATE_VERSION = '1.0.0';
 
 export const PROJECT_WEB_TEMPLATE_FILES: Record<string, string> = {
-  ".gitignore": "node_modules\ndist\n.wrangler\n.DS_Store\n*.log\n",
+  ".gitignore": "node_modules\ndist\n.wrangler\napps/api/src/env.ts\n.DS_Store\n*.log\n",
   ".npmrc": "@volcengine:registry=https://bnpm.byted.org/\n",
   ".viking": "templateVersion={{TEMPLATE_VERSION}}\n",
   "apps/api/package.json": "{\n  \"name\": \"@viking-project/api\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"tsx src/index.ts\",\n    \"typecheck\": \"tsc -p tsconfig.json --noEmit\",\n    \"build\": \"tsc -p tsconfig.json --noEmit\"\n  },\n  \"dependencies\": {\n    \"@volcengine/search-node\": \"^0.7.0\",\n    \"express\": \"^5.1.0\"\n  }\n}\n",
