@@ -265,6 +265,21 @@ Execution order:
 ### `app item-data-count`
 
 - API docs: [GetAppItemDataCount](./api-references/modules/app-data-config/GetAppItemDataCount.md)
+
+**Deterministic recipe for "how much effective data does application X have" (follow exactly; do not explore field-by-field):**
+
+1. Resolve the bound datasets with **`vs app get --id <appId>`** (the flag is `--id`, not `--app-id`).
+   `app get` prints the raw `GetApplication` response, so each entry lives under `Result.Datasets[]` with
+   raw API fields: `DatasetID`, `Name`, and `Type` (a **bare integer code** — decode it with the table in
+   step 3). One `app get` call returns all of these at once; read them together (e.g. a single
+   `--jq '.Result.Datasets[] | {DatasetID, Name, Type}'`). Do NOT issue multiple single-field `--jq` queries
+   and do NOT grep the CLI source for the code table — the table is in step 3 below.
+2. Map each dataset by type and gather its count:
+   - **item (`Type=1`) / video (`Type=3`)** → `vs app item-data-count --application-id <appId> --dataset-id <datasetId>`, read `ValidCnt`; sum across all item/video datasets. Report even when `0`.
+   - **document (`Type=6`, also legacy `doc`=`5`)** → `vs app dataset-config list --application-id <appId> --full`, read `Config[].Dataset.DocumentStats.DocumentNum` + `DocumentFromHomepageNum`. `--full` is required. Report even when `0`.
+   - **user_event (`Type=4`, behavior)** → excluded entirely: no effective-data-volume metric, do not query and do not list (not even as `0`).
+3. Dataset `Type` code table (authoritative, from `DATASET_TYPE_LABELS`): `0=unknown, 1=item, 2=query, 3=video, 4=user_event, 5=doc, 6=document`. Use this to decode the raw `Type` integer from `app get`; there is no need to look it up in source.
+
 - Use this to answer "how much effective data does application X have" for **item/video** datasets. The
   response carries `ValidCnt` (effective/valid records) and `TotalCnt` (total records), plus
   `ImageNumTotal`/`ValidImageNum` and `DurationTotal`/`ValidDuration` for video datasets. Report `ValidCnt`
@@ -280,7 +295,10 @@ Execution order:
   count) and `dataset get/list` expose `DataNum` (dataset-level total) — neither is the application-scoped
   effective count, so use `app item-data-count` for the effective/valid count under an app. For **document**
   datasets the effective count instead comes from `app dataset-config list --full`
-  `Config[].Dataset.DocumentStats` (see above).
+  `Config[].Dataset.DocumentStats` (see above), and it is always reported even when it is `0`. Only
+  **user_event (behavior, `Type=4`)** datasets carry no effective-data-volume metric — exclude them from
+  data-volume answers entirely (do not query a count and do not list them). The "omit even when 0" rule
+  applies to user_event only; item/video/document counts are always reported, including `0`.
 
 | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- |
