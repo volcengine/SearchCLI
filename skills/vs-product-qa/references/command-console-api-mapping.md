@@ -71,6 +71,7 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `app dataset-config list` | console | `POST /api/v1/ListAppDataConfigs` | [ListAppDataConfigs](./api-references/modules/app-data-config/ListAppDataConfigs.md) |
 | `app dataset-config get` | console | `POST /api/v1/GetAppDataConfig` | [GetAppDataConfig](./api-references/modules/app-data-config/GetAppDataConfig.md) |
 | `app dataset-config update` | console | `POST /api/v1/UpdateAppDataConfig` | [UpdateAppDataConfig](./api-references/modules/app-data-config/UpdateAppDataConfig.md) |
+| `app item-data-count` | console | `POST /api/v1/GetAppItemDataCount` | [GetAppItemDataCount](./api-references/modules/app-data-config/GetAppItemDataCount.md) |
 | `app online-config get` | console | `POST /api/v1/GetAppOnlineConfig` | [GetAppOnlineConfig](./api-references/modules/app-online-config/GetAppOnlineConfig.md) |
 | `app online-config update` | console | `POST /api/v1/UpsertAppOnlineConfig` | [UpsertAppOnlineConfig](./api-references/modules/app-online-config/UpsertAppOnlineConfig.md) |
 | `app status` | workflow over console | `GetApplication` + `ListAppDataConfigs` | [GetApplication](./api-references/modules/app-management/GetApplication.md) |
@@ -260,6 +261,52 @@ Execution order:
 | `--field-config` | `DataConfig` | object | effectively yes for real updates | JSON object for `DataFieldConfig`. |
 | `--dry-run` | `OnlySave` | boolean | no | Validate only, do not persist. |
 | `--project-name` | `ProjectName` | string | no | Project scope. |
+
+### `app item-data-count`
+
+- API docs: [GetAppItemDataCount](./api-references/modules/app-data-config/GetAppItemDataCount.md)
+
+**Deterministic recipe for "how much effective data does application X have" (follow exactly; do not explore field-by-field):**
+
+1. Resolve the bound datasets with **`vs app get --id <appId>`** (the flag is `--id`, not `--app-id`).
+   `app get` prints the raw `GetApplication` response, so each entry lives under `Result.Datasets[]` with
+   raw API fields: `DatasetID`, `Name`, and `Type` (a **bare integer code** — decode it with the table in
+   step 3). One `app get` call returns all of these at once; read them together (e.g. a single
+   `--jq '.Result.Datasets[] | {DatasetID, Name, Type}'`). Do NOT issue multiple single-field `--jq` queries
+   and do NOT grep the CLI source for the code table — the table is in step 3 below.
+2. Map each dataset by type and gather its count:
+   - **item (`Type=1`) / video (`Type=3`)** → `vs app item-data-count --application-id <appId> --dataset-id <datasetId>`, read `ValidCnt`; sum across all item/video datasets. Report even when `0`.
+   - **document (`Type=6`, also legacy `doc`=`5`)** → `vs app dataset-config list --application-id <appId> --full`, read `Config[].Dataset.DocumentStats.DocumentNum` + `DocumentFromHomepageNum`. `--full` is required. Report even when `0`.
+   - **user_event (`Type=4`, behavior)** → excluded entirely: no effective-data-volume metric, do not query and do not list (not even as `0`).
+3. Dataset `Type` code table (authoritative, from `DATASET_TYPE_LABELS`): `0=unknown, 1=item, 2=query, 3=video, 4=user_event, 5=doc, 6=document`. Use this to decode the raw `Type` integer from `app get`; there is no need to look it up in source.
+
+- Use this to answer "how much effective data does application X have" for **item/video** datasets. The
+  response carries `ValidCnt` (effective/valid records) and `TotalCnt` (total records), plus
+  `ImageNumTotal`/`ValidImageNum` and `DurationTotal`/`ValidDuration` for video datasets. Report `ValidCnt`
+  as the application-level effective data count. Not applicable to document datasets.
+- **Document datasets are not supported.** Calling this on a document dataset returns
+  `InvalidParameter: DatasetType`. For document (`DatasetTypeDoc`/`DatasetTypeDocument`) datasets, read the
+  count from `app dataset-config list --full` (`ListAppDataConfigs`): `Config[].Dataset.DocumentStats.DocumentNum`
+  (records imported from AI Search) plus `Config[].Dataset.DocumentStats.DocumentFromHomepageNum` (records
+  synced from knowledge management); `DocumentPageNum` is the page count. The `--full` flag is **required** —
+  the default compact `app dataset-config list` output omits `DocumentStats`. Do not use `DataNum`. Resolve the
+  dataset `Type` first and only route item/video datasets to `app item-data-count`.
+- Note: for **item/video**, `app status` / `app dataset-config *` expose `DatasetProcessedDataNum` (processed
+  count) and `dataset get/list` expose `DataNum` (dataset-level total) — neither is the application-scoped
+  effective count, so use `app item-data-count` for the effective/valid count under an app. For **document**
+  datasets the effective count instead comes from `app dataset-config list --full`
+  `Config[].Dataset.DocumentStats` (see above), and it is always reported even when it is `0`. Only
+  **user_event (behavior, `Type=4`)** datasets carry no effective-data-volume metric — exclude them from
+  data-volume answers entirely (do not query a count and do not list them). The "omit even when 0" rule
+  applies to user_event only; item/video/document counts are always reported, including `0`.
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | object | yes if explicit IDs absent | Full JSON object. |
+| `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `--dataset-id` | `DatasetID` | string | yes unless in `--data` | Item/video dataset ID. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+| `--full` | not uploaded | boolean | no | Output shaping only. |
 
 ### `app online-config get`, `app online-config update`
 
