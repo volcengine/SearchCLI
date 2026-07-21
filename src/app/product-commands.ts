@@ -276,6 +276,12 @@ export interface AppDatasetConfigGetOptions extends ProjectScopedOptions {
   full?: boolean;
 }
 
+export interface AppItemDataCountGetOptions extends ProjectScopedOptions {
+  applicationId: string;
+  datasetId: string;
+  full?: boolean;
+}
+
 export interface AppDatasetConfigUpdateOptions extends ProjectScopedOptions {
   applicationId: string;
   datasetId: string;
@@ -670,6 +676,27 @@ export async function runAppDatasetConfigGetCommand(options: AppDatasetConfigGet
   }
 
   await printResult(summarizeAppDatasetConfigGetResponse(response, options.applicationId));
+}
+
+export async function runAppItemDataCountCommand(options: AppItemDataCountGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      AppID: options.applicationId,
+      DatasetID: options.datasetId,
+      ProjectName: options.projectName
+    });
+  const response = await callOpenApi('/api/v1/GetAppItemDataCount', payload, options);
+  if (options.full) {
+    await printResult(response);
+    return;
+  }
+
+  if (!isRecord(response)) {
+    throw new Error('GetAppItemDataCount returned an unexpected response shape.');
+  }
+
+  await printResult(summarizeAppItemDataCountResponse(response, options.applicationId, options.datasetId));
 }
 
 export async function runAppDatasetConfigUpdateCommand(options: AppDatasetConfigUpdateOptions): Promise<void> {
@@ -1811,6 +1838,7 @@ function printDomainHelp(domain: string): void {
         'vs app delete --id <application-id> [--force] [service flags]',
         'vs app diagnose --application-id <id> [--activated-only] [service flags]',
         'vs app status --application-id <id> [--activated-only] [service flags]',
+        'vs app item-data-count --application-id <id> --dataset-id <id> [--full] [service flags]',
         'vs app wait-ready --application-id <id> [--wait-timeout-ms <ms> --poll-interval-ms <ms> --activated-only] [service flags]',
         'vs app dataset bind --application-id <id> --dataset-id <id> [--field-config @config.json --dry-run] [service flags]',
         'vs app attach-dataset --app-id <id> --dataset-id <id> --data-config @data-config.json [--dry-run] [--project-name <name>] [service flags]',
@@ -2341,6 +2369,27 @@ EXAMPLES
   vs app create --name catalog-search --industry e_commerce --language zh --color cyan
   vs app create --name catalog-search --industry e_commerce --risk-check --dry-run
   vs app create --data @app-create.json`,
+    'item-data-count': `Get the effective item data count for an item/video dataset under an application.
+
+USAGE
+  vs app item-data-count --application-id <id> --dataset-id <id> [--full] [service flags]
+
+DESCRIPTION
+  Reports the effective (valid) and total record counts for an item/video dataset as seen by an
+  application, via /api/v1/GetAppItemDataCount. Use this to answer "how much effective data does
+  this application have" for item/video datasets. Not applicable to document datasets.
+  The compact output surfaces validCnt/totalCnt (and image/duration counts for video); pass \`--full\`
+  for the raw response payload.
+
+KEY FLAGS
+  --application-id  Target application ID.
+  --dataset-id      Target item/video dataset ID.
+  --project-name    Viking project name when the API requires project scoping.
+  --full            Return the raw GetAppItemDataCount response.
+
+EXAMPLES
+  vs app item-data-count --application-id 123 --dataset-id 456
+  vs app item-data-count --application-id 123 --dataset-id 456 --full`,
     'dataset:bind': `Bind a dataset to an application with an explicit bind-time field config.
 
 USAGE
@@ -2930,6 +2979,10 @@ async function runAppCli(argv: string[]): Promise<void> {
     printAppCommandHelp(action);
     return;
   }
+  if (action === 'item-data-count' && hasHelpFlag(argv.slice(1))) {
+    printAppCommandHelp(action);
+    return;
+  }
   if (hasHelpFlag(argv.slice(1))) {
     printDomainHelp('app');
     return;
@@ -3004,6 +3057,14 @@ async function runAppCli(argv: string[]): Promise<void> {
         ...projectOptions,
         applicationId: requiredString(values['application-id'], '--application-id'),
         activatedOnly: optionalBoolean(values['activated-only'])
+      });
+      return;
+    case 'item-data-count':
+      await runAppItemDataCountCommand({
+        ...projectOptions,
+        applicationId: requiredString(values['application-id'], '--application-id'),
+        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
+        full: optionalBoolean(values.full)
       });
       return;
     case 'wait-ready':
@@ -4828,6 +4889,27 @@ function summarizeAppDatasetConfigGetResponse(response: Record<string, unknown>,
       applicationId,
       datasetConfig: summarizeAppDatasetConfig(config, true)
     }
+  };
+}
+
+function summarizeAppItemDataCountResponse(
+  response: Record<string, unknown>,
+  applicationId: string,
+  datasetId: string
+): Record<string, unknown> {
+  const result = isRecord(response.Result) ? response.Result : response;
+  return {
+    ResponseMetadata: response.ResponseMetadata,
+    Result: compactObject({
+      applicationId,
+      datasetId,
+      totalCnt: result.TotalCnt,
+      validCnt: result.ValidCnt,
+      imageNumTotal: result.ImageNumTotal,
+      validImageNum: result.ValidImageNum,
+      durationTotal: result.DurationTotal,
+      validDuration: result.ValidDuration
+    })
   };
 }
 
