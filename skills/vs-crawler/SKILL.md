@@ -36,7 +36,7 @@ All crawled records MUST conform to this schema. Every record is a flat JSON obj
 | `author` | string | no | Author name(s); multiple authors separated by commas. |
 | `published_at` | string | no | ISO 8601 datetime, e.g. `"2026-07-16T10:30:00Z"`. Use crawl time if unavailable. |
 | `tags` | array\<string\> | no | Tags, keywords, or topics. |
-| `language` | string | no | ISO 639-1 code: `"en"`, `"zh"`, `"ja"`, `"ko"`, `"hi"`, etc. |
+| `language` | string | no | ISO 639-1 code: `"en"`, `"zh"`, etc. |
 | `source_url` | string | no | Canonical URL of the source page (the URL the record was crawled from). Must be a fully-qualified URL with scheme and host. |
 | `metadata` | object | no | Structured key-value data. Must be flat (one level deep, no nested objects). Values must be scalar (string, number, boolean) — no arrays or objects inside. **Only the standard keys listed below are allowed**; do not add custom keys. All sources must use the same metadata schema.
 
