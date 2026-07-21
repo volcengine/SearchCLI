@@ -1,10 +1,10 @@
 ---
 name: vs-item-onboarding
-description: "onboarding workflow for creating datasets and applications in Viking AI Search. Supports one-time import from local files (JSON, JSONL, CSV) and MySQL databases, plus scheduled incremental sync for append-only JSONL files and MySQL. All sources are first exported to a bootstrap JSONL file; backend-driven schema inference handles field detection, and optional background sync keeps the dataset up to date as new data arrives."
+description: "onboarding workflow for creating datasets and applications in Viking AI Search. Supports one-time import from local files (JSON, JSONL, CSV) and MySQL databases, plus scheduled incremental sync for append-only JSONL files and MySQL. All sources are first exported to a bootstrap JSONL file; backend-driven schema inference handles detection, and optional background sync keeps the dataset up to date as new data arrives."
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: item onboarding, dataset onboarding, OpenAPI, presigned upload, AddInferDatasetSchemaTask, GetInferDatasetSchemaResult, CreateDataset, AttachDatasetToApplication, FieldDescMap, DataFieldConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, schema confirmation, vs-schema-confirm, source export, database import, mysql import, jsonl import, file import, connector sync
+keywords: item onboarding, dataset onboarding, multi_modal, presigned upload, AddInferDatasetSchemaTask, GetInferDatasetSchemaResult, CreateDataset, AttachDatasetToApplication, FieldDescMap, DataFieldConfig, ImageIndexFields, VideoIndexFields, ChatFields, ProcessConfig, data write, dry-run, attach-dataset, infer-result persistence, render-schema, schema confirmation, vs-schema-confirm, source export, database import, mysql import, jsonl import, file import, connector sync
 commands: dataset import-url, dataset infer-schema, dataset infer-result, dataset create, dataset ingest, data write, app create, app attach-dataset, connector export, connector init, connector run, connector status, connector stop, connector inspect
 ---
 
@@ -44,9 +44,9 @@ Do not use this skill when:
 
 ## Do NOT be misled by `vs --help` top-level QUICK START
 
-`vs --help` still lists `vs item profile / plan / apply` at the top of QUICK START for backwards compatibility (annotated `[Deprecated]`). That is the V1 path; this skill does **not** use it. The only legal path here is V2 — `vs dataset import-url → infer-schema → infer-result → dataset create → data write → app create → app attach-dataset` — and any check for a V2 command must be confirmed via `vs dataset --help`, `vs dataset infer-schema --help`, `vs app --help`, or `vs app attach-dataset --help`, never by falling back to `vs item ...`. The workspace path `./.viking/item-plans/<dataset-name>/` is reused for V2 artifacts only because the directory name happens to match; it does not imply V1. The moment the user's ask is "create a dataset / application from a raw JSONL / JSON / CSV file", jump straight to the V2 workflow (steps 3–14 below) without detouring through `item plan/apply`.
+`vs --help` still lists `vs item profile / plan / apply` at the top of QUICK START for backwards compatibility (annotated `[Deprecated]`). That is the V1 path; this skill does **not** use it. The only legal path here is V2 — `vs dataset import-url → infer-schema → infer-result → dataset create → data write → app create → app attach-dataset` — and any check for a V2 command must be confirmed via `vs dataset --help`, `vs dataset infer-schema --help`, `vs app --help`, or `vs app attach-dataset --help`, never by falling back to `vs item ...`. The workspace path `./.viking/item-plans/<dataset-name>/` is reused for V2 artifacts only because the directory name happens to match; it does not imply V1 or item type. The moment the user's ask is "create a multi-modal dataset / application from a raw JSONL / JSON / CSV / MySQL source", jump straight to the V2 workflow (steps 3–14 below) without detouring through `item plan/apply`.
 
-**Forbidden in this skill:** `vs item profile`, `vs item plan`, `vs item apply`, `vs item review`, `vs item provision`, `vs item verify`.
+**Forbidden in this skill:** `vs item profile`, `vs item plan`, `vs item apply`, `vs item review`, `vs item provision`, `vs item verify`, or passing any `--type` other than `multi_modal` to dataset onboarding commands.
 
 ## Preconditions
 
@@ -61,30 +61,39 @@ Do not use this skill when:
 |---|---|---|
 | Upload URL | `vs dataset import-url --file-name <basename>` | Request a presigned PUT URL plus `FileKey` |
 | PUT upload | `curl -X PUT --data-binary @<path> "<FileUrl>"` | Upload the local file to TOS (no auth header needed) |
-| Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type <item\|video\|user_event> --industry <e_commerce\|material\|video\|news\|social_platform\|other> --language <zh\|en\|ja> [--name ...]` | Kick off backend schema inference; returns `TaskID`. **Always pass the snake_case wire value** (e.g. `e_commerce`, not `ecommerce`); the CLI accepts aliases like `ecommerce` for `--industry` only as a courtesy, JSON payloads later require the wire value verbatim. |
-| Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact) |
-| Create dataset | `vs dataset create --data @dataset-create.json [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr` |
+| Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme <general\|e_commerce\|content\|long_video> --language <zh\|en\|ko\|ja\|hi> [--name ...]` | Kick off backend schema inference; returns `TaskID`. `--theme` is **required** (default `general` when the user has no preference). The CLI accepts theme aliases such as `ecommerce` / `e-commerce` → `e_commerce`, `long-video` / `longvideo` → `long_video`, `common` / `default` → `general`. |
+| Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact, including `ImageIndexFields` / `VideoIndexFields` / `ChatFields`) |
+| Create dataset | `vs dataset create --data @dataset-create.json [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr`. The payload must include `Theme` and optionally `ProcessConfig` (abnormal image/video policy, video auto-delete). |
 | Write data | `vs data write --dataset-id <DatasetId> --fields @items.json` | Push the actual records into the dataset |
 | Export (MySQL) | `vs connector export --source mysql ...` | Export a MySQL table snapshot into `/tmp/viking/connector/<job>/bootstrap/items.jsonl` |
 | Export (local file) | `vs connector export --source jsonl --file <path>` | Export a local JSONL file snapshot into the bootstrap directory. For `JSON` (array) or `CSV` inputs, convert to JSONL (one object per line) before running this command. |
-| Sync config | `vs connector init --name <job> --source mysql|jsonl --dataset-id <id> ...` | Persist the local sync job config for later incremental runs |
+| Sync config | `vs connector init --name <job> --source mysql\|jsonl --dataset-id <id> ...` | Persist the local sync job config for later incremental runs |
 | Sync run | `vs connector run --job <job> --daemon` | Start background incremental sync into the dataset |
-| Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--dry-run]` | Optional, only when the user asks for app-level setup |
-| Attach dataset | `vs app attach-dataset --data @attach.json [--dry-run]` | Optional, links a created dataset to an application. The `DataConfig` block is the `DataFieldConfig` straight out of the persisted infer artifact |
+| Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--dry-run]` | Optional, only when the user asks for app-level setup. `--industry` here is an **application-level** attribute independent of the dataset; it is NOT passed to dataset create / infer-schema. |
+| Attach dataset | `vs app attach-dataset --data @attach.json [--dry-run]` | Optional, links the created dataset to an application. The `DataConfig` block is the `DataFieldConfig` straight out of the persisted infer artifact (must include `ImageIndexFields` / `VideoIndexFields` / `ChatFields` verbatim) |
 
-The "All-in-one" shortcut `vs dataset ingest --file <path> --type <type> --industry <industry> [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Schema Confirmation pause. In agent mode you should still drive each step individually so you can pause at step 7 (Schema Confirmation).
+The "All-in-one" shortcut `vs dataset ingest --file <path> --type multi_modal --theme <theme> [--abnormal-image-policy skip|block] [--abnormal-video-policy skip|block] [--video-auto-delete] [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Schema Confirmation pause. In agent mode you should still drive each step individually so you can pause at step 7 (Schema Confirmation).
 
 ## Workflow
 
 Run strictly in order. Each step depends on output from the previous one; an inference artifact persisted in step 6 is reused all the way through step 13.
 
-1. **Confirm input source and mode** — first identify the source type from the user's request, then **explicitly ask the user to choose the import mode** when multiple options exist. Do not silently pick a mode.
+1. **Confirm input source, theme, and mode** — first identify the source type from the user's request, then resolve the multi-modal **Theme**, then **explicitly ask the user to choose the import mode** when multiple options exist. Do not silently pick any of these.
 
    **Source identification**:
    - If the user provided a database connection or table name → MySQL.
    - If the user provided a file path ending in `.jsonl` or described a line-delimited/append-only file → JSONL.
    - If the user provided a file path ending in `.json` (JSON array) or `.csv` → JSON/CSV (one-time only).
    - If the source is unclear, ask the user which source type they want to onboard from before proceeding.
+
+   **Theme resolution (mandatory)** — this skill creates only `multi_modal` datasets, and the backend requires a valid `Theme`. Ask the user to pick one:
+   - `e_commerce` — e-commerce products (with images, price, brand, tags)
+   - `long_video` — long-form video (movies, series; with cover image, language, category)
+   - `content` — general short-form content (posts, news articles with thumbnails, tags, categories)
+   - `general` — other / generic multi-modal (default)
+   If the user cannot decide, default to `general`. Record the chosen theme in a local variable and pass it to every subsequent command that accepts `--theme`.
+
+   **Language**: ask for language if the user has not already stated it (`zh` / `en` / `ko` / `ja` / `hi`); default to `zh` for Chinese-speaking users, `en` otherwise.
 
    **Import mode selection**:
    - For **MySQL** and **JSONL**, resolve whether the user wants one-time import or one-time + ongoing sync. **Only skip the question when the request contains an explicit, unambiguous signal** for one side (apply this detection to whatever language the user is writing in — English, Chinese, etc.):
@@ -93,14 +102,14 @@ Run strictly in order. Each step depends on output from the previous one; an inf
    - If the request is **neutral** — e.g. "import this file", "import this data", bare "import", mentions only a file path with an import verb but says nothing about scheduling/increment/once — **you MUST ask the user to choose**. The bare import verb is NOT a one-time signal; it is ambiguous. **Never silently default to one-time.**
    - For **JSON (array)** and **CSV**, only one-time import is supported. No question needed.
 
-   After the source type and mode are confirmed, follow the matching branch:
+   After the source type, theme, language, and mode are confirmed, follow the matching branch:
 
-   - **MySQL — one-time import**: identify the table name, infer dataset name / dataset type / language / primary key, and require explicit confirmation before any real write. Continue at step 2.
+   - **MySQL — one-time import**: identify the table name, infer dataset name and primary key, and require explicit confirmation before any real write. Continue at step 2.
    - **MySQL — ongoing sync**: same as above, plus the user must explicitly confirm the incremental cursor field itself. After step 10 continue at step 11.
    - **MySQL — existing dataset — ongoing sync**: validate the dataset with `vs dataset get --id <DatasetId> --full`, confirm the source config (especially the incremental cursor field), then jump directly to step 11.
-   - **JSONL file — one-time import**: confirm the file path, dataset type, industry, and language. Continue at step 2.
-   - **JSONL file — ongoing sync**: confirm the file path, dataset type, industry, and language. You MUST also **interactively ask the user to confirm** that new records will only be appended to the end of the file (append-only). Present the constraint clearly — sync only supports files that grow by adding new lines; edits or deletions of existing lines are not tracked and may cause duplicate or missing records. Wait for explicit user confirmation before proceeding. After step 10 continue at step 11.
-   - **JSON (array) or CSV file — one-time import**: confirm the file path, dataset type, industry, and language. These formats are one-time import only; ongoing sync is not supported because they do not provide a stable append-only cursor. Convert the input to JSONL (one JSON object per line) before continuing. Continue at step 2.
+   - **JSONL file — one-time import**: confirm the file path. Continue at step 2.
+   - **JSONL file — ongoing sync**: confirm the file path. You MUST also **interactively ask the user to confirm** that new records will only be appended to the end of the file (append-only). Present the constraint clearly — sync only supports files that grow by adding new lines; edits or deletions of existing lines are not tracked and may cause duplicate or missing records. Wait for explicit user confirmation before proceeding. After step 10 continue at step 11.
+   - **JSON (array) or CSV file — one-time import**: confirm the file path. These formats are one-time import only; ongoing sync is not supported because they do not provide a stable append-only cursor. Convert the input to JSONL (one JSON object per line) before continuing. Continue at step 2.
    - **Existing dataset + one-time source import**: not supported as a single workflow. Explain that the current CLI split supports either source export → new dataset onboarding for a one-time import, or background sync for ongoing updates, then let the user choose which branch to switch to.
 
    Source environment configuration (applies to MySQL branches only; local files require no credentials):
@@ -119,7 +128,7 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
 3. **Get upload URL** — `vs dataset import-url --file-name <basename>`. Capture `Result.FileUrl` and `Result.FileKey`. Keep `FileKey` for step 5.
 4. **PUT upload** — upload the raw item file to `FileUrl` (e.g. `curl -X PUT --data-binary "@<local-path>" "<FileUrl>"`). Expect HTTP 200 with empty body. Do not add an `Authorization` header — `FileUrl` is already presigned.
-5. **Submit inference task** — `vs dataset infer-schema --tos-key <FileKey> --type <item|...> --industry <alias> --language <lang> --name <dataset-name>`. Capture `Result.TaskId`. Industry aliases follow the snake_case backend rules: `ecommerce`/`e-commerce` → `e_commerce`, `social-platform` → `social_platform`, plus `material`/`video`/`news`/`other`. The CLI converts the alias to the backend-expected snake_case automatically.
+5. **Submit inference task** — `vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme <general|e_commerce|content|long_video> --language <lang> --name <dataset-name>`. Capture `Result.TaskId`. Theme values accept alias normalization: `ecommerce`/`e-commerce` → `e_commerce`, `long-video`/`longvideo` → `long_video`, `common`/`default` → `general`.
 6. **Poll inference result + persist locally** — `vs dataset infer-result --task-id <TaskId>` until `Result.Status === "Success"` (poll roughly every 5s, max ~3 minutes). Then write `Result` verbatim to a **workspace-relative** artifact file so the rest of the workflow can read from it.
 
    **Plan directory rules (important)**:
@@ -163,7 +172,7 @@ Run strictly in order. Each step depends on output from the previous one; an inf
    **Your message to the user MUST be exactly this template** (BEGIN/END markers included, three parts only):
 
    ````
-   Dataset <Name> · type=<Type> · industry=<Industry>
+   Dataset <Name> · type=multi_modal · theme=<Theme>
 
    <verbatim CLI stdout from the BEGIN marker through the END marker, character-for-character>
 
@@ -191,15 +200,15 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 
    Wait for an explicit positive confirmation (`yes` or equivalent) before moving to step 8. If the user requests changes, edit the persisted `infer-result.json` in place (do **not** re-run inference) and re-run `vs dataset infer-result --data @infer-result.json --render-schema`, then re-emit the same three-part template so the user sees the same deterministic structure.
 
-8. **Dry-run create** — build `dataset-create.json` directly from the persisted artifact: copy `Schema` as-is (do **not** flip `IsPK`; the backend derives PK from `BizAttr`), copy `DataFieldConfig.FieldDescMap` as `FieldDescMap`, fill in `Name` / `Type` / `Industry` / `Language` / `Description`, set `DryRun: true`. Run `vs dataset create --data @dataset-create.json --dry-run`. Surface any validation errors and pause for correction. Useful payload shape:
+8. **Dry-run create** — build `dataset-create.json` directly from the persisted artifact: copy `Schema` as-is (do **not** flip `IsPK`; the backend derives PK from `BizAttr`), copy `DataFieldConfig.FieldDescMap` as `FieldDescMap`, fill in `Name` / `Type: "multi_modal"` / `Language` / `Description`, set `Theme` to the chosen theme, optionally set `ProcessConfig`, then set `DryRun: true`. Run `vs dataset create --data @dataset-create.json --dry-run`. Surface any validation errors and pause for correction. Standard payload shape:
 
    ```json
    {
      "Name": "<dataset-name>",
-     "Type": "item",
+     "Type": "multi_modal",
      "Description": "<one-line description>",
-     "Industry": "ecommerce",
      "Language": "zh",
+     "Theme": "<general|e_commerce|content|long_video>",
      "Schema":       <copy from infer-result.json Schema>,
      "FieldDescMap": <copy from infer-result.json DataFieldConfig.FieldDescMap>
    }
@@ -273,15 +282,11 @@ enum fields are **strings**. Pass the CLI alias (case-insensitive) and let the C
 
 | Field | CLI alias (recommended) | Backend wire value (snake_case) |
 |---|---|---|
-| `Industry` | `ecommerce` / `e-commerce` | `e_commerce` |
-| `Industry` | `material` | `material` |
-| `Industry` | `video` | `video` |
-| `Industry` | `news` | `news` |
-| `Industry` | `social-platform` / `social` | `social_platform` |
-| `Industry` | `other` | `other` |
-| `Industry` | `none` | `""` (empty) |
-| `Type` (dataset, `infer-schema`) | `item` / `video` / `user_event` (use `user-event` as a courtesy alias) | same, snake_case |
-| `Type` (dataset, `create`) | `item` / `video` / `user_event` / `document` | same, snake_case |
+| `Type` (dataset) | `multi_modal` (use `multi-modal` / `multimodal` as aliases) | `multi_modal` |
+| `Theme` | `general` / `common` / `default` | `general` |
+| `Theme` | `ecommerce` / `e-commerce` | `e_commerce` |
+| `Theme` | `content` | `content` |
+| `Theme` | `long-video` / `longvideo` | `long_video` |
 | `Type` (field) | `string` / `int32` / `int64` / `float` / `bool` / `array<string>` / `array<int64>` / `array<float>` / `object` / `array<object>` | identical string |
 
 Do not pass numeric codes to any V2 API. The CLI keeps a one-way alias map and an int→string fallback for legacy payloads, but agents should emit strings only.
@@ -319,7 +324,7 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 3. **Never flip `IsPK`.** Backend derives PK from `BizAttr`. Modifying `IsPK` (or stripping `BizAttr`) on the wire is a code smell and can fail validation.
 4. **Never skip Schema Confirmation (step 7).** Schema persistence (step 8 onward) requires an explicit human "yes" on the inferred schema and field roles.
 5. **Always dry-run once.** Run `dataset create --dry-run` before the real create. Surface backend validation errors to the user before retrying.
-6. **String enums only.** Pass `Type` and `Industry` as their string values (PascalCase alias accepted on input, snake_case is what the backend expects on wire). Numeric codes will be rejected.
+6. **String enums only.** Pass `Type` as `"multi_modal"` and `Theme` as one of `general|e_commerce|content|long_video`. Do not pass numeric enum codes. App-level `--industry` is only used for `vs app create`; never pass it to dataset create / infer-schema.
 7. **No backtrack flags.** `attach-dataset` (V2) does not accept `BacktrackReq`. If the user needs historical backtrack, treat it as a separate workflow.
 8. **Preserve `FieldDescMap` and `DataConfig`.** Forward the inferred `FieldDescMap` to `CreateDatasetV2`, and forward the inferred `DataConfig` verbatim to `AttachDatasetToApplicationV2`. Do not regenerate or strip them locally.
 9. **No `Authorization` header on the TOS PUT.** `FileUrl` is presigned; adding auth headers will break the upload.
@@ -331,13 +336,20 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 15. **Resolve import mode before proceeding for MySQL and JSONL.** Only skip the question when the request contains an explicit one-time or ongoing signal. The bare import verb without further qualification is neutral and you MUST ask. Never silently default to one-time. JSON/CSV are one-time only with no question needed.
 16. **Do not invent a one-shot source import into an existing dataset.** If the user wants `existing_dataset + once`, explain the current CLI split and let them choose between creating a new dataset from exported JSONL or enabling connector-based sync.
 17. **Never block waiting for readiness.** After printing the hand-off block, end your turn immediately. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
+18. **Theme is mandatory.** You MUST pass `--theme` (one of `general|e_commerce|content|long_video`) to both `dataset infer-schema` and `dataset create`. If the user has no preference, default to `general`. Do not leave Theme unset.
+19. **Multi-modal BizAttrs are backend-assigned; do not hand-edit them.** Schema inference automatically assigns the correct `MultiModal*` BizAttr codes (e.g. `MultiModalId`=80, `MultiModalImageUrl`=83, `MultiModalVideoUrl`=84, `MultiModalCategory`=85, `MultiModalPrice`=88). Do not add, remove, or remap these BizAttrs manually. If inference returns Warnings about missing required BizAttrs for the chosen Theme, fix the source data (add the missing column) rather than patching BizAttr by hand.
+20. **Preserve multi-modal DataFieldConfig sub-fields.** When attaching the dataset to an application, the `DataConfig` in `attach.json` MUST include `ImageIndexFields`, `VideoIndexFields`, and `ChatFields` exactly as returned by inference (they may be empty arrays, but must not be dropped). These fields drive image search, video search, and multimodal chat respectively; stripping them silently disables those capabilities.
+21. **Do not call GetSchemaTemplate from the CLI.** The frontend (DonaldTrump) calls `GetSchemaTemplate(TemplateCode=theme)` to get per-theme BizAttrConstraint lists; the CLI does not wrap this API. For CLI-driven onboarding, trust the backend's schema inference to assign required fields correctly; the Schema Confirmation Warnings block will surface any missing required fields, which the agent should relay to the user. Do not add a CLI call to fetch or validate templates.
 
 ## Recovery Hints
 
 - `infer-result` returns `Status=Failed` → read the `Error` / `ErrorCode` fields, fix the input file (encoding, JSONL formatting, header row), re-upload via step 3.
-- `dataset create` rejects with `InvalidParameter.PrimaryKeyCount` → check the persisted artifact: at least one field must carry a PK-class `BizAttr` (`ImagePK` / `VideoContentID` / `QueryPK` / `MultiModalID`). If none does, inference effectively failed; re-run with a cleaner input.
-- `dataset create` rejects with `InvalidParameter.Request` → most common causes: (a) field `Type` sent as a number instead of a string, (b) `Industry` sent in PascalCase like `ECommerce` instead of the alias `ecommerce`, (c) `BizAttr` accidentally stripped during local editing. Fix locally and dry-run again; no need to re-run inference.
-- `attach-dataset` errors after a successful create → run `vs app diagnose --application-id <AppId>` to inspect the runtime state before retrying.
+- `dataset create` rejects with `InvalidParameter.PrimaryKeyCount` → check the persisted artifact: at least one field must carry a PK-class `BizAttr` (`ImagePK` / `VideoContentID` / `QueryPK` / `MultiModalID`). If none does, inference effectively failed; re-run with a cleaner input that includes a stable identifier column.
+- `dataset create` rejects with `InvalidParameter.Theme` or `InvalidParameter.UnsupportedTheme` → the `--theme` value is invalid; use one of `general|e_commerce|content|long_video`.
+- `dataset create` rejects with `InvalidParameter.Request` → most common causes: (a) field `Type` sent as a number instead of a string, (b) `BizAttr` accidentally stripped during local editing, (c) `Theme` was missing or empty. Fix locally and dry-run again; no need to re-run inference.
+- `dataset create` rejects with multi-modal BizAttr errors (e.g. missing required `MultiModalImageUrl` for `e_commerce` theme) → the inferred schema is missing a required field for the chosen theme. Add the missing column to the source data and re-run from step 3 (re-upload + re-infer); do NOT patch BizAttr by hand.
+- `attach-dataset` errors after a successful create → run `vs app diagnose --application-id <AppId>` to inspect the runtime state before retrying. If the error is `OperationDenied.ImageAndVideoDatasetNotSupport` (code 340023), the application already has a dataset of a conflicting modality (image-text vs video cannot be bound together); create a separate application instead.
+- `attach-dataset` errors with `OperationDenied.VideoDatasetFieldsInsufficient` (code 340025) → a multi-modal video dataset requires descriptive text/array<string> fields beyond numeric fields; add title/content/description columns to the source data.
 - `data write` returns a HTTP error → confirm the dataset is in the `Ready` state via `vs app status --application-id <AppId>` (if attached), or `vs dataset get --id <DatasetId> --full` for unattached writes.
 
 ## Worked Example

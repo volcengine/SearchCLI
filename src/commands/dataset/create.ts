@@ -12,6 +12,7 @@ export default class DatasetCreate extends Command {
   static override examples = [
     '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json',
     '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json --field-desc-map @field-desc-map.json --industry ecommerce --dry-run',
+    '<%= config.bin %> dataset create --name demo-mm --type multi_modal --theme e_commerce --schema-json @schema.json --industry ecommerce --language zh --abnormal-image-policy skip',
     '<%= config.bin %> dataset create --data @dataset-create.json'
   ];
 
@@ -21,7 +22,7 @@ export default class DatasetCreate extends Command {
       description: 'Dataset name. Required unless --data already provides Name.'
     }),
     type: Flags.string({
-      description: 'Dataset type: item|video|user_event|document|multi_modal|query. Required unless --data already provides Type.'
+      description: 'Dataset type: item|video|user_event|document|multi_modal. Required unless --data already provides Type.'
     }),
     description: Flags.string({ description: 'Dataset description when building the payload from flags.' }),
     'schema-json': Flags.string({
@@ -36,9 +37,16 @@ export default class DatasetCreate extends Command {
     industry: Flags.string({
       description: 'Industry hint forwarded to the dataset (e.g. ecommerce|video|news).'
     }),
-    language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
+    language: Flags.string({ description: 'Language hint: zh|en|ko|ja|hi.' }),
+    theme: Flags.string({
+      description:
+        'Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video). Required when --type=multi_modal.'
+    }),
     'abnormal-image-policy': Flags.string({
-      description: 'ProcessConfig.AbnormalImageDataProcessPolicy (e.g. drop|keep).'
+      description: 'ProcessConfig.AbnormalImageDataProcessPolicy (skip|block). skip=drop bad image rows; block=fail the create.'
+    }),
+    'abnormal-video-policy': Flags.string({
+      description: 'ProcessConfig.AbnormalVideoDataProcessPolicy (skip|block). skip=drop bad video rows; block=fail the create.'
     }),
     'video-auto-delete': Flags.boolean({
       description: 'ProcessConfig.VideoAutoDelete: when set, the backend auto-deletes source videos after processing.'
@@ -73,7 +81,9 @@ export default class DatasetCreate extends Command {
       schemaJson: flags['schema-json'],
       industry: flags.industry,
       language: flags.language,
+      theme: flags.theme,
       abnormalImagePolicy: flags['abnormal-image-policy'],
+      abnormalVideoPolicy: flags['abnormal-video-policy'],
       videoAutoDelete: flags['video-auto-delete'],
       dryRun: flags['dry-run'],
       fieldDescMap: flags['field-desc-map'],

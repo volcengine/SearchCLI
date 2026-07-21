@@ -48,6 +48,10 @@ export interface DatasetIngestWorkflowOptions extends WorkflowServiceOptions {
   datasetName?: string;
   industry?: string;
   language?: string;
+  theme?: string;
+  abnormalImagePolicy?: string;
+  abnormalVideoPolicy?: string;
+  videoAutoDelete?: boolean;
   schemaWaitTimeoutMs?: number;
   schemaPollIntervalMs?: number;
   dryRun?: boolean;
@@ -79,7 +83,7 @@ interface DatasetIngestV2ExecutionResult {
 }
 
 import { isUserEventDatasetType } from '../core/types';
-import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
+import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, parseDatasetThemeValue, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
 
 export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWorkflowOptions): Promise<void> {
   console.warn("Warning: 'vs app dataset bind' is deprecated; use 'vs app attach-dataset' instead.");
@@ -357,6 +361,8 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
   }
   steps.push({ step: 'upload_file', ok: true, detail: `bytes=${fileBuffer.length}` });
 
+  const normalizedTheme = parseDatasetThemeValue(options.theme);
+
   const inferTaskResponse = unwrapResult(
     await client.post('/open/AddInferDatasetSchemaTaskV2', compactObject({
       TosKey: fileKey,
@@ -364,6 +370,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
       Name: options.datasetName,
       Industry: options.industry,
       Language: options.language,
+      Theme: normalizedTheme,
       ProjectName: projectName
     }))
   );
@@ -392,12 +399,22 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
   if (!inferResult) throw new Error(`Timed out waiting for schema inference task ${taskId}.`);
   steps.push({ step: 'poll_infer_result', ok: true, detail: 'status=success' });
 
+  const processConfig = (options.abnormalImagePolicy !== undefined || options.abnormalVideoPolicy !== undefined || options.videoAutoDelete !== undefined)
+    ? compactObject({
+        AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
+        AbnormalVideoDataProcessPolicy: options.abnormalVideoPolicy,
+        VideoAutoDelete: options.videoAutoDelete
+      })
+    : undefined;
+
   const datasetCreatePayload = compactObject({
     Name: options.datasetName ?? `cli-${fileKey.split('/').pop()?.replace(/\.[^.]*$/, '') ?? Date.now()}`,
     Type: parseDatasetTypeV2Value(normalizedType, CREATE_DATASET_TYPES),
     Schema: inferResult.Schema,
     Industry: options.industry,
     Language: options.language,
+    Theme: normalizedTheme,
+    ProcessConfig: processConfig,
     FieldDescMap: inferResult.FieldDescMap,
     DryRun: options.dryRun === true ? true : undefined,
     ProjectName: projectName

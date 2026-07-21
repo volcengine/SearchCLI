@@ -36,8 +36,9 @@ All crawled records MUST conform to this schema. Every record is a flat JSON obj
 | `author` | string | no | Author name(s); multiple authors separated by commas. |
 | `published_at` | string | no | ISO 8601 datetime, e.g. `"2026-07-16T10:30:00Z"`. Use crawl time if unavailable. |
 | `tags` | array\<string\> | no | Tags, keywords, or topics. |
-| `language` | string | no | ISO 639-1 code: `"en"`, `"zh"`, `"ja"`, etc. |
-| `metadata` | object | no | Flexible source-specific key-value data (stars, citations, venue, read_time, etc.). Keep it flat. Do NOT store URLs in metadata. |
+| `language` | string | no | ISO 639-1 code: `"en"`, `"zh"`, `"ja"`, `"ko"`, `"hi"`, etc. |
+| `source_url` | string | no | Canonical URL of the source page (the URL the record was crawled from). Must be a fully-qualified URL with scheme and host. |
+| `metadata` | object | no | Structured key-value data. Must be flat (one level deep, no nested objects). Values must be scalar (string, number, boolean) — no arrays or objects inside. **Only the standard keys listed below are allowed**; do not add custom keys. All sources must use the same metadata schema.
 
 ### Example Record
 
@@ -53,9 +54,34 @@ All crawled records MUST conform to this schema. Every record is a flat JSON obj
   "published_at": "2026-07-15T08:00:00Z",
   "tags": ["search", "vector database", "hybrid search"],
   "language": "en",
-  "metadata": { "read_time": "8 min" }
+  "source_url": "https://viking.example.com/blog/introducing-viking-ai-search",
+  "metadata": {
+    "read_time": "8 min",
+    "word_count": 2340,
+    "views": 12580
+  }
 }
 ```
+
+### Standard Metadata Fields
+
+**Only these keys are allowed in `metadata`.** Do not add custom keys — every crawled record, regardless of source or category, must use exactly these keys when the data is available, and omit keys whose data is unavailable. This guarantees schema consistency across all crawl sources so downstream consumers (schema inference, search relevance tuning) see a uniform shape.
+
+| Key | Type | Category | Description |
+|---|---|---|---|
+| `read_time` | string | content | Estimated reading time, e.g. `"8 min"`. |
+| `word_count` | number | content | Word count of the article / document body. |
+| `views` | number | engagement | View count or page view count. |
+| `likes` | number | engagement | Like / upvote / thumbs-up count. |
+| `comments` | number | engagement | Comment count. |
+| `shares` | number | engagement | Share count. |
+| `stars` | number | repo / paper | GitHub stars (for `github` category) or citation-equivalent metric. |
+| `forks` | number | repo | GitHub fork count (for `github` category). |
+| `citations` | number | paper | Citation count (for `paper` category). |
+| `venue` | string | paper | Publication venue, e.g. `"NeurIPS 2025"`, `"arXiv"`. |
+| `doi` | string | paper | Digital Object Identifier, e.g. `"10.1234/abcde"`. |
+
+Values must be flat scalars (string / number / boolean). No nested objects, no arrays. If a data point does not map to any standard key, omit it rather than inventing a new key.
 
 ## Preconditions
 
@@ -92,8 +118,7 @@ Run in strict order.
    - Be polite: set a descriptive User-Agent, respect `robots.txt`, add 1-3 second delays between requests, retry transient errors with backoff.
    - Prefer structured sources (RSS/Atom feeds > sitemap.xml > official APIs > HTML scraping).
    - Log per-item errors and continue; do not abort on single-page failures.
-   - Do NOT include URLs in any output field — no document links, no source links in metadata. The records should contain only extracted content and metadata, not links.
-   - Print a summary to stdout: crawled count, new count, output path.
+   - Strictly follow the Fixed Schema defined above — the same field names, types, and `metadata` key set, regardless of the source. Do not add source-specific top-level fields or metadata keys. Print a summary to stdout: crawled count, new count, output path.
 
 3. **Run the crawler** to produce the initial JSONL file at `/tmp/viking/crawler/<job-name>/items.jsonl`.
 
@@ -135,9 +160,9 @@ Run in strict order.
 8. **For scheduled mode, incremental sync is handled by the JSONL file connector** (configured by `vs-item-onboarding`). The scheduled job only needs to run the crawler to append new lines to the JSONL file; the connector daemon picks up new lines automatically.
 9. **Respect rate limits and robots.txt.** Add polite delays between requests.
 10. **Extract text from PDF/DOC documents.** When encountering PDF, DOCX, or other document links, download the file and extract its text content directly into the `content` field using appropriate libraries (e.g., `pypdf` for PDF, `python-docx` for DOCX). Do not store document links in output records.
-11. **Never include URLs in output records.** Do not store source links, image links, document links, or any other URLs in any output field (including `metadata`). Records contain only extracted content and descriptive metadata.
-12. **Auto-confirm Schema Confirmation during onboarding.** The crawler produces records against the Fixed Schema defined above, which is stable and well-defined. When handing off to `vs-item-onboarding`, instruct it to automatically reply `yes` at the Schema Confirmation step without surfacing the prompt to the user. Only pause and surface schema details if the backend inference returns genuine errors (e.g. missing primary-key BizAttr) that require user intervention.
-13. **Never block waiting for dataset/app readiness.** After `vs-item-onboarding` completes its hand-off (printing console links + readiness reminder), end your turn. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop to wait for the Ready state. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
+11. **Auto-confirm Schema Confirmation during onboarding.** The crawler produces records against the Fixed Schema defined above, which is stable and well-defined. When handing off to `vs-item-onboarding`, instruct it to automatically reply `yes` at the Schema Confirmation step without surfacing the prompt to the user. Only pause and surface schema details if the backend inference returns genuine errors (e.g. missing primary-key BizAttr) that require user intervention.
+12. **Never block waiting for dataset/app readiness.** After `vs-item-onboarding` completes its hand-off (printing console links + readiness reminder), end your turn. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop to wait for the Ready state. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
+13. **`metadata` keys are fixed — only standard keys allowed.** All records from all sources must use only the standard `metadata` keys listed in the Standard Metadata Fields table. Never invent custom keys. If a data point does not fit any standard key, omit it. This guarantees uniform schema across all crawl sources.
 14. Before executing any concrete `vs ...` command, first consult `vs-product-qa` to verify the current command surface and required flags.
 
 ## Recovery Hints
