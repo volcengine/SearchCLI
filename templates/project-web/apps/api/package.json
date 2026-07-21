@@ -1,0 +1,15 @@
+{
+  "name": "@viking-project/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@volcengine/search-node": "^0.7.0",
+    "express": "^5.1.0"
+  }
+}

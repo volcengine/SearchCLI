@@ -60,6 +60,36 @@ If you changed binary packaging behavior, also run:
 npm run test:acceptance:binary
 ```
 
+## Project Template Development
+
+The full-stack project template under `templates/project-web` can run locally
+without first calling `vs project create`.
+
+Before starting the template dev server, create a local API config file:
+
+```bash
+cp templates/project-web/apps/api/src/env.template.ts templates/project-web/apps/api/src/env.ts
+```
+
+Then edit `templates/project-web/apps/api/src/env.ts` with local project IDs.
+This file is gitignored and should stay local. The embed generation step maps
+`apps/api/src/env.template.ts` to `apps/api/src/env.ts` for projects generated
+by `vs project create`.
+
+Run the template locally:
+
+```bash
+npm run project-template:dev
+```
+
+To install inside the template directory manually:
+
+```bash
+cd templates/project-web
+npm install
+npm run dev
+```
+
 ## Skills
 
 This repository treats skills as first-class product assets.

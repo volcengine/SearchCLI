@@ -30,8 +30,10 @@
   "scripts": {
     "clean:dist": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "generate:embedded-skills": "node ./scripts/generate-embedded-repo-skills.mjs",
+    "generate:embedded-project-template": "node ./scripts/generate-embedded-project-template.mjs",
+    "project-template:dev": "npm --prefix templates/project-web install && npm --prefix templates/project-web run dev",
     "validate:skills": "node ./scripts/validate-skills.mjs",
-    "build": "npm run clean:dist && tsc -p tsconfig.json",
+    "build": "npm run generate:embedded-project-template && npm run clean:dist && tsc -p tsconfig.json",
     "dev": "tsx ./src/index.ts",
     "start": "node ./bin/run.js",
     "prepack": "npm run build",

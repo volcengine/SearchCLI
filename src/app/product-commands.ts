@@ -12,6 +12,7 @@ import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
 import { resolvePurchasePageUrl, type EnvironmentId } from '../core/environment';
 import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import { isProjectFeatureEnabled } from '../core/feature-flags';
 import { ApiRequestError, postJson } from '../core/http';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
@@ -66,6 +67,7 @@ import {
   runConnectorStopCommand
 } from './connector-commands';
 import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
+import { runProjectCreateCommand, runProjectDeployCommand } from './project-commands';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -1764,6 +1766,16 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runItemCli(argv);
       return true;
+    case 'project':
+      if (!isProjectFeatureEnabled()) {
+        return false;
+      }
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runProjectCli(argv);
+      return true;
     default:
       return false;
   }
@@ -1783,6 +1795,7 @@ export function printProductDomainsHelp(): void {
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
     'vs chat run',
+    ...(isProjectFeatureEnabled() ? ['vs project create|deploy'] : []),
     'vs purchase link|order status|wait'
   ];
 
@@ -1975,6 +1988,21 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
+    project: `${renderUsageBlock(
+      [
+        'vs project create [project-name] --app-id <id> --features <search,recommend,chat> [--profile <name>] [--search-scene-id <id> --search-dataset-id <id>] [--rec-scene-id <id>] [output flags]',
+        'vs project deploy --provider <provider> [--project-dir <dir>] [--dry-run] [output flags]'
+      ]
+    )}
+
+DESCRIPTION
+  Create a runnable web experience for an existing Viking app and deploy it to the selected provider.
+  Project create requires one or more explicit features. It reuses VIKING_API_KEY when configured;
+  otherwise it uses AK/SK from the selected or active auth profile.
+
+COMMON FLAGS
+  create: --features --profile --format --jq --output
+  deploy: --provider --project-dir --dry-run --format --jq --output`,
     purchase: `${renderUsageBlock(
       [
         'vs purchase link [--environment-id <environment-id>]',
@@ -3870,6 +3898,54 @@ async function runChatSearchCli(argv: string[]): Promise<void> {
   });
 }
 
+async function runProjectCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('project');
+    return;
+  }
+
+  switch (action) {
+    case 'create': {
+      rejectProjectCreateCredentialFlags(argv.slice(1));
+      const parsed = parseStandaloneArguments(argv.slice(1));
+      const values = parsed.values;
+      await runProjectCreateCommand({
+        projectName: optionalString(parsed.positionals[0]),
+        appId: requiredString(values['app-id'], '--app-id'),
+        features: optionalString(values.features),
+        profile: optionalString(values.profile),
+        searchSceneId: optionalString(values['search-scene-id']),
+        searchDatasetId: optionalString(values['search-dataset-id']),
+        recSceneId: optionalString(values['rec-scene-id'])
+      });
+      return;
+    }
+    case 'deploy': {
+      const values = parseStandaloneOptions(argv.slice(1));
+      await runProjectDeployCommand({
+        projectDir: optionalString(values['project-dir']),
+        dryRun: optionalBoolean(values['dry-run']),
+        provider: optionalString(values.provider)
+      });
+      return;
+    }
+    default:
+      throw new Error(`Unknown project subcommand: ${action}`);
+  }
+}
+
+function rejectProjectCreateCredentialFlags(argv: string[]): void {
+  const removedFlags = ['--api-key', '--ak', '--sk', '--region'];
+  const usedFlag = removedFlags.find(flag =>
+    argv.some(value => value === flag || value.startsWith(`${flag}=`))
+  );
+  if (!usedFlag) return;
+  throw new Error(
+    `vs project create no longer accepts ${usedFlag}. Set VIKING_API_KEY or use \`vs auth login\` / \`vs auth import-env\`, then select credentials with --profile.`,
+  );
+}
+
 async function runPurchaseCli(argv: string[]): Promise<void> {
   const action = argv[0];
   const subAction = argv[1];
@@ -3906,8 +3982,16 @@ async function runPurchaseCli(argv: string[]): Promise<void> {
   }
 }
 
-function parseStandaloneOptions(argv: string[]) {
-  const { values } = parseArgs({
+type StandaloneOptionValue = string | boolean | string[] | undefined;
+type StandaloneValues = Record<string, StandaloneOptionValue>;
+
+function parseStandaloneOptions(argv: string[]): StandaloneValues {
+  const { values } = parseStandaloneArguments(argv);
+  return values;
+}
+
+function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; positionals: string[] } {
+  const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
     strict: false,
@@ -3938,6 +4022,8 @@ function parseStandaloneOptions(argv: string[]) {
       id: { type: 'string' },
       job: { type: 'string' },
       'plan-dir': { type: 'string' },
+      'project-dir': { type: 'string' },
+      provider: { type: 'string' },
       name: { type: 'string' },
       source: { type: 'string' },
       mode: { type: 'string' },
@@ -3972,7 +4058,12 @@ function parseStandaloneOptions(argv: string[]) {
       'dataset-id': { type: 'string' },
       fields: { type: 'string' },
       full: { type: 'boolean' },
+      'app-id': { type: 'string' },
       'application-id': { type: 'string' },
+      features: { type: 'string' },
+      'search-scene-id': { type: 'string' },
+      'search-dataset-id': { type: 'string' },
+      'rec-scene-id': { type: 'string' },
       'scene-id': { type: 'string' },
       'project-name': { type: 'string' },
       'dry-run': { type: 'boolean' },
@@ -4080,15 +4171,12 @@ function parseStandaloneOptions(argv: string[]) {
       'data-config': { type: 'string' },
       'icon-color': { type: 'string' },
       'risk-check': { type: 'boolean' },
-      'app-id': { type: 'string' },
       theme: { type: 'string' },
     }
   });
 
-  return values;
+  return { values: values as StandaloneValues, positionals };
 }
-
-type StandaloneValues = ReturnType<typeof parseStandaloneOptions>;
 
 function toStandaloneServiceOptions(values: StandaloneValues): ServiceCommandOptions {
   return compactObject({

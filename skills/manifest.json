@@ -30,6 +30,12 @@
       ]
     },
     {
+      "name": "vs-project",
+      "files": [
+        "vs-project/SKILL.md"
+      ]
+    },
+    {
       "name": "vs-recommend",
       "files": [
         "vs-recommend/SKILL.md"
