@@ -134,6 +134,7 @@ export interface DatasetCreateOptions extends ServiceCommandOptions {
   language?: string;
   theme?: string;
   abnormalImagePolicy?: string;
+  abnormalVideoPolicy?: string;
   videoAutoDelete?: boolean;
   dryRun?: boolean;
   fieldDescMap?: string;
@@ -801,29 +802,46 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
     ? await loadJsonInput(options.schemaJson)
     : await loadJsonInput(options.schema);
   const fieldDescMap = options.fieldDescMap ? await loadJsonInput(options.fieldDescMap) : undefined;
-  const processConfig = (options.abnormalImagePolicy !== undefined || options.videoAutoDelete !== undefined)
+  const processConfig = (options.abnormalImagePolicy !== undefined || options.abnormalVideoPolicy !== undefined || options.videoAutoDelete !== undefined)
     ? compactObject({
         AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
+        AbnormalVideoDataProcessPolicy: options.abnormalVideoPolicy,
         VideoAutoDelete: options.videoAutoDelete
       })
     : undefined;
-  const fallbackPayload = compactObject({
-    Name: options.name,
-    Type: options.type,
-    Description: options.description,
-    Schema: schemaInline,
-    Industry: options.industry,
-    Language: options.language,
-    Theme: options.theme,
-    ProcessConfig: processConfig,
-    FieldDescMap: fieldDescMap,
-    DryRun: options.dryRun === true ? true : undefined,
-    ProjectName: options.projectName
-  });
-  const payload = normalizeDatasetV2Payload(
-    (await loadJsonInput(options.data)) ?? fallbackPayload,
-    CREATE_DATASET_TYPES
-  );
+  const filePayload = await loadJsonInput(options.data);
+
+  let rawPayload: Record<string, unknown>;
+  if (isRecord(filePayload)) {
+    rawPayload = { ...filePayload };
+    if (options.name !== undefined) rawPayload.Name = options.name;
+    if (options.type !== undefined) rawPayload.Type = options.type;
+    if (options.description !== undefined) rawPayload.Description = options.description;
+    if (schemaInline !== undefined) rawPayload.Schema = schemaInline;
+    if (options.industry !== undefined) rawPayload.Industry = options.industry;
+    if (options.language !== undefined) rawPayload.Language = options.language;
+    if (options.theme !== undefined) rawPayload.Theme = options.theme;
+    if (processConfig !== undefined) rawPayload.ProcessConfig = processConfig;
+    if (fieldDescMap !== undefined) rawPayload.FieldDescMap = fieldDescMap;
+    if (options.dryRun === true) rawPayload.DryRun = true;
+    if (options.projectName !== undefined) rawPayload.ProjectName = options.projectName;
+  } else {
+    rawPayload = compactObject({
+      Name: options.name,
+      Type: options.type,
+      Description: options.description,
+      Schema: schemaInline,
+      Industry: options.industry,
+      Language: options.language,
+      Theme: options.theme,
+      ProcessConfig: processConfig,
+      FieldDescMap: fieldDescMap,
+      DryRun: options.dryRun === true ? true : undefined,
+      ProjectName: options.projectName
+    });
+  }
+
+  const payload = normalizeDatasetV2Payload(rawPayload, CREATE_DATASET_TYPES);
   requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
   await printResult(callOpenApi('/open/CreateDatasetV2', payload, options));
 }
@@ -1813,7 +1831,7 @@ export function printProductDomainsHelp(): void {
     'vs app dataset bind',
     'vs app dataset-config get|list|update',
     'vs app online-config get|update',
-    'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result',
+    'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result|validate-schema',
     'vs dataset schema check',
     'vs data write|import|delete',
     'vs connector init|run|status|stop|inspect',
@@ -1855,14 +1873,15 @@ COMMON FLAGS
   --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     dataset: `${renderUsageBlock(
       [
-        'vs dataset create --name <name> --type <item|video|user_event|document> [--description <text>] [--schema @schema.json] [--industry <type>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--dry-run] [service flags]',
+        'vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <type>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--abnormal-video-policy <policy>] [--video-auto-delete] [--dry-run] [service flags]',
         'vs dataset get --id <dataset-id> [--full] [service flags]',
         'vs dataset update --id <dataset-id> [--version <n>] [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]',
-        'vs dataset ingest --file ./items.jsonl --type <item|video|user_event> [--dataset-name <name>] [--industry <type>] [--language <lang>] [--dry-run] [workflow flags]',
+        'vs dataset ingest --file ./items.jsonl --type <user_event|multi_modal> [--dataset-name <name>] [--industry <type>] [--language <lang>] [--theme <theme>] [--abnormal-image-policy <policy>] [--abnormal-video-policy <policy>] [--video-auto-delete] [--dry-run] [workflow flags]',
         'vs dataset import-url --file-name <file> [--project-name <name>] [service flags]',
-        'vs dataset infer-schema --tos-key <key> --type <item|video|user_event> [--name <name>] [--industry <type>] [--language <lang>] [--project-name <name>] [service flags]',
-        'vs dataset infer-result --task-id <id> [--render-schema] [--project-name <name>] [service flags]',
+        'vs dataset infer-schema --tos-key <key> --type <user_event|multi_modal> [--name <name>] [--industry <type>] [--language <lang>] [--theme <theme>] [--project-name <name>] [service flags]',
+        'vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]',
+        'vs dataset validate-schema --input <path> --dataset-type <multi_modal|user_event>',
         'vs dataset schema check --type <item|query|video|user-event|doc|document> [--schema @schema.json] [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
@@ -1945,7 +1964,7 @@ COMMON FLAGS
 USAGE
   vs dataset import-url --file-name <basename>
   vs dataset infer-schema --tos-key <FileKey> --type <item|video> --industry <type> --language <lang>
-  vs dataset infer-result --task-id <TaskID> --render-schema
+  vs dataset infer-result --task-id <TaskID>
   vs dataset create --data @dataset-create.json
   vs data write --dataset-id <DatasetId> --fields @items.json
   vs app create --name <name> --industry <type> --language <lang>
@@ -2054,7 +2073,7 @@ function printDatasetCommandHelp(action: string): void {
     create: `Create a Viking dataset.
 
 USAGE
-  vs dataset create --name <name> --type <item|video|user_event|document> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--video-auto-delete] [--project-name <name>] [--dry-run] [service flags]
+  vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--project-name <name>] [--dry-run] [service flags]
   vs dataset create --data @dataset-create.json [service flags]
 
 DESCRIPTION
@@ -2065,17 +2084,18 @@ DESCRIPTION
 KEY FLAGS
   --data                    Full create payload. Recommended when you already have dataset-create.json.
   --name                    Dataset name. Required unless --data already provides Name.
-  --type                    Dataset type. Allowed values: item|video|user_event|document. Required unless --data already provides Type.
+  --type                    Dataset type. Allowed values: user_event|multi_modal. Required unless --data already provides Type.
   --description             Dataset description when building the payload from flags.
   --schema                  Schema JSON. Use for schema-only creation; prefer --data when dataset-create.json
                             is available so DataFieldConfig is also submitted.
   --schema-json             Inline schema JSON literal (alternative to --schema @file).
   --industry                Optional industry hint (e_commerce|material|video|news|social_platform|other).
                             Forwards to CreateDatasetV2.Industry; aliases like \`ecommerce\` are accepted.
-  --language                Optional language hint (zh|en|ja). Forwards to CreateDatasetV2.Language.
-  --theme                   Optional theme/domain hint. Forwards to CreateDatasetV2.Theme.
+  --language                Optional language hint (zh|en|ko|ja|hi). Forwards to CreateDatasetV2.Language.
+  --theme                   Theme/domain hint. Allowed values: general|e_commerce|content|long_video. Required when --type=multi_modal. Forwards to CreateDatasetV2.Theme.
   --field-desc-map          JSON map of FieldName → human description. Forwards to FieldDescMap.
-  --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy value (e.g. skip|fail).
+  --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy value (skip|block). skip=drop bad image rows; block=fail the import.
+  --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy value (skip|block). skip=drop bad video rows; block=fail the import.
   --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
   --project-name            Viking project name when the API requires project scoping.
   --dry-run                 Validate the payload server-side without persisting the dataset.
@@ -2117,7 +2137,7 @@ EXAMPLES
 
 USAGE
   vs dataset ingest --dataset-id <id> --fields @items.json [--project-name <name>] [workflow flags]
-  vs dataset ingest --file ./items.jsonl --type <item|video|user_event> [--dataset-name <name>] [--industry <industry>] [--language <lang>] [--schema-wait-timeout-ms <n>] [--schema-poll-interval-ms <n>] [--project-name <name>] [--dry-run] [workflow flags]
+  vs dataset ingest --file ./items.jsonl --type <user_event|multi_modal> [--dataset-name <name>] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--schema-wait-timeout-ms <n>] [--schema-poll-interval-ms <n>] [--project-name <name>] [--dry-run] [workflow flags]
 
 DESCRIPTION
   In a plan-driven dataset-only flow, pair this with \`dataset create --data @dataset-create.json\`
@@ -2134,13 +2154,18 @@ KEY FLAGS
   --dataset-id              Target dataset ID (legacy data-write mode).
   --fields                  JSON array payload. When ingesting from an item plan, prefer normalized-items.json.
   --file                    Local JSONL/CSV source for V2 chain mode.
-  --type                    Dataset type for V2 chain mode. Accepts item|video|user_event (the
-                            inference-allowed enum); the same value is reused for CreateDatasetV2.
+  --type                    Dataset type for V2 chain mode. Accepts user_event|multi_modal;
+                            the same value is reused for CreateDatasetV2.
   --dataset-name            Optional dataset name for V2 chain mode. Reused for both
                             AddInferDatasetSchemaTaskV2.Name and CreateDatasetV2.Name.
   --industry                Optional industry hint forwarded to inference and CreateDatasetV2
                             (e_commerce|material|video|news|social_platform|other).
-  --language                Optional language hint (zh|en|ja) forwarded to inference and CreateDatasetV2.
+  --language                Optional language hint (zh|en|ko|ja|hi) forwarded to inference and CreateDatasetV2.
+  --theme                   Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video).
+                            Required when --type=multi_modal. Forwards to AddInferDatasetSchemaTaskV2.Theme and CreateDatasetV2.Theme.
+  --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy (skip|block) for multi_modal.
+  --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy (skip|block) for multi_modal.
+  --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
   --schema-wait-timeout-ms  Upper bound for polling GetInferDatasetSchemaResultV2 (default 120000).
   --schema-poll-interval-ms Wait between polling attempts in ms (default 2000).
   --project-name            Viking project name when the API requires project scoping.
@@ -2150,6 +2175,7 @@ EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
   vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --language zh
   vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run
+  vs dataset ingest --file ./products.jsonl --type multi_modal --theme e_commerce --abnormal-image-policy skip --industry e_commerce --language zh
   vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
   vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type item --dataset-name demo-items`,
     'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
@@ -2172,7 +2198,7 @@ EXAMPLES
     'infer-schema': `Submit a schema inference task for V2 dataset onboarding (AddInferDatasetSchemaTaskV2).
 
 USAGE
-  vs dataset infer-schema --tos-key <key> --type <item|video|user_event> [--name <name>] [--industry <industry>] [--language <lang>] [--project-name <name>] [service flags]
+  vs dataset infer-schema --tos-key <key> --type <user_event|multi_modal> [--name <name>] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--project-name <name>] [service flags]
   vs dataset infer-schema --data @infer-schema.json [service flags]
 
 DESCRIPTION
@@ -2181,11 +2207,12 @@ DESCRIPTION
 
 KEY FLAGS
   --tos-key        FileKey returned by \`dataset import-url\`. Required unless --data already provides TosKey.
-  --type           Dataset type. Allowed values: item|video|user_event. Required unless --data already provides Type.
+  --type           Dataset type. Allowed values: user_event|multi_modal. Required unless --data already provides Type.
   --name           Optional dataset name hint forwarded to AddInferDatasetSchemaTaskV2.Name.
   --industry       Optional industry hint (e_commerce|material|video|news|social_platform|other).
                    Aliases like \`ecommerce\` are accepted and normalized to the snake_case wire value.
-  --language       Optional language hint (zh|en|ja).
+  --language       Optional language hint (zh|en|ko|ja|hi).
+  --theme          Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video). Required when --type=multi_modal.
   --project-name   Viking project name when the API requires project scoping.
 
 EXAMPLES
@@ -2194,7 +2221,7 @@ EXAMPLES
     'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
 
 USAGE
-  vs dataset infer-result --task-id <id> [--project-name <name>] [--render-schema] [service flags]
+  vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]
   vs dataset infer-result --data @infer-result.json [service flags]
 
 DESCRIPTION
@@ -2202,18 +2229,36 @@ DESCRIPTION
   DataFieldConfig when Status is Success. This is a single-shot call; \`dataset ingest\` performs
   the polling internally.
 
+  To render a human-readable schema confirmation block (fields table, field roles, warnings),
+  save the result to JSON and use \`vs dataset validate-schema --input <path> --dataset-type <type>\`.
+
 KEY FLAGS
   --task-id        TaskID returned by \`dataset infer-schema\`.
   --project-name   Viking project name when the API requires project scoping.
-  --render-schema  Render the inferred schema as a deterministic Schema Confirmation table (fields +
-                   field-role roster + anomaly warnings). Tolerates Name/FieldName,
-                   Type/FieldType, missing Required / BizAttr / FieldDescMap, and missing
-                   DataFieldConfig entries. Use this before asking the user to confirm.
 
 EXAMPLES
   vs dataset infer-result --task-id task_abc123
-  vs dataset infer-result --task-id task_abc123 --render-schema
-  vs dataset infer-result --data @infer-result.json --render-schema`
+  vs dataset infer-result --data @infer-result.json`,
+    'validate-schema': `Validate and render a schema-inference result locally.
+
+USAGE
+  vs dataset validate-schema --input <path/to/infer-result.json> --dataset-type <multi_modal|user_event>
+
+DESCRIPTION
+  Reads a saved infer-result JSON file and renders the deterministic Schema Confirmation block
+  (metadata / field table / field roles / warnings). Supply --dataset-type to toggle validation rules:
+  multi_modal validates primary-key BizAttr, IndexFields, and role references; user_event skips
+  those checks (behavior datasets use a different primary-key mechanism and have no search roles).
+
+KEY FLAGS
+  --input           Path to infer-result JSON file (from \`vs dataset infer-result > file.json\`
+                    or the saved plan artifact). Required.
+  --dataset-type    Dataset type: multi_modal (default) or user_event. Controls which validation
+                    rules and render sections are active.
+
+EXAMPLES
+  vs dataset validate-schema --input ./infer-result.json --dataset-type multi_modal
+  vs dataset validate-schema --input ./.viking/item-plans/my-dataset/infer-result.json --dataset-type user_event`
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
@@ -2358,7 +2403,7 @@ KEY FLAGS
   --description    Optional application description.
   --industry       Optional industry hint (e_commerce|material|video|news|social_platform|other).
                    Aliases like \`ecommerce\` are accepted and normalized to the snake_case wire value.
-  --language       Optional language hint (zh|en|ja). Forwards to CreateApplicationV2.Language.
+  --language       Optional language hint (zh|en|ko|ja|hi). Forwards to CreateApplicationV2.Language.
   --color          Icon color shorthand (cyan|blue|purple|pink). Forwards to Icon.ColorName.
   --icon-color     Explicit alias for --color when both are present.
   --risk-check     Enable platform risk-check on the application (EnableRiskCheck=true).
@@ -3195,6 +3240,7 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         language: optionalString(values.language),
         theme: optionalString(values.theme),
         abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
+        abnormalVideoPolicy: optionalString(values['abnormal-video-policy']),
         videoAutoDelete: optionalBoolean(values['video-auto-delete']),
         dryRun: optionalBoolean(values['dry-run']),
         fieldDescMap: optionalString(values['field-desc-map']),
@@ -3216,6 +3262,7 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         name: optionalString(values.name),
         industry: optionalString(values.industry),
         language: optionalString(values.language),
+        theme: optionalString(values.theme),
         projectName: optionalString(values['project-name'])
       });
       return;
@@ -3223,8 +3270,13 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       await runDatasetInferResultCommand({
         ...serviceOptions,
         taskId: optionalString(values['task-id']),
-        projectName: optionalString(values['project-name']),
-        renderSchema: optionalBoolean(values['render-schema'])
+        projectName: optionalString(values['project-name'])
+      });
+      return;
+    case 'validate-schema':
+      await runDatasetValidateSchemaCommand({
+        input: optionalString(values.input),
+        datasetType: optionalString(values['dataset-type']) ?? 'multi_modal'
       });
       return;
     case 'get':
@@ -4156,6 +4208,7 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'opening-remarks': { type: 'string' },
       'item-dataset-id': { type: 'string' },
       'dataset-type': { type: 'string' },
+      input: { type: 'string', short: 'i' },
       'page-number': { type: 'string' },
       'activated-only': { type: 'boolean' },
       'wait-ready': { type: 'boolean' },
@@ -4215,6 +4268,7 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'schema-json': { type: 'string' },
       'field-desc-map': { type: 'string' },
       'abnormal-image-policy': { type: 'string' },
+      'abnormal-video-policy': { type: 'string' },
       'video-auto-delete': { type: 'boolean' },
       'data-config': { type: 'string' },
       'icon-color': { type: 'string' },
@@ -4484,22 +4538,47 @@ function normalizeAppCreateV2Payload(payload: unknown, industry?: string): unkno
 }
 
 const DATASET_TYPE_V2_ALIASES: Record<string, string> = {
-  item: 'item',
-  video: 'video',
   'user-event': 'user_event',
   user_event: 'user_event',
-  document: 'document'
+  'multi-modal': 'multi_modal',
+  multi_modal: 'multi_modal',
+  multimodal: 'multi_modal'
 };
 
 const DATASET_TYPE_CODE_TO_V2: Record<number, string> = {
-  1: 'item',
-  3: 'video',
   4: 'user_event',
-  5: 'document'
+  7: 'multi_modal'
 };
 
-export const INFER_SCHEMA_DATASET_TYPES = ['item', 'video', 'user_event'] as const;
-export const CREATE_DATASET_TYPES = ['item', 'video', 'user_event', 'document'] as const;
+export const INFER_SCHEMA_DATASET_TYPES = ['user_event', 'multi_modal'] as const;
+export const CREATE_DATASET_TYPES = ['user_event', 'multi_modal'] as const;
+
+const DATASET_THEME_ALIASES: Record<string, string> = {
+  general: 'general',
+  common: 'general',
+  default: 'general',
+  'e-commerce': 'e_commerce',
+  ecommerce: 'e_commerce',
+  e_commerce: 'e_commerce',
+  content: 'content',
+  'long-video': 'long_video',
+  long_video: 'long_video',
+  longvideo: 'long_video'
+};
+
+const SUPPORTED_DATASET_THEMES = ['general', 'e_commerce', 'content', 'long_video'] as const;
+
+export function parseDatasetThemeValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === '') return 'general';
+  const resolved = DATASET_THEME_ALIASES[normalized];
+  if (resolved) return resolved;
+  if ((SUPPORTED_DATASET_THEMES as readonly string[]).includes(normalized)) return normalized;
+  throw new Error(
+    `Invalid dataset Theme value: ${value}. Supported values: ${SUPPORTED_DATASET_THEMES.join('|')}.`
+  );
+}
 
 export function parseDatasetTypeV2Value(value: unknown, allowed?: readonly string[]): string {
   let resolved: string | undefined;
@@ -4516,7 +4595,7 @@ export function parseDatasetTypeV2Value(value: unknown, allowed?: readonly strin
     resolved = DATASET_TYPE_CODE_TO_V2[value];
   }
   if (resolved === undefined) {
-    const allowedList = allowed ? allowed.join('|') : 'item|video|user_event|document';
+    const allowedList = allowed ? allowed.join('|') : 'user_event|multi_modal';
     throw new Error(`Invalid dataset Type value: ${String(value)}. Use ${allowedList}.`);
   }
   if (allowed && !allowed.includes(resolved)) {
@@ -4538,6 +4617,9 @@ function normalizeDatasetV2Payload(payload: unknown, allowed?: readonly string[]
   }
   if (payload.Industry !== undefined && typeof payload.Industry === 'string') {
     normalized.Industry = payload.Industry.trim();
+  }
+  if (payload.Theme !== undefined) {
+    normalized.Theme = parseDatasetThemeValue(payload.Theme);
   }
   return normalized;
 }
@@ -4609,6 +4691,7 @@ export interface DatasetInferSchemaOptions extends ServiceCommandOptions {
   name?: string;
   industry?: string;
   language?: string;
+  theme?: string;
   projectName?: string;
 }
 
@@ -4619,6 +4702,7 @@ export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOp
     Name: options.name,
     Industry: options.industry ? parseApplicationIndustryV2Value(options.industry) : undefined,
     Language: options.language,
+    Theme: options.theme,
     ProjectName: options.projectName
   });
   const rawPayload = (await loadJsonInput(options.data)) ?? fallbackPayload;
@@ -4630,7 +4714,6 @@ export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOp
 export interface DatasetInferResultOptions extends ServiceCommandOptions {
   taskId?: string;
   projectName?: string;
-  renderSchema?: boolean;
 }
 
 export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
@@ -4641,16 +4724,33 @@ export async function runDatasetInferResultCommand(options: DatasetInferResultOp
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
   requireNonEmptyObject(payload, 'Need --task-id (or --data) for dataset infer-result.');
   const response = await callOpenApi('/open/GetInferDatasetSchemaResultV2', payload, options);
-  if (options.renderSchema) {
-    const confirm = buildInferSchemaConfirm(response);
-    if (hasExplicitOutputFormatFlag()) {
-      await printResult(confirm);
-      return;
-    }
-    process.stdout.write(`${renderInferSchemaConfirmText(confirm)}\n`);
+  await printResult(response);
+}
+
+export interface DatasetValidateSchemaOptions {
+  input?: string;
+  datasetType: string;
+}
+
+export async function runDatasetValidateSchemaCommand(options: DatasetValidateSchemaOptions): Promise<void> {
+  const input = options.input;
+  if (!input) {
+    throw new Error('--input is required: path to an infer-result JSON file.');
+  }
+  const raw = await loadJsonInput(input);
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`Invalid infer-result JSON at ${input}.`);
+  }
+  const datasetType = options.datasetType?.toLowerCase() || 'multi_modal';
+  if (datasetType !== 'multi_modal' && datasetType !== 'user_event') {
+    throw new Error(`Invalid --dataset-type: ${options.datasetType}. Use multi_modal or user_event.`);
+  }
+  const confirm = buildInferSchemaConfirm(raw, datasetType);
+  if (hasExplicitOutputFormatFlag()) {
+    await printResult(confirm);
     return;
   }
-  await printResult(response);
+  process.stdout.write(`${renderInferSchemaConfirmText(confirm)}\n`);
 }
 
 export interface AppAttachDatasetOptions extends ServiceCommandOptions {

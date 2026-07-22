@@ -12,6 +12,7 @@ export default class DatasetIngest extends Command {
   static override examples = [
     '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --dataset-name demo-items',
     '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --industry ecommerce --language zh --dry-run',
+    '<%= config.bin %> dataset ingest --file ./products.jsonl --type multi_modal --theme e_commerce --abnormal-image-policy skip --industry ecommerce --language zh',
     '<%= config.bin %> dataset ingest --dataset-id 123 --fields @items.json'
   ];
 
@@ -22,13 +23,26 @@ export default class DatasetIngest extends Command {
       description: 'Local file path to upload via GetPresignedImportUrlV2. Required for V2 onboarding chain.'
     }),
     type: Flags.string({
-      description: 'Dataset type for the V2 chain: item|video|user_event|document|multi_modal.'
+      description: 'Dataset type for the V2 chain: user_event|multi_modal.'
     }),
     'dataset-name': Flags.string({
       description: 'Optional dataset name used during inference and create.'
     }),
     industry: Flags.string({ description: 'Industry hint forwarded to V2 inference/create.' }),
-    language: Flags.string({ description: 'Language hint: zh|en|ja.' }),
+    language: Flags.string({ description: 'Language hint: zh|en|ko|ja|hi.' }),
+    theme: Flags.string({
+      description:
+        'Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video). Required when --type=multi_modal.'
+    }),
+    'abnormal-image-policy': Flags.string({
+      description: 'ProcessConfig.AbnormalImageDataProcessPolicy (skip|block). For multi_modal datasets.'
+    }),
+    'abnormal-video-policy': Flags.string({
+      description: 'ProcessConfig.AbnormalVideoDataProcessPolicy (skip|block). For multi_modal datasets.'
+    }),
+    'video-auto-delete': Flags.boolean({
+      description: 'ProcessConfig.VideoAutoDelete: auto-delete source videos after processing.'
+    }),
     'schema-wait-timeout-ms': Flags.integer({
       description: 'Timeout in milliseconds for polling the schema inference task. Default 120000.'
     }),
@@ -63,6 +77,10 @@ export default class DatasetIngest extends Command {
       datasetName: flags['dataset-name'],
       industry: flags.industry,
       language: flags.language,
+      theme: flags.theme,
+      abnormalImagePolicy: flags['abnormal-image-policy'],
+      abnormalVideoPolicy: flags['abnormal-video-policy'],
+      videoAutoDelete: flags['video-auto-delete'],
       schemaWaitTimeoutMs: flags['schema-wait-timeout-ms'],
       schemaPollIntervalMs: flags['schema-poll-interval-ms'],
       dryRun: flags['dry-run'],

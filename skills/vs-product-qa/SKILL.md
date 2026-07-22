@@ -23,7 +23,8 @@ Use this skill when the user asks grounded questions about Viking AI Search, inc
 Do not use this skill for workflow execution. Delegate instead:
 
 - sign-up, purchase, payment, or first AK/SK setup -> `vs-user-onboarding`
-- item data ingestion or dataset creation -> `vs-item-onboarding`
+- multi-modal dataset creation and ingestion (records with image/video URLs + text) -> `vs-item-onboarding`
+- web crawling for content ingestion -> `vs-crawler`
 - search tuning suggestions or execution -> `vs-search-tuning`
 
 If another skill is active and the user asks a product question outside that skill's scripted scope, answer with `vs-product-qa`, then return to the original workflow after the answer is complete.

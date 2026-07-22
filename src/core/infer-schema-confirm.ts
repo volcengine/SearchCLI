@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-const PK_BIZ_ATTRS = new Set(['ImagePK', 'VideoContentID', 'QueryPK', 'MultiModalID']);
+const PK_BIZ_ATTRS = new Set(['MultiModalId']);
 
 const ROLE_KEYS = [
   ['IndexFields', 'index'],
@@ -38,13 +38,14 @@ export interface SchemaConfirmSummary {
 }
 
 export interface InferSchemaConfirm {
+  datasetType: string;
   summary: SchemaConfirmSummary;
   fields: SchemaConfirmField[];
   roles: SchemaConfirmRoles;
   warnings: string[];
 }
 
-export function buildInferSchemaConfirm(envelope: unknown): InferSchemaConfirm {
+export function buildInferSchemaConfirm(envelope: unknown, datasetType: string): InferSchemaConfirm {
   const result = extractResult(envelope);
   const schema = toArray(pick(result, ['Schema', 'schema']));
   const topFieldDescMap = toRecord(pick(result, ['FieldDescMap', 'fieldDescMap']));
@@ -70,11 +71,13 @@ export function buildInferSchemaConfirm(envelope: unknown): InferSchemaConfirm {
   }
   let primaryKey: string | null = null;
   let primaryKeyBizAttr: string | null = null;
-  for (const field of fields) {
-    if (field.bizAttr && PK_BIZ_ATTRS.has(field.bizAttr)) {
-      primaryKey = field.name;
-      primaryKeyBizAttr = field.bizAttr;
-      break;
+  if (datasetType !== 'user_event') {
+    for (const field of fields) {
+      if (field.bizAttr && PK_BIZ_ATTRS.has(field.bizAttr)) {
+        primaryKey = field.name;
+        primaryKeyBizAttr = field.bizAttr;
+        break;
+      }
     }
   }
 
@@ -111,9 +114,9 @@ export function buildInferSchemaConfirm(envelope: unknown): InferSchemaConfirm {
     status
   };
 
-  const warnings = collectWarnings({ fields, roles, mergedDescMap, seenNames, primaryKey, schemaProvided: schema.length > 0 });
+  const warnings = collectWarnings({ fields, roles, mergedDescMap, seenNames, primaryKey, schemaProvided: schema.length > 0, datasetType });
 
-  return { summary, fields, roles, warnings };
+  return { datasetType, summary, fields, roles, warnings };
 }
 
 function normalizeField(entry: unknown, descMap: Record<string, string>): SchemaConfirmField {
@@ -137,26 +140,29 @@ function collectWarnings(input: {
   seenNames: Set<string>;
   primaryKey: string | null;
   schemaProvided: boolean;
+  datasetType: string;
 }): string[] {
   const warnings: string[] = [];
   if (!input.schemaProvided) {
     warnings.push('Schema array is empty or missing — backend has not produced any field for this task.');
   }
-  if (input.fields.length > 0 && !input.primaryKey) {
+  if (input.datasetType !== 'user_event' && input.fields.length > 0 && !input.primaryKey) {
     warnings.push(
-      'No field carries a primary-key BizAttr (ImagePK / VideoContentID / QueryPK / MultiModalID). Backend cannot derive a PK; check the source data.'
+      'No field carries a primary-key BizAttr (MultiModalId). Backend cannot derive a PK; check the source data.'
     );
   }
   const missingDesc = input.fields.filter(field => field.description === '').map(field => field.name);
   if (missingDesc.length > 0) {
     warnings.push(`FieldDescMap is missing entries for: ${missingDesc.join(', ')}.`);
   }
-  if (input.roles.index.length === 0) {
+  if (input.datasetType !== 'user_event' && input.roles.index.length === 0) {
     warnings.push('DataFieldConfig.IndexFields is empty — text search will not work until populated.');
   }
-  const unknownRoles = collectUnknownRoleFields(input.roles, input.seenNames);
-  if (unknownRoles.length > 0) {
-    warnings.push(`Field roles reference unknown schema fields: ${unknownRoles.join(', ')}.`);
+  if (input.datasetType !== 'user_event') {
+    const unknownRoles = collectUnknownRoleFields(input.roles, input.seenNames);
+    if (unknownRoles.length > 0) {
+      warnings.push(`Field roles reference unknown schema fields: ${unknownRoles.join(', ')}.`);
+    }
   }
   return warnings;
 }
@@ -252,6 +258,8 @@ function lowerFirst(value: string): string {
 }
 
 export function renderInferSchemaConfirmText(confirm: InferSchemaConfirm): string {
+  const isUserEvent = confirm.datasetType === 'user_event';
+  
   const lines: string[] = [];
   lines.push('<!-- vs-schema-confirm: BEGIN (verbatim — do not paraphrase) -->');
   lines.push('**Metadata**');
@@ -259,19 +267,23 @@ export function renderInferSchemaConfirmText(confirm: InferSchemaConfirm): strin
   lines.push('```');
   lines.push(`Status: ${confirm.summary.status}`);
   lines.push(`Field count: ${confirm.summary.fieldCount}`);
-  lines.push(`Primary key: ${formatPrimaryKey(confirm.summary)}`);
+  if (!isUserEvent) {
+    lines.push(`Primary key: ${formatPrimaryKey(confirm.summary)}`);
+  }
   lines.push('```');
   lines.push('');
   lines.push(`**Fields (${confirm.fields.length})**`);
   lines.push('');
   lines.push(renderMarkdownFieldTable(confirm.fields));
   lines.push('');
-  lines.push('**Field Roles**');
-  lines.push('');
-  lines.push('```');
-  for (const line of renderRolesLines(confirm.roles)) lines.push(line);
-  lines.push('```');
-  lines.push('');
+  if (!isUserEvent) {
+    lines.push('**Field Roles**');
+    lines.push('');
+    lines.push('```');
+    for (const line of renderRolesLines(confirm.roles)) lines.push(line);
+    lines.push('```');
+    lines.push('');
+  }
   lines.push(`**Warnings (${confirm.warnings.length})**`);
   lines.push('');
   lines.push('```');

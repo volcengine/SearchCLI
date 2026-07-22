@@ -22,7 +22,7 @@ export default class AppCreate extends Command {
       description:
         'Application industry name or numeric code: none|ecommerce|material|video|news|social-platform|other (or 0/1/2/3/4/5/20).'
     }),
-    language: Flags.string({ description: 'Application language: zh|en|ja' }),
+    language: Flags.string({ description: 'Application language: zh|en|ko|ja|hi' }),
     'icon-color': Flags.string({
       description: 'Application icon color: cyan|blue|purple|pink (V2 alias for the legacy --color flag).'
     }),
