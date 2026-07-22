@@ -4,7 +4,7 @@ description: "Answer Viking AI Search product questions, CLI usage questions, AP
 category: shared
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: viking ai search, product question, product concept, concept, how to, usage, api, authentication, ak sk, configuration, error, troubleshooting, docs, official docs, help, faq
+keywords: viking ai search, product question, product concept, concept, how to, usage, api, authentication, ak sk, configuration, error, troubleshooting, docs, official docs, help, faq, data count, effective data, valid data, data volume, item-data-count
 commands: doctor, auth status, llm status, skill list, skill search, skill show
 ---
 
@@ -54,6 +54,7 @@ Classify the question before choosing a source.
 | Local CLI error / stack trace | the error's own recovery output | "I see `ERR_AUTH_REQUIRED`; what now" |
 | Product concept | official docs via the bundled documentation helper | "What is a scene in Viking AI Search" |
 | API field semantics / request-response shape | official docs via the bundled documentation helper | "What does `recall_mode` accept" |
+| Application / dataset **effective (valid) data volume** | first resolve each bound dataset's `Type` (via `app get` / `app dataset-config list`). For **item/video** datasets, call `app item-data-count` per dataset and sum `ValidCnt` (`DataNum` is not the answer). For **document** datasets, do NOT call `app item-data-count` (it returns `InvalidParameter: DatasetType`) — use `app dataset-config list --full` (the `--full` flag is required; the default compact output omits `DocumentStats`) and read the document count from `Config[].Dataset.DocumentStats` (`DocumentNum` + `DocumentFromHomepageNum`), not `DataNum`. Always report the document count, including when it is `0`. For **user_event (behavior)** datasets only, exclude them entirely because they have no effective-data-volume metric at all — do not query a count and do not list them (this "omit even when 0" rule applies to user_event only, never to item/video/document, which are always reported even when their count is 0). | "How much effective data does application X have" |
 | Purchase / billing / pricing / quota | official docs via the bundled documentation helper | "How do I upgrade my plan" |
 | Console UI path / where to click | official docs via the bundled documentation helper | "Where do I configure boost/bury" |
 
@@ -157,16 +158,27 @@ Use this structure and omit fields that have no grounded content:
 **CLI entry**: <`vs ...` command, or "see `vs <x> --help`">
 ```
 
+`CLI entry` is only for questions that ask **how to use a command**. For a data/result question
+(e.g. "how much effective data does app X have"), omit `CLI entry` entirely — do not list the commands you
+ran to obtain the number.
+
+For a data/result question, output **only** `Conclusion`. Omit `Source`, `Steps`, and `CLI entry` entirely
+— do not name the command or backend action, do not add a provenance line, and do not list the commands you
+ran to obtain the number.
+
 Rules:
 
 - for CLI-usage questions, `Source` cites the command output used in this turn
 - for doc-grounded answers, `Source` must be a real URL retrieved in this turn
 - do not fill missing fields with speculation
 - do not paste large documentation blocks; summarize in your own words and link the source
+- do not narrate internal method selection or source-routing decisions in the answer (e.g. which field/API/skill was chosen, or why another field such as `DataNum` was rejected); report the grounded result directly
+- do not list the commands used to fetch a result (no `CLI entry` command dump) unless the user explicitly asked how to run it
+- for a data/result answer, output only the `Conclusion` line; do not emit a `Source` line at all (no command name, no backend action, no field references)
 
 ## Constraints
 
-1. **Grounded only**: every factual claim must cite either CLI output from this turn or an official documentation URL retrieved in this turn.
+1. **Grounded only**: every factual claim must be backed by CLI output from this turn or an official documentation URL retrieved in this turn. Citing that provenance in a `Source` line is required for CLI-usage and doc-grounded answers, but for a data/result answer (e.g. an effective-data-count number) do not print a `Source` line — stay grounded internally and output only the `Conclusion`.
 2. **No memory answers**: do not answer Viking AI Search product questions from training memory.
 3. **No fabricated URLs**: sub-page URLs must come from routing actually performed in this turn. Do not guess paths.
 4. **No CLI hallucination**: do not recommend commands or flags that do not exist.
@@ -182,6 +194,7 @@ Rules:
 13. **Strict doc scope**: only access `https://www.volcengine.com/docs/85296/1544972` and its child pages in the same subtree.
 14. **Hard source restriction**: for Viking AI Search docs, `search` must use `ServiceCodes="Universal AI Search"`, and `fetch` must stay under `https://www.volcengine.com/docs/85296`.
 15. **Delegate specialized workflows**: use [references/delegation.md](references/delegation.md) when the user actually needs onboarding, item workflow execution, or tuning execution.
+16. **No routing narration**: keep internal method/source selection out of the user-facing answer. Do not explain which field, API, command, or skill was chosen, and do not justify rejecting an alternative field (for example, do not add remarks like "using validCnt instead of DataNum" or "DataNum reflects a legacy field"). State the grounded result plainly; provenance belongs in `Source`, not in an explanatory aside.
 
 ## Delegation
 
