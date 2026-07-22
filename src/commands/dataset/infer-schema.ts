@@ -21,7 +21,7 @@ export default class DatasetInferSchema extends Command {
     }),
     type: Flags.string({
       description:
-        'Dataset type hint: item|video|user_event|document|multi_modal. Required unless --data provides Type.'
+        'Dataset type hint: user_event|multi_modal. Required unless --data provides Type.'
     }),
     name: Flags.string({ description: 'Optional dataset name hint.' }),
     industry: Flags.string({ description: 'Industry hint (e.g. ecommerce|video|news).' }),

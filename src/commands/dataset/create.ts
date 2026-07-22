@@ -22,7 +22,7 @@ export default class DatasetCreate extends Command {
       description: 'Dataset name. Required unless --data already provides Name.'
     }),
     type: Flags.string({
-      description: 'Dataset type: item|video|user_event|document|multi_modal. Required unless --data already provides Type.'
+      description: 'Dataset type: user_event|multi_modal. Required unless --data already provides Type.'
     }),
     description: Flags.string({ description: 'Dataset description when building the payload from flags.' }),
     'schema-json': Flags.string({

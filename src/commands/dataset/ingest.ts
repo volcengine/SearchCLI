@@ -23,7 +23,7 @@ export default class DatasetIngest extends Command {
       description: 'Local file path to upload via GetPresignedImportUrlV2. Required for V2 onboarding chain.'
     }),
     type: Flags.string({
-      description: 'Dataset type for the V2 chain: item|video|user_event|document|multi_modal.'
+      description: 'Dataset type for the V2 chain: user_event|multi_modal.'
     }),
     'dataset-name': Flags.string({
       description: 'Optional dataset name used during inference and create.'
