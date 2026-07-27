@@ -109,6 +109,8 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-infer-schema-help', testDatasetInferSchemaHelp);
   await runTest('v2-dataset-infer-result-help', testDatasetInferResultHelp);
   await runTest('v2-app-attach-dataset-help', testAppAttachDatasetHelp);
+  await runTest('data-source-subscription-help', testDataSourceSubscriptionHelp);
+  await runTest('data-source-subscription-mock', testDataSourceSubscriptionMock);
 
   await runTest('v2-dataset-create-dry-run', testDatasetCreateDryRun);
   await runTest('v2-app-create-dry-run', testAppCreateDryRun);
@@ -1510,6 +1512,123 @@ async function testAppAttachDatasetHelp() {
   assert.match(stdout, /--dataset-id/);
   assert.match(stdout, /--data-config/);
   return `${command.prefix} app attach-dataset --help`;
+}
+
+async function testDataSourceSubscriptionHelp() {
+  const { stdout } = await runCli(['dataset', 'subscription', 'create', '--help']);
+  assert.match(stdout, /Create a (dataset )?data source subscription/i);
+  assert.match(stdout, /--client-token/);
+  assert.match(stdout, /--data-source-config/);
+  assert.match(stdout, /--create-dataset-config/);
+  return `${command.prefix} dataset subscription create --help`;
+}
+
+async function testDataSourceSubscriptionMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-subscription-create' },
+        Result: { TaskId: 'task_123' }
+      }),
+      GetDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-subscription-get' },
+        Result: { Task: { TaskId: 'task_123', Status: 'Running', ImportedCount: 10 } }
+      }),
+      ListDataSourceSubscriptions: () => ({
+        ResponseMetadata: { RequestId: 'req-subscription-list' },
+        Result: { Tasks: [{ TaskId: 'task_123', Status: 'Running', ImportedCount: 10 }] }
+      }),
+      CloseDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-subscription-close' },
+        Result: { TaskId: 'task_123', Status: 'Closed' }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  const serviceFlags = [
+    '--project-name',
+    'subscription-project',
+    ...v2ServiceFlags(server.baseUrl)
+  ];
+  const dataSourceConfig = JSON.stringify({
+    DTSConfig: {
+      SourceTable: {
+        Database: ' source_database ',
+        Table: 'source_table'
+      },
+      SourceConfig: {
+        EndpointType: 'Public_MySQL',
+        PublicMySQLSettings: {
+          Host: 'mysql.example.com',
+          Port: 3306,
+          Username: 'reader',
+          Password: ' secret '
+        }
+      }
+    }
+  });
+
+  try {
+    await runCli(
+      [
+        'dataset',
+        'subscription',
+        'create',
+        '--client-token',
+        'client-token-123',
+        '--type',
+        'volc_dts',
+        '--dataset-id',
+        'dataset_123',
+        '--data-source-config',
+        dataSourceConfig,
+        ...serviceFlags
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'get', '--task-id', 'task_123', ...serviceFlags],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'list', ...serviceFlags],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'close', '--task-id', 'task_123', ...serviceFlags],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+
+    assert.deepEqual(
+      state.requests.map(request => request.action),
+      [
+        'CreateDataSourceSubscription',
+        'GetDataSourceSubscription',
+        'ListDataSourceSubscriptions',
+        'CloseDataSourceSubscription'
+      ]
+    );
+    for (const request of state.requests) {
+      assert.equal(request.query.Version, '2025-03-01');
+      assert.equal(request.body.ProjectName, 'subscription-project');
+    }
+
+    const createRequest = state.requests[0];
+    assert.equal(createRequest.body.ClientToken, 'client-token-123');
+    assert.equal(createRequest.body.DatasetID, 'dataset_123');
+    assert.equal(createRequest.body.Type, 'volc_dts');
+    assert.equal(createRequest.body.DataSourceConfig.DTSConfig.SourceTable.Database, ' source_database ');
+    assert.equal(
+      createRequest.body.DataSourceConfig.DTSConfig.SourceConfig.PublicMySQLSettings.Password,
+      ' secret '
+    );
+    assert.equal(state.requests[1].body.TaskId, 'task_123');
+    assert.equal(state.requests[3].body.TaskId, 'task_123');
+    return `${command.prefix} dataset subscription create|get|list|close`;
+  } finally {
+    await server.close();
+  }
 }
 
 async function testDatasetCreateDryRun() {

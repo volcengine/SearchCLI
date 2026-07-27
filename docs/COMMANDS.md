@@ -104,6 +104,15 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Parameters: `[workflow flags]`
 *   `vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document>`
     *   Parameters: `[--schema @schema.json] [service flags]`
+*   `vs dataset subscription create --client-token <token> --type volc_dts --data-source-config @config.json`
+    *   Parameters: `[--dataset-id <id> | --need-create-dataset --create-dataset-config @config.json] [service flags]`
+    *   Full request alternative: `vs dataset subscription create --data @create-subscription.json`
+*   `vs dataset subscription close --task-id <id>`
+    *   Parameters: `[service flags]`
+*   `vs dataset subscription get --task-id <id>`
+    *   Parameters: `[service flags]`
+*   `vs dataset subscription list`
+    *   Parameters: `[service flags]`
 *   `vs dataset list`
     *   Parameters: `[--type <type> --name <text> --application-id <id> --full] [service flags]`
 *   `vs dataset delete --id <dataset-id>`

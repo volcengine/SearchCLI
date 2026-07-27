@@ -148,6 +148,19 @@ export interface DatasetListOptions extends ServiceCommandOptions {
   full?: boolean;
 }
 
+export interface DataSourceSubscriptionCreateOptions extends ProjectScopedOptions {
+  clientToken?: string;
+  needCreateDataset?: boolean;
+  datasetId?: string;
+  createDatasetConfig?: string;
+  type?: string;
+  dataSourceConfig?: string;
+}
+
+export interface DataSourceSubscriptionTaskOptions extends ProjectScopedOptions {
+  taskId?: string;
+}
+
 export interface DatasetSchemaCheckOptions extends ProjectScopedOptions {
   type?: string;
   schema?: string;
@@ -920,6 +933,71 @@ export async function runDatasetDeleteCommand(options: ResourceIdOptions): Promi
   }
   
   await printResult(callOpenApi('/api/v1/DeleteDataset', payload, options));
+}
+
+export async function runDataSourceSubscriptionCreateCommand(
+  options: DataSourceSubscriptionCreateOptions
+): Promise<void> {
+  const filePayload = await loadJsonInput(options.data);
+  const createDatasetConfig = await loadJsonInput(options.createDatasetConfig);
+  const dataSourceConfig = await loadJsonInput(options.dataSourceConfig);
+  const payload = isRecord(filePayload)
+    ? { ...filePayload }
+    : compactObject({
+        ClientToken: options.clientToken,
+        NeedCreateDataset: options.needCreateDataset === true ? true : undefined,
+        DatasetID: options.datasetId,
+        CreateDatasetConfig: createDatasetConfig,
+        Type: options.type,
+        DataSourceConfig: dataSourceConfig,
+        ProjectName: options.projectName
+      });
+
+  if (isRecord(filePayload)) {
+    if (options.clientToken !== undefined) payload.ClientToken = options.clientToken;
+    if (options.needCreateDataset === true) payload.NeedCreateDataset = true;
+    if (options.datasetId !== undefined) payload.DatasetID = options.datasetId;
+    if (createDatasetConfig !== undefined) payload.CreateDatasetConfig = createDatasetConfig;
+    if (options.type !== undefined) payload.Type = options.type;
+    if (dataSourceConfig !== undefined) payload.DataSourceConfig = dataSourceConfig;
+    if (options.projectName !== undefined) payload.ProjectName = options.projectName;
+  }
+
+  requireNonEmptyObject(payload, 'Need --data or data source subscription create fields.');
+  await printResult(callConsoleTopAction('CreateDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionCloseCommand(
+  options: DataSourceSubscriptionTaskOptions
+): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      TaskId: requiredString(options.taskId, '--task-id'),
+      ProjectName: options.projectName
+    });
+  await printResult(callConsoleTopAction('CloseDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionGetCommand(
+  options: DataSourceSubscriptionTaskOptions
+): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      TaskId: requiredString(options.taskId, '--task-id'),
+      ProjectName: options.projectName
+    });
+  await printResult(callConsoleTopAction('GetDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionListCommand(options: ProjectScopedOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName
+    });
+  await printResult(callConsoleTopAction('ListDataSourceSubscriptions', payload, options));
 }
 
 export async function runDataWriteCommand(options: DataWriteOptions): Promise<void> {
@@ -1832,6 +1910,7 @@ export function printProductDomainsHelp(): void {
     'vs app dataset-config get|list|update',
     'vs app online-config get|update',
     'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result|validate-schema',
+    'vs dataset subscription create|close|get|list',
     'vs dataset schema check',
     'vs data write|import|delete',
     'vs connector init|run|status|stop|inspect',
@@ -1883,6 +1962,10 @@ COMMON FLAGS
         'vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]',
         'vs dataset validate-schema --input <path> --dataset-type <multi_modal|user_event>',
         'vs dataset schema check --type <item|query|video|user-event|doc|document> [--schema @schema.json] [service flags]',
+        'vs dataset subscription create --client-token <token> --type volc_dts --data-source-config @config.json [--dataset-id <id> | --need-create-dataset --create-dataset-config @config.json] [service flags]',
+        'vs dataset subscription close --task-id <id> [service flags]',
+        'vs dataset subscription get --task-id <id> [service flags]',
+        'vs dataset subscription list [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
       ]
@@ -2068,7 +2151,7 @@ COMMON FLAGS
   console.log(helpByDomain[domain] ?? `Unknown domain: ${domain}`);
 }
 
-function printDatasetCommandHelp(action: string): void {
+function printDatasetCommandHelp(action: string, subAction?: string): void {
   const helpByAction: Record<string, string> = {
     create: `Create a Viking dataset.
 
@@ -2133,6 +2216,39 @@ EXAMPLES
   vs dataset list
   vs dataset list --type item
   vs dataset list --name catalog --full`,
+    'subscription:create': `Create a data source subscription.
+
+USAGE
+  vs dataset subscription create --client-token <token> --type volc_dts --data-source-config @data-source-config.json [--dataset-id <id> | --need-create-dataset --create-dataset-config @create-dataset-config.json] [service flags]
+  vs dataset subscription create --data @create-subscription.json [service flags]
+
+KEY FLAGS
+  --client-token           Idempotency token. Reusing it requires an identical request payload.
+  --need-create-dataset    Ask the service to sample data and create a new multi_modal dataset.
+  --dataset-id             Existing multi_modal or user_event dataset to bind.
+  --create-dataset-config  Structured CreateDatasetConfig JSON used with --need-create-dataset.
+  --type                   Data source type. Currently only volc_dts is supported.
+  --data-source-config     Structured DataSourceConfig JSON containing DTSConfig.
+  --project-name           Viking project name.
+
+EXAMPLES
+  vs dataset subscription create --client-token token-123 --type volc_dts --dataset-id ds_123 --data-source-config @data-source-config.json
+  vs dataset subscription create --data @create-subscription.json`,
+    'subscription:close': `Close a data source subscription.
+
+USAGE
+  vs dataset subscription close --task-id <id> [--project-name <name>] [service flags]
+  vs dataset subscription close --data @close-subscription.json [service flags]`,
+    'subscription:get': `Get a data source subscription.
+
+USAGE
+  vs dataset subscription get --task-id <id> [--project-name <name>] [service flags]
+  vs dataset subscription get --data @get-subscription.json [service flags]`,
+    'subscription:list': `List data source subscriptions in a project.
+
+USAGE
+  vs dataset subscription list [--project-name <name>] [service flags]
+  vs dataset subscription list --data @list-subscriptions.json [service flags]`,
     ingest: `Complete file-based V2 dataset onboarding or write explicit rows into an existing dataset.
 
 USAGE
@@ -2261,7 +2377,8 @@ EXAMPLES
   vs dataset validate-schema --input ./.viking/item-plans/my-dataset/infer-result.json --dataset-type user_event`
   };
 
-  console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
+  const key = `${action}:${subAction ?? ''}`;
+  console.log(helpByAction[key] ?? helpByAction[action] ?? `Unknown dataset subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
 }
 
 function printDictCommandHelp(action: string): void {
@@ -3221,7 +3338,7 @@ async function runAppCli(argv: string[]): Promise<void> {
 async function runDatasetCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if (hasHelpFlag(argv.slice(1))) {
-    printDatasetCommandHelp(action);
+    printDatasetCommandHelp(action, argv[1]);
     return;
   }
   const values = parseStandaloneOptions(argv.slice(1));
@@ -3335,6 +3452,40 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         force: optionalBoolean(values.force)
       });
       return;
+    case 'subscription': {
+      const subAction = argv[1];
+      if (subAction === 'create') {
+        await runDataSourceSubscriptionCreateCommand({
+          ...projectOptions,
+          clientToken: optionalString(values['client-token']),
+          needCreateDataset: optionalBoolean(values['need-create-dataset']),
+          datasetId: optionalString(values['dataset-id']),
+          createDatasetConfig: optionalString(values['create-dataset-config']),
+          type: optionalString(values.type),
+          dataSourceConfig: optionalString(values['data-source-config'])
+        });
+        return;
+      }
+      if (subAction === 'close') {
+        await runDataSourceSubscriptionCloseCommand({
+          ...projectOptions,
+          taskId: optionalString(values['task-id'])
+        });
+        return;
+      }
+      if (subAction === 'get') {
+        await runDataSourceSubscriptionGetCommand({
+          ...projectOptions,
+          taskId: optionalString(values['task-id'])
+        });
+        return;
+      }
+      if (subAction === 'list') {
+        await runDataSourceSubscriptionListCommand(projectOptions);
+        return;
+      }
+      throw new Error(`Unknown dataset subscription subcommand: ${subAction}`);
+    }
     default:
       throw new Error(`Unknown dataset subcommand: ${action}`);
   }
@@ -4265,6 +4416,10 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'overview-config': { type: 'string' },
       'file-name': { type: 'string' },
       'task-id': { type: 'string' },
+      'client-token': { type: 'string' },
+      'need-create-dataset': { type: 'boolean' },
+      'create-dataset-config': { type: 'string' },
+      'data-source-config': { type: 'string' },
       'schema-json': { type: 'string' },
       'field-desc-map': { type: 'string' },
       'abnormal-image-policy': { type: 'string' },

@@ -14,6 +14,38 @@ export interface ConsoleTopAction {
 
 const PUBLIC_CONSOLE_TOP_ACTIONS: ConsoleTopAction[] = [
   {
+    action: 'CreateDataSourceSubscription',
+    path: '/open/CreateDataSourceSubscription',
+    version: '2025-03-01',
+    description: 'Create a dataset data source subscription.',
+    command: 'vs dataset subscription create --data @create-subscription.json',
+    category: 'dataset'
+  },
+  {
+    action: 'CloseDataSourceSubscription',
+    path: '/open/CloseDataSourceSubscription',
+    version: '2025-03-01',
+    description: 'Close a dataset data source subscription.',
+    command: 'vs dataset subscription close --task-id <task>',
+    category: 'dataset'
+  },
+  {
+    action: 'GetDataSourceSubscription',
+    path: '/open/GetDataSourceSubscription',
+    version: '2025-03-01',
+    description: 'Get a dataset data source subscription.',
+    command: 'vs dataset subscription get --task-id <task>',
+    category: 'dataset'
+  },
+  {
+    action: 'ListDataSourceSubscriptions',
+    path: '/open/ListDataSourceSubscriptions',
+    version: '2025-03-01',
+    description: 'List dataset data source subscriptions in a project.',
+    command: 'vs dataset subscription list',
+    category: 'dataset'
+  },
+  {
     action: 'GetAppOnlineConfig',
     path: '/api/v1/GetAppOnlineConfig',
     version: '2025-03-01',
