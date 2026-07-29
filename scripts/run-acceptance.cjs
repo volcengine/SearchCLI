@@ -388,6 +388,8 @@ async function testProjectCreateDeploy() {
     assert.equal(fs.existsSync(path.join(projectDir, 'apps')), false);
     const generatedPackage = JSON.parse(fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8'));
     assert.match(generatedPackage.dependencies.next, /^\^16\./);
+    assert.match(generatedPackage.dependencies['@volcengine/search-sdk-js'], /^\^0\.7\./);
+    assert.equal(generatedPackage.dependencies['@volcengine/search-node'], undefined);
     assert.equal(generatedPackage.dependencies.express, undefined);
     assert.equal(generatedPackage.devDependencies?.vite, undefined);
     assert.equal(fs.existsSync(path.join(projectDir, 'wrangler.jsonc')), false);

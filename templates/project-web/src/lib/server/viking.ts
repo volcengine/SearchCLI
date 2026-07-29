@@ -5,7 +5,7 @@ import {
   SearchTimeoutError,
   createSearchClient,
   type SearchClient,
-} from "@volcengine/search-node";
+} from "@volcengine/search-sdk-js";
 
 import type { ProjectFeature } from "@/lib/project";
 import { env } from "@/lib/server/env";

@@ -23,7 +23,7 @@ import type {
   QueryRecommendationResponse,
   RecommendResponse,
   SearchResponse
-} from "@volcengine/search-node";
+} from "@volcengine/search-sdk-js";
 
 import { MarkdownMessage } from "@/components/markdown-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

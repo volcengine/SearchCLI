@@ -1,4 +1,4 @@
-import type { ChatSearchChunk } from "@volcengine/search-node";
+import type { ChatSearchChunk } from "@volcengine/search-sdk-js";
 
 type SseEvent = {
   event: string;
