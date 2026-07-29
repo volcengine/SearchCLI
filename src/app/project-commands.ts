@@ -21,10 +21,7 @@ import { resolveCliDefaults } from "../core/user-config";
 const DEFAULT_PROJECT_NAME = "viking-web-app";
 const PROJECT_MARKER_PATH = ".viking";
 const PROJECT_FEATURES = ["search", "recommend", "chat"] as const;
-const SUPPORTED_DEPLOYMENT_PROVIDERS = ["cloudflare"] as const;
 export type ProjectFeature = (typeof PROJECT_FEATURES)[number];
-export type DeploymentProvider =
-  (typeof SUPPORTED_DEPLOYMENT_PROVIDERS)[number];
 
 export interface ProjectCreateOptions {
   projectName?: string;
@@ -47,10 +44,14 @@ interface CommandResult {
   stderr: string;
 }
 
-interface RunProjectCommandOptions {
-  includeAuthGuidance?: boolean;
-  streamOutput?: boolean;
+interface DeploymentProvider {
+  run: (
+    projectDir: string,
+    dryRun: boolean | undefined,
+  ) => Promise<CommandResult>;
 }
+
+const DEPLOYMENT_PROVIDERS = new Map<string, DeploymentProvider>();
 
 type ProjectCreateAuth =
   | {
@@ -101,7 +102,6 @@ export async function runProjectCreateCommand(
   const projectName = hasExplicitProjectName(options.projectName)
     ? requestedProjectName
     : await resolveDefaultProjectName(requestedProjectName);
-  const deploymentName = normalizeDeploymentName(projectName);
   const projectDir = path.resolve(projectName);
   await ensureCreatableProjectDir(projectDir);
 
@@ -117,9 +117,7 @@ export async function runProjectCreateCommand(
     "{{SEARCH_DATASET_ID}}": searchDatasetId ?? "",
     "{{REC_SCENE_ID}}": recSceneId ?? "",
     "{{PROJECT_NAME}}": projectName,
-    "{{WORKER_NAME}}": deploymentName,
     "{{TEMPLATE_VERSION}}": PROJECT_WEB_TEMPLATE_VERSION,
-    "{{COMPATIBILITY_DATE}}": new Date().toISOString().slice(0, 10),
   };
 
   await mkdir(projectDir, { recursive: true });
@@ -138,7 +136,6 @@ export async function runProjectCreateCommand(
       projectDir,
       template: "project-web",
       templateVersion: PROJECT_WEB_TEMPLATE_VERSION,
-      deploymentName,
       features,
       authMode: auth.authMode,
       authSource: auth.authSource,
@@ -149,7 +146,6 @@ export async function runProjectCreateCommand(
         "npm install",
         "npm run dev",
         "npm run build",
-        "vs project deploy --provider cloudflare",
       ],
     },
   });
@@ -202,7 +198,9 @@ export async function runProjectDeployCommand(
   options: ProjectDeployOptions,
 ): Promise<void> {
   requireProjectFeatureEnabled();
-  const provider = normalizeDeploymentProvider(options.provider);
+  const { name: provider, implementation } = resolveDeploymentProvider(
+    options.provider,
+  );
   const projectDir = path.resolve(options.projectDir ?? process.cwd());
   await loadAndValidateProjectMarker(projectDir);
 
@@ -212,11 +210,7 @@ export async function runProjectDeployCommand(
 
   await runProjectCommand("npm", ["run", "build"], projectDir);
 
-  const deployResult = await runDeploymentProviderCommand(
-    provider,
-    projectDir,
-    options.dryRun,
-  );
+  const deployResult = await implementation.run(projectDir, options.dryRun);
   const parsedUrls = parseDeploymentUrls(
     `${deployResult.stdout}\n${deployResult.stderr}`,
   );
@@ -232,54 +226,6 @@ export async function runProjectDeployCommand(
       urls: parsedUrls.allUrls,
     },
   });
-}
-
-async function runDeploymentProviderCommand(
-  provider: DeploymentProvider,
-  projectDir: string,
-  dryRun: boolean | undefined,
-): Promise<CommandResult> {
-  switch (provider) {
-    case "cloudflare":
-      return runCloudflareDeployCommand(projectDir, dryRun);
-  }
-}
-
-async function runCloudflareDeployCommand(
-  projectDir: string,
-  dryRun: boolean | undefined,
-): Promise<CommandResult> {
-  await ensureCloudflareWranglerLoggedIn(projectDir);
-  const deployArgs = ["--yes", "wrangler", "deploy"];
-  if (dryRun) deployArgs.push("--dry-run");
-  return runProjectCommand("npx", deployArgs, projectDir);
-}
-
-async function ensureCloudflareWranglerLoggedIn(
-  projectDir: string,
-): Promise<void> {
-  try {
-    const result = await runProjectCommand(
-      "npx",
-      ["--yes", "wrangler", "whoami"],
-      projectDir,
-      {
-        includeAuthGuidance: false,
-        streamOutput: false,
-      },
-    );
-    if (isCloudflareWranglerLoggedOut(`${result.stdout}\n${result.stderr}`)) {
-      throw new Error(formatCloudflareWranglerLoginFailure());
-    }
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.startsWith("Cloudflare Wrangler is not logged in")
-    ) {
-      throw error;
-    }
-    throw new Error(formatCloudflareWranglerLoginFailure());
-  }
 }
 
 async function ensureCreatableProjectDir(projectDir: string): Promise<void> {
@@ -343,12 +289,9 @@ async function runProjectCommand(
   command: string,
   args: string[],
   cwd: string,
-  options: RunProjectCommandOptions = {},
 ): Promise<CommandResult> {
   const commandLine = [command, ...args].join(" ");
   process.stderr.write(`\n> ${commandLine}\n`);
-  const includeAuthGuidance = options.includeAuthGuidance ?? true;
-  const streamOutput = options.streamOutput ?? true;
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -361,11 +304,11 @@ async function runProjectCommand(
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutChunks.push(chunk);
-      if (streamOutput) process.stderr.write(chunk);
+      process.stderr.write(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderrChunks.push(chunk);
-      if (streamOutput) process.stderr.write(chunk);
+      process.stderr.write(chunk);
     });
     child.on("error", (error) => {
       reject(
@@ -374,7 +317,6 @@ async function runProjectCommand(
             command,
             args,
             commandOutputError(error, stdoutChunks, stderrChunks),
-            { includeAuthGuidance },
           ),
         ),
       );
@@ -396,7 +338,6 @@ async function runProjectCommand(
               stdout,
               stderr,
             },
-            { includeAuthGuidance },
           ),
         ),
       );
@@ -419,7 +360,6 @@ function formatCommandFailure(
   command: string,
   args: string[],
   error: unknown,
-  options: { includeAuthGuidance?: boolean } = {},
 ): string {
   const commandLine = [command, ...args].join(" ");
   const maybeError = error as {
@@ -432,21 +372,7 @@ function formatCommandFailure(
   const stderr =
     typeof maybeError.stderr === "string" ? maybeError.stderr.trim() : "";
   const output = [stdout, stderr].filter(Boolean).join("\n");
-  const includeAuthGuidance = options.includeAuthGuidance ?? true;
-  const authGuidance = includeAuthGuidance && needsDeploymentAuthGuidance(output)
-    ? "\nCloudflare Wrangler authentication is required. Run `npx wrangler login` in the project directory, then retry."
-    : "";
-  if (authGuidance) {
-    return `Command failed: ${commandLine}${authGuidance}`;
-  }
-  return `Command failed: ${commandLine}${output ? `\n${output}` : ""}${authGuidance || (maybeError.message ? `\n${maybeError.message}` : "")}`;
-}
-
-function formatCloudflareWranglerLoginFailure(): string {
-  return [
-    "Cloudflare Wrangler is not logged in, so deployment was not started.",
-    "Run `npx wrangler login` in the project directory, then retry `vs project deploy --provider cloudflare`.",
-  ].join("\n");
+  return `Command failed: ${commandLine}${output ? `\n${output}` : maybeError.message ? `\n${maybeError.message}` : ""}`;
 }
 
 function parseDeploymentUrls(output: string): {
@@ -469,32 +395,26 @@ function extractUrls(output: string): string[] {
   return [...new Set(matches.map((url) => url.replace(/[.,;:]+$/, "")))];
 }
 
-function needsDeploymentAuthGuidance(output: string): boolean {
-  return /api[_\s-]?token|wrangler login|not authenticated|not logged in|authentication|unauthorized/i.test(
-    output,
-  );
-}
-
-function isCloudflareWranglerLoggedOut(output: string): boolean {
-  return /not authenticated|not logged in|please run [`']?wrangler login[`']?/i.test(
-    output,
-  );
-}
-
-function normalizeDeploymentProvider(provider?: string): DeploymentProvider {
+function resolveDeploymentProvider(provider?: string): {
+  name: string;
+  implementation: DeploymentProvider;
+} {
   if (!provider || !provider.trim()) {
-    throw new Error(
-      `Missing required flag: --provider. Supported providers: ${SUPPORTED_DEPLOYMENT_PROVIDERS.join(", ")}.\nExample: \`vs project deploy --provider cloudflare\``,
-    );
+    throw new Error("Missing required flag: --provider.");
   }
   const normalized = provider.trim().toLowerCase();
-  if (
-    (SUPPORTED_DEPLOYMENT_PROVIDERS as readonly string[]).includes(normalized)
-  ) {
-    return normalized as DeploymentProvider;
+  const implementation = DEPLOYMENT_PROVIDERS.get(normalized);
+  if (implementation) {
+    return { name: normalized, implementation };
+  }
+  const supportedProviders = [...DEPLOYMENT_PROVIDERS.keys()];
+  if (supportedProviders.length === 0) {
+    throw new Error(
+      `Unsupported deployment provider: ${provider}. No deployment providers are currently available.`,
+    );
   }
   throw new Error(
-    `Unsupported deployment provider: ${provider}. Supported providers: ${SUPPORTED_DEPLOYMENT_PROVIDERS.join(", ")}.`,
+    `Unsupported deployment provider: ${provider}. Supported providers: ${supportedProviders.join(", ")}.`,
   );
 }
 
@@ -633,21 +553,6 @@ function validateTemplateSafeValue(value: string, label: string): void {
       `${label} cannot contain double quotes, backslashes, or newlines.`,
     );
   }
-}
-
-function normalizeDeploymentName(projectName: string): string {
-  const slug = normalizeAsciiSlug(projectName);
-  return (
-    (slug || DEFAULT_PROJECT_NAME).slice(0, 63).replace(/-+$/g, "") ||
-    DEFAULT_PROJECT_NAME
-  );
-}
-
-function normalizeAsciiSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 async function projectDependencyDirExists(projectDir: string): Promise<boolean> {

@@ -9,12 +9,7 @@ import { isProjectFeatureEnabled, requireProjectFeatureEnabled } from '../../cor
 export default class ProjectDeploy extends Command {
   static override hidden = !isProjectFeatureEnabled();
 
-  static override description = 'Deploy a project created by "vs project create" to the selected provider.';
-
-  static override examples = [
-    '<%= config.bin %> project deploy --provider cloudflare',
-    '<%= config.bin %> project deploy --provider cloudflare --project-dir ./demo --dry-run'
-  ];
+  static override description = 'Deploy a project created by "vs project create" through a registered provider.';
 
   static override flags = {
     ...outputFormatFlags,
@@ -23,8 +18,7 @@ export default class ProjectDeploy extends Command {
     }),
     provider: Flags.string({
       required: true,
-      description: 'Deployment provider. Currently supported: cloudflare.',
-      options: ['cloudflare']
+      description: 'Deployment provider. No providers are currently available.'
     }),
     'dry-run': Flags.boolean({
       description: 'Validate deployment after install/build without publishing changes.'

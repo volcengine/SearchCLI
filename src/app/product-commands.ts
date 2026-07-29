@@ -2041,7 +2041,8 @@ COMMON FLAGS
     )}
 
 DESCRIPTION
-  Create a runnable web experience for an existing Viking app and deploy it to the selected provider.
+  Create a runnable web experience for an existing Viking app.
+  The deploy command is reserved for registered providers; none are currently available.
   Project create requires one or more explicit features. It reuses VIKING_API_KEY when configured;
   otherwise it uses AK/SK from the selected or active auth profile.
 

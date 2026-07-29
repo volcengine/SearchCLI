@@ -28,9 +28,3 @@ Chat responses are streamed as SSE events: `session`, `chunk`, `error`, and `don
 Successful search responses include pagination metadata from the template API.
 Search query recommendation responses are returned directly from `@volcengine/search-node`.
 Recommendation responses are returned directly from `@volcengine/search-node`.
-
-Deploy through the CLI with an explicit provider:
-
-```bash
-vs project deploy --provider cloudflare
-```

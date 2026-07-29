@@ -380,44 +380,46 @@ async function testProjectCreateDeploy() {
     const projectDir = path.join(workspace, 'demo');
     assert.equal(created.ok, true);
     assert.equal(fs.realpathSync(created.result.projectDir), fs.realpathSync(projectDir));
-    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=1.0.0');
+    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=1.1.0');
     assert.match(fs.readFileSync(path.join(projectDir, 'apps/api/src/env.ts'), 'utf8'), /secret-1/);
     assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /apps\/api\/src\/env\.ts/);
+    assert.equal(fs.existsSync(path.join(projectDir, 'wrangler.jsonc')), false);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps/api/src/cloudflare.ts')), false);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps/api/src/cloudflare-node.d.ts')), false);
+    assert.doesNotMatch(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /wrangler/i);
+    assert.doesNotMatch(fs.readFileSync(path.join(projectDir, 'README.md'), 'utf8'), /cloudflare|wrangler/i);
+    assert.deepEqual(created.result.nextSteps, [
+      'cd demo',
+      'npm install',
+      'npm run dev',
+      'npm run build'
+    ]);
     assert.doesNotMatch(stdout, /secret-1/);
 
     const fakeBin = path.join(workspace, 'bin');
     fs.mkdirSync(fakeBin);
     writeExecutable(path.join(fakeBin, 'npm'), `#!/usr/bin/env node
-const fs = require('node:fs');
-const path = require('node:path');
-if (process.argv[2] === 'install') fs.mkdirSync(path.join(process.cwd(), 'node_modules'));
-`);
-    writeExecutable(path.join(fakeBin, 'npx'), `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args.includes('whoami')) process.exit(0);
-console.log('https://demo.example.workers.dev');
+throw new Error('npm must not run without a registered deployment provider');
 `);
 
-    const outputPath = path.join(workspace, 'deploy.json');
-    const deployed = await runCli([
-      'project',
-      'deploy',
-      '--provider',
-      'cloudflare',
-      '--project-dir',
-      projectDir,
-      '--dry-run',
-      '--json',
-      '--output',
-      outputPath
-    ], {
-      env: {
-        ...featureEnv,
-        PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`
-      }
-    });
-    assert.equal(deployed.stdout, '');
-    assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).result.deploymentUrl, 'https://demo.example.workers.dev');
+    await assert.rejects(
+      () => runCli([
+        'project',
+        'deploy',
+        '--provider',
+        'retired-provider',
+        '--project-dir',
+        projectDir,
+        '--dry-run',
+        '--json'
+      ], {
+        env: {
+          ...featureEnv,
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`
+        }
+      }),
+      /Unsupported deployment provider: retired-provider.*No deployment providers are currently available/i
+    );
     return `${command.prefix} project create/deploy`;
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
