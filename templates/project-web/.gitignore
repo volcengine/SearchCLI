@@ -1,5 +1,8 @@
 node_modules
 dist
-apps/api/src/env.ts
+.next
+.env.local
+next-env.d.ts
+*.tsbuildinfo
 .DS_Store
 *.log

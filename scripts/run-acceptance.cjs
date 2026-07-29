@@ -380,12 +380,18 @@ async function testProjectCreateDeploy() {
     const projectDir = path.join(workspace, 'demo');
     assert.equal(created.ok, true);
     assert.equal(fs.realpathSync(created.result.projectDir), fs.realpathSync(projectDir));
-    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=1.1.0');
-    assert.match(fs.readFileSync(path.join(projectDir, 'apps/api/src/env.ts'), 'utf8'), /secret-1/);
-    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /apps\/api\/src\/env\.ts/);
+    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=2.0.0');
+    assert.match(fs.readFileSync(path.join(projectDir, '.env.local'), 'utf8'), /VIKING_API_KEY=secret-1/);
+    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /\.env\.local/);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/page.tsx')), true);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/api/chat/route.ts')), true);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps')), false);
+    const generatedPackage = JSON.parse(fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8'));
+    assert.match(generatedPackage.dependencies.next, /^\^16\./);
+    assert.equal(generatedPackage.dependencies.express, undefined);
+    assert.equal(generatedPackage.devDependencies?.vite, undefined);
     assert.equal(fs.existsSync(path.join(projectDir, 'wrangler.jsonc')), false);
-    assert.equal(fs.existsSync(path.join(projectDir, 'apps/api/src/cloudflare.ts')), false);
-    assert.equal(fs.existsSync(path.join(projectDir, 'apps/api/src/cloudflare-node.d.ts')), false);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/api/cloudflare.ts')), false);
     assert.doesNotMatch(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /wrangler/i);
     assert.doesNotMatch(fs.readFileSync(path.join(projectDir, 'README.md'), 'utf8'), /cloudflare|wrangler/i);
     assert.deepEqual(created.result.nextSteps, [
