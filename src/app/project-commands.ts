@@ -4,11 +4,14 @@
 import { spawn } from "node:child_process";
 import {
   mkdir,
+  mkdtemp,
   readdir,
   readFile,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   PROJECT_WEB_TEMPLATE_FILES,
@@ -21,6 +24,7 @@ import { resolveCliDefaults } from "../core/user-config";
 const DEFAULT_PROJECT_NAME = "viking-web-app";
 const PROJECT_MARKER_PATH = ".viking";
 const PROJECT_FEATURES = ["search", "recommend", "chat"] as const;
+const IGA_NPX_ARGS = ["-y", "@iga-pages/cli@latest"] as const;
 export type ProjectFeature = (typeof PROJECT_FEATURES)[number];
 
 export interface ProjectCreateOptions {
@@ -44,6 +48,12 @@ interface CommandResult {
   stderr: string;
 }
 
+interface RunProjectCommandOptions {
+  displayArgs?: string[];
+  redactValues?: string[];
+  streamOutput?: boolean;
+}
+
 interface DeploymentProvider {
   run: (
     projectDir: string,
@@ -51,7 +61,20 @@ interface DeploymentProvider {
   ) => Promise<CommandResult>;
 }
 
-const DEPLOYMENT_PROVIDERS = new Map<string, DeploymentProvider>();
+const DEPLOYMENT_PROVIDERS = new Map<string, DeploymentProvider>([
+  ["volcengine-iga", { run: runVolcengineIgaDeployCommand }],
+]);
+const MANAGED_IGA_ENV_KEYS = [
+  "VIKING_APP_ID",
+  "VIKING_API_KEY",
+  "VIKING_AK",
+  "VIKING_SK",
+  "VIKING_REGION",
+  "VIKING_FEATURES",
+  "VIKING_SEARCH_SCENE_ID",
+  "VIKING_SEARCH_DATASET_ID",
+  "VIKING_REC_SCENE_ID",
+] as const;
 
 type ProjectCreateAuth =
   | {
@@ -146,6 +169,7 @@ export async function runProjectCreateCommand(
         "npm install",
         "npm run dev",
         "npm run build",
+        "vs project deploy",
       ],
     },
   });
@@ -208,7 +232,9 @@ export async function runProjectDeployCommand(
     await runProjectCommand("npm", ["install"], projectDir);
   }
 
-  await runProjectCommand("npm", ["run", "build"], projectDir);
+  if (!options.dryRun) {
+    await runProjectCommand("npm", ["run", "build"], projectDir);
+  }
 
   const deployResult = await implementation.run(projectDir, options.dryRun);
   const parsedUrls = parseDeploymentUrls(
@@ -223,9 +249,157 @@ export async function runProjectDeployCommand(
       dryRun: Boolean(options.dryRun),
       deploymentUrl: parsedUrls.deploymentUrl ?? null,
       previewUrl: parsedUrls.previewUrl ?? null,
+      consoleUrl: parsedUrls.consoleUrl ?? null,
       urls: parsedUrls.allUrls,
     },
   });
+}
+
+async function runVolcengineIgaDeployCommand(
+  projectDir: string,
+  dryRun: boolean | undefined,
+): Promise<CommandResult> {
+  if (!dryRun) {
+    await ensureIgaProjectLinked(projectDir);
+    await syncIgaEnvironmentVariables(projectDir);
+    return runProjectCommand(
+      "npx",
+      [...IGA_NPX_ARGS, "pages", "deploy"],
+      projectDir,
+    );
+  }
+
+  const outputDir = await mkdtemp(
+    path.join(os.tmpdir(), "viking-iga-build-"),
+  );
+  try {
+    return await runProjectCommand(
+      "npx",
+      [
+        ...IGA_NPX_ARGS,
+        "pages",
+        "build",
+        "--output",
+        outputDir,
+      ],
+      projectDir,
+    );
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+}
+
+async function ensureIgaProjectLinked(projectDir: string): Promise<void> {
+  try {
+    await stat(path.join(projectDir, ".iga", "project.json"));
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  await runProjectCommand(
+    "npx",
+    [...IGA_NPX_ARGS, "pages", "link", "-y"],
+    projectDir,
+  );
+}
+
+async function syncIgaEnvironmentVariables(
+  projectDir: string,
+): Promise<void> {
+  const localValues = await readManagedIgaEnvironmentVariables(projectDir);
+  const listResult = await runProjectCommand(
+    "npx",
+    [...IGA_NPX_ARGS, "pages", "env", "list", "--format=json"],
+    projectDir,
+  );
+  const existingKeys = parseIgaEnvironmentKeys(listResult.stdout);
+
+  for (const key of MANAGED_IGA_ENV_KEYS) {
+    const action = existingKeys.has(key) ? "update" : "add";
+    const value = localValues.get(key) ?? "";
+    const args = [
+      ...IGA_NPX_ARGS,
+      "pages",
+      "env",
+      action,
+      key,
+      "--value",
+      value,
+      "-y",
+    ];
+    await runProjectCommand("npx", args, projectDir, {
+      displayArgs: [
+        ...IGA_NPX_ARGS,
+        "pages",
+        "env",
+        action,
+        key,
+        "--value",
+        "[REDACTED]",
+        "-y",
+      ],
+      redactValues: value ? [value] : [],
+      streamOutput: false,
+    });
+  }
+}
+
+async function readManagedIgaEnvironmentVariables(
+  projectDir: string,
+): Promise<Map<string, string>> {
+  const envPath = path.join(projectDir, ".env.local");
+  let content: string;
+  try {
+    content = await readFile(envPath, "utf8");
+  } catch {
+    throw new Error(
+      `Cannot deploy without generated runtime configuration. Missing ${envPath}.`,
+    );
+  }
+
+  const allowedKeys = new Set<string>(MANAGED_IGA_ENV_KEYS);
+  const values = new Map<string, string>();
+  for (const line of content.split(/\r?\n/)) {
+    const normalized = line.trim();
+    if (!normalized || normalized.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator < 1) continue;
+    const key = line.slice(0, separator).trim();
+    if (!allowedKeys.has(key)) continue;
+    values.set(key, line.slice(separator + 1));
+  }
+
+  const missingKeys = MANAGED_IGA_ENV_KEYS.filter((key) => !values.has(key));
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Generated runtime configuration is incomplete in ${envPath}. Missing: ${missingKeys.join(", ")}.`,
+    );
+  }
+  return values;
+}
+
+function parseIgaEnvironmentKeys(output: string): Set<string> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(output);
+  } catch {
+    throw new Error(
+      "Unable to read IGA environment variables: expected JSON output from `iga pages env list --format=json`.",
+    );
+  }
+  const env = (payload as { env?: unknown }).env;
+  if (!Array.isArray(env)) {
+    throw new Error(
+      "Unable to read IGA environment variables: response does not contain an env list.",
+    );
+  }
+  return new Set(
+    env.flatMap((item) => {
+      const key = (item as { key?: unknown })?.key;
+      return typeof key === "string" ? [key] : [];
+    }),
+  );
 }
 
 async function ensureCreatableProjectDir(projectDir: string): Promise<void> {
@@ -289,9 +463,12 @@ async function runProjectCommand(
   command: string,
   args: string[],
   cwd: string,
+  options: RunProjectCommandOptions = {},
 ): Promise<CommandResult> {
-  const commandLine = [command, ...args].join(" ");
+  const displayArgs = options.displayArgs ?? args;
+  const commandLine = [command, ...displayArgs].join(" ");
   process.stderr.write(`\n> ${commandLine}\n`);
+  const streamOutput = options.streamOutput ?? true;
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -304,19 +481,20 @@ async function runProjectCommand(
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutChunks.push(chunk);
-      process.stderr.write(chunk);
+      if (streamOutput) process.stderr.write(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderrChunks.push(chunk);
-      process.stderr.write(chunk);
+      if (streamOutput) process.stderr.write(chunk);
     });
     child.on("error", (error) => {
       reject(
         new Error(
           formatCommandFailure(
             command,
-            args,
+            displayArgs,
             commandOutputError(error, stdoutChunks, stderrChunks),
+            options.redactValues,
           ),
         ),
       );
@@ -332,12 +510,13 @@ async function runProjectCommand(
         new Error(
           formatCommandFailure(
             command,
-            args,
+            displayArgs,
             {
               message: `Command exited with ${signal ? `signal ${signal}` : `status ${code ?? "unknown"}`}.`,
               stdout,
               stderr,
             },
+            options.redactValues,
           ),
         ),
       );
@@ -360,6 +539,7 @@ function formatCommandFailure(
   command: string,
   args: string[],
   error: unknown,
+  redactValues: string[] = [],
 ): string {
   const commandLine = [command, ...args].join(" ");
   const maybeError = error as {
@@ -371,23 +551,65 @@ function formatCommandFailure(
     typeof maybeError.stdout === "string" ? maybeError.stdout.trim() : "";
   const stderr =
     typeof maybeError.stderr === "string" ? maybeError.stderr.trim() : "";
-  const output = [stdout, stderr].filter(Boolean).join("\n");
-  return `Command failed: ${commandLine}${output ? `\n${output}` : maybeError.message ? `\n${maybeError.message}` : ""}`;
+  const output = redactSensitiveValues(
+    [stdout, stderr].filter(Boolean).join("\n"),
+    redactValues,
+  );
+  const authGuidance = needsIgaAuthenticationGuidance(command, args, output)
+    ? "\nIGA authentication is required. Run `npx -y @iga-pages/cli@latest login` in an interactive terminal, then retry."
+    : "";
+  return `Command failed: ${commandLine}${output ? `\n${output}` : maybeError.message ? `\n${maybeError.message}` : ""}${authGuidance}`;
+}
+
+function redactSensitiveValues(
+  text: string,
+  values: string[],
+): string {
+  return values.reduce(
+    (redacted, value) => redacted.split(value).join("[REDACTED]"),
+    text,
+  );
+}
+
+function needsIgaAuthenticationGuidance(
+  command: string,
+  args: string[],
+  output: string,
+): boolean {
+  if (command !== "npx" || !args.includes("@iga-pages/cli@latest")) {
+    return false;
+  }
+  return /not logged in|please run [`'"]?iga login|authentication (?:is )?required|credentials? (?:were )?not found/i.test(
+    output,
+  );
 }
 
 function parseDeploymentUrls(output: string): {
   deploymentUrl?: string;
   previewUrl?: string;
+  consoleUrl?: string;
   allUrls: string[];
 } {
   const allUrls = extractUrls(output);
-  const previewUrl = output
-    .split(/\r?\n/)
-    .find((line) => /preview/i.test(line))
+  const lines = output.split(/\r?\n/);
+  const previewUrl = extractLabeledUrl(lines, /preview\s+url/i);
+  const consoleUrl = extractLabeledUrl(lines, /\bconsole\b/i);
+  return {
+    deploymentUrl: previewUrl,
+    previewUrl,
+    consoleUrl,
+    allUrls,
+  };
+}
+
+function extractLabeledUrl(
+  lines: string[],
+  label: RegExp,
+): string | undefined {
+  return lines
+    .find((line) => label.test(line))
     ?.match(/https?:\/\/[^\s)>\]]+/)?.[0]
     ?.replace(/[.,;:]+$/, "");
-  const deploymentUrl = allUrls.find((url) => url !== previewUrl) ?? allUrls[0];
-  return { deploymentUrl, previewUrl, allUrls };
 }
 
 function extractUrls(output: string): string[] {
@@ -399,10 +621,7 @@ function resolveDeploymentProvider(provider?: string): {
   name: string;
   implementation: DeploymentProvider;
 } {
-  if (!provider || !provider.trim()) {
-    throw new Error("Missing required flag: --provider.");
-  }
-  const normalized = provider.trim().toLowerCase();
+  const normalized = provider?.trim().toLowerCase() || "volcengine-iga";
   const implementation = DEPLOYMENT_PROVIDERS.get(normalized);
   if (implementation) {
     return { name: normalized, implementation };

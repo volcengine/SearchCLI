@@ -1,6 +1,7 @@
 node_modules
 dist
 .next
+.iga/
 .env.local
 next-env.d.ts
 *.tsbuildinfo

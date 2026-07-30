@@ -9,7 +9,12 @@ import { isProjectFeatureEnabled, requireProjectFeatureEnabled } from '../../cor
 export default class ProjectDeploy extends Command {
   static override hidden = !isProjectFeatureEnabled();
 
-  static override description = 'Deploy a project created by "vs project create" through a registered provider.';
+  static override description = 'Deploy a project created by "vs project create" to Volcengine IGA Pages.';
+
+  static override examples = [
+    '<%= config.bin %> project deploy',
+    '<%= config.bin %> project deploy --project-dir ./demo --dry-run'
+  ];
 
   static override flags = {
     ...outputFormatFlags,
@@ -17,11 +22,12 @@ export default class ProjectDeploy extends Command {
       description: 'Project directory. Defaults to the current working directory.'
     }),
     provider: Flags.string({
-      required: true,
-      description: 'Deployment provider. No providers are currently available.'
+      default: 'volcengine-iga',
+      description: 'Deployment provider. Defaults to volcengine-iga.',
+      options: ['volcengine-iga']
     }),
     'dry-run': Flags.boolean({
-      description: 'Validate deployment after install/build without publishing changes.'
+      description: 'Validate the project with IGA Pages build without publishing changes.'
     })
   };
 

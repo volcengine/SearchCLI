@@ -11,12 +11,29 @@ npm run build
 npm start
 ```
 
+Deploy to Volcengine IGA Pages through SearchCLI:
+
+```bash
+vs project deploy
+```
+
+The deploy command links the IGA Pages project when needed and synchronizes
+the generated `VIKING_*` values from `.env.local` before publishing. Other
+remote environment variables are preserved.
+
+To validate the IGA Pages build without publishing:
+
+```bash
+vs project deploy --dry-run
+```
+
 The project is a single Next.js App Router application. The browser reads the
 features selected by `vs project create --features` from `/api/config`, while
 Viking credentials and resource IDs stay in server-only Route Handlers.
 
 Generated credentials are written as plain text to `.env.local`, which is
-ignored by Git. For deployments, prefer setting the same variables in the
+ignored by Git. SearchCLI synchronizes these values for IGA Pages deployments.
+If deploying through another workflow, configure the same variables in its
 runtime environment:
 
 - `VIKING_API_KEY` for API key authentication
