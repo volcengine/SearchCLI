@@ -1,10 +1,10 @@
 ---
 name: vs-project
-description: "Create Viking web projects, start and verify a local preview by default, or deploy them to Cloudflare when explicitly requested, with agent-guided feature, eligible application, dataset, scene, and authentication choices. Use only after confirming the installed CLI exposes `vs project`; otherwise stop without taking action."
+description: "Create Viking web projects, start and verify a local preview, or deploy a generated project to Volcengine IGA Pages when explicitly requested. Includes agent-guided feature, eligible application, dataset, scene, and authentication choices. Use only after confirming the installed CLI exposes `vs project`; otherwise stop without taking action."
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
-keywords: project create, project deploy, web project, local preview, dev server, cloudflare deploy, feature selection, app filtering, scene selection
+keywords: project create, project deploy, volcengine iga, iga pages, web project, local preview, dev server, feature selection, app filtering, scene selection
 commands: project create, project deploy, app list, dataset list, search scene list, recommend scene list, auth status, auth import-env, auth login
 ---
 
@@ -12,7 +12,7 @@ commands: project create, project deploy, app list, dataset list, search scene l
 
 ## When to Use
 
-Use this skill to create a Viking web project from existing application resources or deploy a generated project to Cloudflare.
+Use this skill to create a Viking web project from existing application resources and verify its local preview, or to deploy a generated project to Volcengine IGA Pages.
 
 ## Preconditions
 
@@ -21,8 +21,8 @@ Use this skill to create a Viking web project from existing application resource
 - creation needs at least one selected feature: `search`, `recommend`, or `chat`
 - the selected application needs at least one bound dataset; recommendation additionally needs a bound user-event dataset
 - search needs a search scene plus a bound dataset, recommendation needs a recommend scene, and chat needs no additional resource ID
-- local preview needs Node.js and npm in the environment that runs the generated project
-- deployment needs a directory created by `vs project create`
+- local preview needs Node.js 20.9 or newer and npm in the environment that runs the generated project
+- deployment needs a directory created by `vs project create`, Node.js 20.9 or newer, npm, network access for `npx`, and an authenticated IGA CLI session
 - do not ask the user to paste API keys, AK, or SK into chat
 
 ## Commands
@@ -33,7 +33,7 @@ Use this skill to create a Viking web project from existing application resource
 - `search scene list --application-id <id>`: list search scene choices
 - `recommend scene list --application-id <id>`: list recommend scene choices
 - `project create`: generate the project
-- `project deploy`: validate or publish the generated project through Cloudflare
+- `project deploy`: publish the generated project to Volcengine IGA Pages, or validate its IGA build when the user explicitly requests a dry run
 - `npm install` / `npm run dev`: install generated-project dependencies and keep its local API and web servers running
 
 ## Workflow
@@ -59,8 +59,6 @@ For a capped test-account list, use: `Showing the first 20 of 100; reply with an
 
 ### Create
 
-Treat a project creation request as creation-only unless the user explicitly requests deployment. Do not ask whether they want creation only or deployment.
-
 1. Ask the user to select one or more features from `search`, `recommend`, and `chat`. Use a multi-select picker when supported; otherwise show a numbered list and accept multiple values. Require at least one selection and do not infer or preselect a feature.
 2. Run `vs auth status --json` (or add `--profile <name>` when the user selected a non-active profile). Reuse a configured `VIKING_API_KEY` when reported as the source; otherwise reuse valid logged-in AK/SK. If needed, prefer `vs auth import-env` for AK/SK already present in the shell; otherwise use `vs auth login` in a real interactive terminal.
 3. Run `vs app list --full --json` and inspect every application's bound `Datasets` entries. For `recommend`, normalize the user-event type from either numeric enums or labels: `4`, `DatasetTypeUserEvent`, `user_event`, or `user-event`.
@@ -69,20 +67,23 @@ Treat a project creation request as creation-only unless the user explicitly req
 6. For `search`, run both `vs dataset list --application-id <app-id> --json` and `vs search scene list --application-id <app-id> --json`. Offer all returned datasets as choices. For `recommend`, run `vs recommend scene list --application-id <app-id> --json`. Do not query an additional resource for `chat`.
 7. Apply the Resource ID selection contract separately to every required dataset and scene list. Wait for each user selection and never silently choose the first result. If a required list is empty, stop and identify the missing resource; do not invent an ID or create unrelated resources unless the user asks.
 8. If the user already supplied a project name, use it. Otherwise, do not ask for or explain the project name or target directory; omit the optional `[project-name]` argument and let the CLI select its default directory (`viking-web-app`, `viking-web-app2`, and so on). An explicitly supplied target directory must be absent or empty.
-9. Summarize the application, enabled features, selected IDs, authentication source, and an explicitly supplied project name, if any. Warn that generated `apps/api/src/env.ts` contains plaintext credentials, must not be committed, and should be overridden with runtime `VIKING_*` environment variables for deployment.
+9. Summarize the application, enabled features, selected IDs, authentication source, and an explicitly supplied project name, if any. Warn that generated `.env.local` contains plaintext credentials, must not be committed, and can be overridden with runtime `VIKING_*` environment variables.
 10. Show the exact `vs project create` command without resolved secrets, then run it. Always pass `--features <comma-separated-features>`. Omit the optional `[project-name]` argument when the user did not already supply one. Use `--profile <name>` only when selecting a non-active auth profile; the command does not accept API keys or AK/SK as flags. Search must pass `--search-scene-id` and `--search-dataset-id` together; recommendation must pass `--rec-scene-id`; chat needs no additional resource flag.
 11. Read the generated `projectDir` from the command result. Run `npm install` in that directory unless its `node_modules` directory already exists. Stop and report the install failure if dependencies cannot be installed; do not claim that a preview is available.
-12. Run `npm run dev` in the generated directory using a persistent terminal or background session that remains alive after the response. Watch the live output until both the API server and Vite web server report that they are listening. Treat an early process exit, `EADDRINUSE`, or another fatal startup error as a failed preview; do not detach an unobserved process or treat process creation alone as success.
-13. Extract the web preview URL from Vite's actual `Local:` output instead of assuming port 5173. Vite may select another port when its default is occupied. Normalize its origin without a trailing slash, then run `curl -fsS -o /dev/null <preview-origin>/` and `curl -fsS <preview-origin>/api/config`; require both requests to succeed and confirm that `/api/config` returns the selected features.
-14. Report the generated directory, enabled features, and verified local preview URL, and state that the development service is still running. Keep the service session alive for the user's preview. If startup or either probe fails, report the observed failure and no preview URL. If deployment was not explicitly requested, finish by stating that you can also help deploy later; do not ask a deployment question or start a dry run.
+12. Run `npm run dev` in the generated directory using a persistent terminal or background session that remains alive after the response. Watch the live output until the Next.js server reports that it is ready. Treat an early process exit, `EADDRINUSE`, or another fatal startup error as a failed preview; do not detach an unobserved process or treat process creation alone as success.
+13. Extract the preview URL from Next.js's actual `Local:` output instead of assuming port 3000. Next.js may select another port when its default is occupied. Normalize its origin without a trailing slash, then run `curl -fsS -o /dev/null <preview-origin>/` and `curl -fsS <preview-origin>/api/config`; require both requests to succeed and confirm that `/api/config` returns the selected features.
+14. Report the generated directory, enabled features, and verified local preview URL, and state that the development service is still running. Keep the service session alive for the user's preview. If startup or either probe fails, report the observed failure and no preview URL.
 
 ### Deploy
 
-1. Resolve the project directory and verify that it contains the `.viking` marker. Stop if it was not created by `vs project create`.
-2. Use Cloudflare, the only supported provider. First run `vs project deploy --provider cloudflare --project-dir <dir> --dry-run`. Do not separately run install or build; the deploy command installs missing dependencies and builds the project.
-3. If Wrangler is logged out, ask the user to run `npx wrangler login` in the project directory using a real interactive terminal, then retry the dry run.
-4. After a successful dry run, explicitly confirm live publication with the user. Run the same command without `--dry-run` only after confirmation.
-5. Report the deployment URL returned by the CLI. If no URL is returned, report completion without inventing one.
+Treat project creation as creation-only unless the user explicitly requests deployment. Do not run a deployment dry run before a live deployment.
+
+1. Resolve the requested project directory and verify that it contains the `.viking` marker created by `vs project create`. Do not deploy an arbitrary directory.
+2. Before publishing, summarize the target directory and that the provider is Volcengine IGA Pages. Obtain confirmation when the user's request is not already an explicit, unambiguous instruction to publish.
+3. Run `vs project deploy --project-dir <dir>` directly. Volcengine IGA is the default provider; `--provider=volcengine-iga` remains available when an explicit provider is useful. The command installs missing dependencies, performs a local build, links the IGA Pages project when needed, synchronizes the generated `VIKING_*` values from `.env.local`, and then delegates upload and publication to the IGA CLI.
+4. If IGA reports that authentication is required, ask the user to run `npx -y @iga-pages/cli@latest login` in a real interactive terminal. Retry the same `vs project deploy` command after login succeeds.
+5. Report the Preview URL and Console URL returned by the CLI. If either URL is absent, report only the values actually returned; never invent a URL.
+6. Use `--dry-run` only when the user explicitly asks to validate or build for IGA without publishing. In that case run `vs project deploy --project-dir <dir> --dry-run` and clearly state that no remote deployment was created.
 
 ## Constraints
 
@@ -96,5 +97,7 @@ Treat a project creation request as creation-only unless the user explicitly req
 - never bypass resource selection when multiple valid applications, datasets, or scenes exist
 - never ask the user to recall or manually provide a resource ID when the CLI can enumerate valid choices
 - never ask for a project name or target directory when the user did not provide one; omit `[project-name]` and use the CLI default
-- treat creation as creation-only by default; do not ask whether to deploy, and finish by stating that you can help deploy the generated project if the user wants
-- never publish merely because project creation succeeded; live deployment always needs an explicit request and confirmation
+- never deploy merely because project creation succeeded; deployment requires an explicit publication request
+- do not run `--dry-run` as a mandatory step before live deployment
+- do not infer or report IGA internal provider identifiers, deployment scope, project IDs, or URLs that the CLI did not return
+- preserve unrelated IGA environment variables; synchronize only the generated `VIKING_*` keys and never reveal their values

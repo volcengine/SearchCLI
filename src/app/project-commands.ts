@@ -4,11 +4,14 @@
 import { spawn } from "node:child_process";
 import {
   mkdir,
+  mkdtemp,
   readdir,
   readFile,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   PROJECT_WEB_TEMPLATE_FILES,
@@ -21,10 +24,8 @@ import { resolveCliDefaults } from "../core/user-config";
 const DEFAULT_PROJECT_NAME = "viking-web-app";
 const PROJECT_MARKER_PATH = ".viking";
 const PROJECT_FEATURES = ["search", "recommend", "chat"] as const;
-const SUPPORTED_DEPLOYMENT_PROVIDERS = ["cloudflare"] as const;
+const IGA_NPX_ARGS = ["-y", "@iga-pages/cli@latest"] as const;
 export type ProjectFeature = (typeof PROJECT_FEATURES)[number];
-export type DeploymentProvider =
-  (typeof SUPPORTED_DEPLOYMENT_PROVIDERS)[number];
 
 export interface ProjectCreateOptions {
   projectName?: string;
@@ -48,9 +49,32 @@ interface CommandResult {
 }
 
 interface RunProjectCommandOptions {
-  includeAuthGuidance?: boolean;
+  displayArgs?: string[];
+  redactValues?: string[];
   streamOutput?: boolean;
 }
+
+interface DeploymentProvider {
+  run: (
+    projectDir: string,
+    dryRun: boolean | undefined,
+  ) => Promise<CommandResult>;
+}
+
+const DEPLOYMENT_PROVIDERS = new Map<string, DeploymentProvider>([
+  ["volcengine-iga", { run: runVolcengineIgaDeployCommand }],
+]);
+const MANAGED_IGA_ENV_KEYS = [
+  "VIKING_APP_ID",
+  "VIKING_API_KEY",
+  "VIKING_AK",
+  "VIKING_SK",
+  "VIKING_REGION",
+  "VIKING_FEATURES",
+  "VIKING_SEARCH_SCENE_ID",
+  "VIKING_SEARCH_DATASET_ID",
+  "VIKING_REC_SCENE_ID",
+] as const;
 
 type ProjectCreateAuth =
   | {
@@ -101,7 +125,6 @@ export async function runProjectCreateCommand(
   const projectName = hasExplicitProjectName(options.projectName)
     ? requestedProjectName
     : await resolveDefaultProjectName(requestedProjectName);
-  const deploymentName = normalizeDeploymentName(projectName);
   const projectDir = path.resolve(projectName);
   await ensureCreatableProjectDir(projectDir);
 
@@ -117,9 +140,7 @@ export async function runProjectCreateCommand(
     "{{SEARCH_DATASET_ID}}": searchDatasetId ?? "",
     "{{REC_SCENE_ID}}": recSceneId ?? "",
     "{{PROJECT_NAME}}": projectName,
-    "{{WORKER_NAME}}": deploymentName,
     "{{TEMPLATE_VERSION}}": PROJECT_WEB_TEMPLATE_VERSION,
-    "{{COMPATIBILITY_DATE}}": new Date().toISOString().slice(0, 10),
   };
 
   await mkdir(projectDir, { recursive: true });
@@ -138,7 +159,6 @@ export async function runProjectCreateCommand(
       projectDir,
       template: "project-web",
       templateVersion: PROJECT_WEB_TEMPLATE_VERSION,
-      deploymentName,
       features,
       authMode: auth.authMode,
       authSource: auth.authSource,
@@ -149,7 +169,7 @@ export async function runProjectCreateCommand(
         "npm install",
         "npm run dev",
         "npm run build",
-        "vs project deploy --provider cloudflare",
+        "vs project deploy",
       ],
     },
   });
@@ -202,7 +222,9 @@ export async function runProjectDeployCommand(
   options: ProjectDeployOptions,
 ): Promise<void> {
   requireProjectFeatureEnabled();
-  const provider = normalizeDeploymentProvider(options.provider);
+  const { name: provider, implementation } = resolveDeploymentProvider(
+    options.provider,
+  );
   const projectDir = path.resolve(options.projectDir ?? process.cwd());
   await loadAndValidateProjectMarker(projectDir);
 
@@ -210,13 +232,11 @@ export async function runProjectDeployCommand(
     await runProjectCommand("npm", ["install"], projectDir);
   }
 
-  await runProjectCommand("npm", ["run", "build"], projectDir);
+  if (!options.dryRun) {
+    await runProjectCommand("npm", ["run", "build"], projectDir);
+  }
 
-  const deployResult = await runDeploymentProviderCommand(
-    provider,
-    projectDir,
-    options.dryRun,
-  );
+  const deployResult = await implementation.run(projectDir, options.dryRun);
   const parsedUrls = parseDeploymentUrls(
     `${deployResult.stdout}\n${deployResult.stderr}`,
   );
@@ -229,57 +249,157 @@ export async function runProjectDeployCommand(
       dryRun: Boolean(options.dryRun),
       deploymentUrl: parsedUrls.deploymentUrl ?? null,
       previewUrl: parsedUrls.previewUrl ?? null,
+      consoleUrl: parsedUrls.consoleUrl ?? null,
       urls: parsedUrls.allUrls,
     },
   });
 }
 
-async function runDeploymentProviderCommand(
-  provider: DeploymentProvider,
+async function runVolcengineIgaDeployCommand(
   projectDir: string,
   dryRun: boolean | undefined,
 ): Promise<CommandResult> {
-  switch (provider) {
-    case "cloudflare":
-      return runCloudflareDeployCommand(projectDir, dryRun);
+  if (!dryRun) {
+    await ensureIgaProjectLinked(projectDir);
+    await syncIgaEnvironmentVariables(projectDir);
+    return runProjectCommand(
+      "npx",
+      [...IGA_NPX_ARGS, "pages", "deploy"],
+      projectDir,
+    );
+  }
+
+  const outputDir = await mkdtemp(
+    path.join(os.tmpdir(), "viking-iga-build-"),
+  );
+  try {
+    return await runProjectCommand(
+      "npx",
+      [
+        ...IGA_NPX_ARGS,
+        "pages",
+        "build",
+        "--output",
+        outputDir,
+      ],
+      projectDir,
+    );
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
   }
 }
 
-async function runCloudflareDeployCommand(
-  projectDir: string,
-  dryRun: boolean | undefined,
-): Promise<CommandResult> {
-  await ensureCloudflareWranglerLoggedIn(projectDir);
-  const deployArgs = ["--yes", "wrangler", "deploy"];
-  if (dryRun) deployArgs.push("--dry-run");
-  return runProjectCommand("npx", deployArgs, projectDir);
+async function ensureIgaProjectLinked(projectDir: string): Promise<void> {
+  try {
+    await stat(path.join(projectDir, ".iga", "project.json"));
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  await runProjectCommand(
+    "npx",
+    [...IGA_NPX_ARGS, "pages", "link", "-y"],
+    projectDir,
+  );
 }
 
-async function ensureCloudflareWranglerLoggedIn(
+async function syncIgaEnvironmentVariables(
   projectDir: string,
 ): Promise<void> {
-  try {
-    const result = await runProjectCommand(
-      "npx",
-      ["--yes", "wrangler", "whoami"],
-      projectDir,
-      {
-        includeAuthGuidance: false,
-        streamOutput: false,
-      },
-    );
-    if (isCloudflareWranglerLoggedOut(`${result.stdout}\n${result.stderr}`)) {
-      throw new Error(formatCloudflareWranglerLoginFailure());
-    }
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.startsWith("Cloudflare Wrangler is not logged in")
-    ) {
-      throw error;
-    }
-    throw new Error(formatCloudflareWranglerLoginFailure());
+  const localValues = await readManagedIgaEnvironmentVariables(projectDir);
+  const listResult = await runProjectCommand(
+    "npx",
+    [...IGA_NPX_ARGS, "pages", "env", "list", "--format=json"],
+    projectDir,
+  );
+  const existingKeys = parseIgaEnvironmentKeys(listResult.stdout);
+
+  for (const key of MANAGED_IGA_ENV_KEYS) {
+    const action = existingKeys.has(key) ? "update" : "add";
+    const value = localValues.get(key) ?? "";
+    const args = [
+      ...IGA_NPX_ARGS,
+      "pages",
+      "env",
+      action,
+      key,
+      "--value",
+      value,
+      "-y",
+    ];
+    await runProjectCommand("npx", args, projectDir, {
+      displayArgs: [
+        ...IGA_NPX_ARGS,
+        "pages",
+        "env",
+        action,
+        key,
+        "--value",
+        "[REDACTED]",
+        "-y",
+      ],
+      redactValues: value ? [value] : [],
+      streamOutput: false,
+    });
   }
+}
+
+async function readManagedIgaEnvironmentVariables(
+  projectDir: string,
+): Promise<Map<string, string>> {
+  const envPath = path.join(projectDir, ".env.local");
+  let content: string;
+  try {
+    content = await readFile(envPath, "utf8");
+  } catch {
+    throw new Error(
+      `Cannot deploy without generated runtime configuration. Missing ${envPath}.`,
+    );
+  }
+
+  const allowedKeys = new Set<string>(MANAGED_IGA_ENV_KEYS);
+  const values = new Map<string, string>();
+  for (const line of content.split(/\r?\n/)) {
+    const normalized = line.trim();
+    if (!normalized || normalized.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator < 1) continue;
+    const key = line.slice(0, separator).trim();
+    if (!allowedKeys.has(key)) continue;
+    values.set(key, line.slice(separator + 1));
+  }
+
+  const missingKeys = MANAGED_IGA_ENV_KEYS.filter((key) => !values.has(key));
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Generated runtime configuration is incomplete in ${envPath}. Missing: ${missingKeys.join(", ")}.`,
+    );
+  }
+  return values;
+}
+
+function parseIgaEnvironmentKeys(output: string): Set<string> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(output);
+  } catch {
+    throw new Error(
+      "Unable to read IGA environment variables: expected JSON output from `iga pages env list --format=json`.",
+    );
+  }
+  const env = (payload as { env?: unknown }).env;
+  if (!Array.isArray(env)) {
+    throw new Error(
+      "Unable to read IGA environment variables: response does not contain an env list.",
+    );
+  }
+  return new Set(
+    env.flatMap((item) => {
+      const key = (item as { key?: unknown })?.key;
+      return typeof key === "string" ? [key] : [];
+    }),
+  );
 }
 
 async function ensureCreatableProjectDir(projectDir: string): Promise<void> {
@@ -345,9 +465,9 @@ async function runProjectCommand(
   cwd: string,
   options: RunProjectCommandOptions = {},
 ): Promise<CommandResult> {
-  const commandLine = [command, ...args].join(" ");
+  const displayArgs = options.displayArgs ?? args;
+  const commandLine = [command, ...displayArgs].join(" ");
   process.stderr.write(`\n> ${commandLine}\n`);
-  const includeAuthGuidance = options.includeAuthGuidance ?? true;
   const streamOutput = options.streamOutput ?? true;
 
   return new Promise((resolve, reject) => {
@@ -372,9 +492,9 @@ async function runProjectCommand(
         new Error(
           formatCommandFailure(
             command,
-            args,
+            displayArgs,
             commandOutputError(error, stdoutChunks, stderrChunks),
-            { includeAuthGuidance },
+            options.redactValues,
           ),
         ),
       );
@@ -390,13 +510,13 @@ async function runProjectCommand(
         new Error(
           formatCommandFailure(
             command,
-            args,
+            displayArgs,
             {
               message: `Command exited with ${signal ? `signal ${signal}` : `status ${code ?? "unknown"}`}.`,
               stdout,
               stderr,
             },
-            { includeAuthGuidance },
+            options.redactValues,
           ),
         ),
       );
@@ -419,7 +539,7 @@ function formatCommandFailure(
   command: string,
   args: string[],
   error: unknown,
-  options: { includeAuthGuidance?: boolean } = {},
+  redactValues: string[] = [],
 ): string {
   const commandLine = [command, ...args].join(" ");
   const maybeError = error as {
@@ -431,37 +551,65 @@ function formatCommandFailure(
     typeof maybeError.stdout === "string" ? maybeError.stdout.trim() : "";
   const stderr =
     typeof maybeError.stderr === "string" ? maybeError.stderr.trim() : "";
-  const output = [stdout, stderr].filter(Boolean).join("\n");
-  const includeAuthGuidance = options.includeAuthGuidance ?? true;
-  const authGuidance = includeAuthGuidance && needsDeploymentAuthGuidance(output)
-    ? "\nCloudflare Wrangler authentication is required. Run `npx wrangler login` in the project directory, then retry."
+  const output = redactSensitiveValues(
+    [stdout, stderr].filter(Boolean).join("\n"),
+    redactValues,
+  );
+  const authGuidance = needsIgaAuthenticationGuidance(command, args, output)
+    ? "\nIGA authentication is required. Run `npx -y @iga-pages/cli@latest login` in an interactive terminal, then retry."
     : "";
-  if (authGuidance) {
-    return `Command failed: ${commandLine}${authGuidance}`;
-  }
-  return `Command failed: ${commandLine}${output ? `\n${output}` : ""}${authGuidance || (maybeError.message ? `\n${maybeError.message}` : "")}`;
+  return `Command failed: ${commandLine}${output ? `\n${output}` : maybeError.message ? `\n${maybeError.message}` : ""}${authGuidance}`;
 }
 
-function formatCloudflareWranglerLoginFailure(): string {
-  return [
-    "Cloudflare Wrangler is not logged in, so deployment was not started.",
-    "Run `npx wrangler login` in the project directory, then retry `vs project deploy --provider cloudflare`.",
-  ].join("\n");
+function redactSensitiveValues(
+  text: string,
+  values: string[],
+): string {
+  return values.reduce(
+    (redacted, value) => redacted.split(value).join("[REDACTED]"),
+    text,
+  );
+}
+
+function needsIgaAuthenticationGuidance(
+  command: string,
+  args: string[],
+  output: string,
+): boolean {
+  if (command !== "npx" || !args.includes("@iga-pages/cli@latest")) {
+    return false;
+  }
+  return /not logged in|please run [`'"]?iga login|authentication (?:is )?required|credentials? (?:were )?not found/i.test(
+    output,
+  );
 }
 
 function parseDeploymentUrls(output: string): {
   deploymentUrl?: string;
   previewUrl?: string;
+  consoleUrl?: string;
   allUrls: string[];
 } {
   const allUrls = extractUrls(output);
-  const previewUrl = output
-    .split(/\r?\n/)
-    .find((line) => /preview/i.test(line))
+  const lines = output.split(/\r?\n/);
+  const previewUrl = extractLabeledUrl(lines, /preview\s+url/i);
+  const consoleUrl = extractLabeledUrl(lines, /\bconsole\b/i);
+  return {
+    deploymentUrl: previewUrl,
+    previewUrl,
+    consoleUrl,
+    allUrls,
+  };
+}
+
+function extractLabeledUrl(
+  lines: string[],
+  label: RegExp,
+): string | undefined {
+  return lines
+    .find((line) => label.test(line))
     ?.match(/https?:\/\/[^\s)>\]]+/)?.[0]
     ?.replace(/[.,;:]+$/, "");
-  const deploymentUrl = allUrls.find((url) => url !== previewUrl) ?? allUrls[0];
-  return { deploymentUrl, previewUrl, allUrls };
 }
 
 function extractUrls(output: string): string[] {
@@ -469,32 +617,23 @@ function extractUrls(output: string): string[] {
   return [...new Set(matches.map((url) => url.replace(/[.,;:]+$/, "")))];
 }
 
-function needsDeploymentAuthGuidance(output: string): boolean {
-  return /api[_\s-]?token|wrangler login|not authenticated|not logged in|authentication|unauthorized/i.test(
-    output,
-  );
-}
-
-function isCloudflareWranglerLoggedOut(output: string): boolean {
-  return /not authenticated|not logged in|please run [`']?wrangler login[`']?/i.test(
-    output,
-  );
-}
-
-function normalizeDeploymentProvider(provider?: string): DeploymentProvider {
-  if (!provider || !provider.trim()) {
+function resolveDeploymentProvider(provider?: string): {
+  name: string;
+  implementation: DeploymentProvider;
+} {
+  const normalized = provider?.trim().toLowerCase() || "volcengine-iga";
+  const implementation = DEPLOYMENT_PROVIDERS.get(normalized);
+  if (implementation) {
+    return { name: normalized, implementation };
+  }
+  const supportedProviders = [...DEPLOYMENT_PROVIDERS.keys()];
+  if (supportedProviders.length === 0) {
     throw new Error(
-      `Missing required flag: --provider. Supported providers: ${SUPPORTED_DEPLOYMENT_PROVIDERS.join(", ")}.\nExample: \`vs project deploy --provider cloudflare\``,
+      `Unsupported deployment provider: ${provider}. No deployment providers are currently available.`,
     );
   }
-  const normalized = provider.trim().toLowerCase();
-  if (
-    (SUPPORTED_DEPLOYMENT_PROVIDERS as readonly string[]).includes(normalized)
-  ) {
-    return normalized as DeploymentProvider;
-  }
   throw new Error(
-    `Unsupported deployment provider: ${provider}. Supported providers: ${SUPPORTED_DEPLOYMENT_PROVIDERS.join(", ")}.`,
+    `Unsupported deployment provider: ${provider}. Supported providers: ${supportedProviders.join(", ")}.`,
   );
 }
 
@@ -633,21 +772,6 @@ function validateTemplateSafeValue(value: string, label: string): void {
       `${label} cannot contain double quotes, backslashes, or newlines.`,
     );
   }
-}
-
-function normalizeDeploymentName(projectName: string): string {
-  const slug = normalizeAsciiSlug(projectName);
-  return (
-    (slug || DEFAULT_PROJECT_NAME).slice(0, 63).replace(/-+$/g, "") ||
-    DEFAULT_PROJECT_NAME
-  );
-}
-
-function normalizeAsciiSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 async function projectDependencyDirExists(projectDir: string): Promise<boolean> {

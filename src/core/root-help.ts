@@ -12,7 +12,7 @@ const CORE_COMMANDS: HelpLine[] = [
 ];
 
 const PROJECT_COMMAND: HelpLine = {
-  text: "project            Create and deploy full-stack web projects",
+  text: "project            Create full-stack web projects",
 };
 
 const PRODUCT_COMMANDS: HelpLine[] = [
@@ -56,9 +56,8 @@ export function printRootHelp(): void {
   ];
   const projectQuickStart = projectEnabled
     ? `
-  Create and deploy a starter web project
-    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>
-    vs project deploy --provider cloudflare --project-dir ./demo`
+  Create a starter web project
+    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>`
     : "";
 
   console.log(`SearchCLI

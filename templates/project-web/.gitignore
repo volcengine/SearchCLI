@@ -1,6 +1,9 @@
 node_modules
 dist
-.wrangler
-apps/api/src/env.ts
+.next
+.iga/
+.env.local
+next-env.d.ts
+*.tsbuildinfo
 .DS_Store
 *.log

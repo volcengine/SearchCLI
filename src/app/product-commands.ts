@@ -2036,12 +2036,13 @@ COMMON FLAGS
     project: `${renderUsageBlock(
       [
         'vs project create [project-name] --app-id <id> --features <search,recommend,chat> [--profile <name>] [--search-scene-id <id> --search-dataset-id <id>] [--rec-scene-id <id>] [output flags]',
-        'vs project deploy --provider <provider> [--project-dir <dir>] [--dry-run] [output flags]'
+        'vs project deploy [--provider=volcengine-iga] [--project-dir <dir>] [--dry-run] [output flags]'
       ]
     )}
 
 DESCRIPTION
-  Create a runnable web experience for an existing Viking app and deploy it to the selected provider.
+  Create a runnable web experience for an existing Viking app.
+  Deploy generated projects to Volcengine IGA Pages; the provider defaults to volcengine-iga.
   Project create requires one or more explicit features. It reuses VIKING_API_KEY when configured;
   otherwise it uses AK/SK from the selected or active auth profile.
 

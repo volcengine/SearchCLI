@@ -68,12 +68,12 @@ without first calling `vs project create`.
 Before starting the template dev server, create a local API config file:
 
 ```bash
-cp templates/project-web/apps/api/src/env.template.ts templates/project-web/apps/api/src/env.ts
+cp templates/project-web/.env.template templates/project-web/.env.local
 ```
 
-Then edit `templates/project-web/apps/api/src/env.ts` with local project IDs.
+Then edit `templates/project-web/.env.local` with local project IDs and enabled features.
 This file is gitignored and should stay local. The embed generation step maps
-`apps/api/src/env.template.ts` to `apps/api/src/env.ts` for projects generated
+`.env.template` to `.env.local` for projects generated
 by `vs project create`.
 
 Run the template locally:

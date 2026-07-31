@@ -122,9 +122,9 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Description: create a web project for an existing app with one or more explicit features. Search requires both search IDs, recommendation requires a recommend scene ID, and chat needs no additional resource ID. The command reuses `VIKING_API_KEY` when configured, otherwise AK/SK from the selected or active `vs auth` profile.
     *   Defaults: `project-name` defaults to `viking-web-app` and auto-increments when needed
 *   `vs project deploy`
-    *   Usage: `vs project deploy --provider <provider> [--project-dir <dir>] [--dry-run] [output flags]`
-    *   Description: deploy a generated project and print the URL
-    *   Providers: `cloudflare`
+    *   Usage: `vs project deploy [--provider=volcengine-iga] [--project-dir <dir>] [--dry-run] [output flags]`
+    *   Description: build and deploy a generated project to Volcengine IGA Pages, synchronizing generated `VIKING_*` runtime variables before publication; `--dry-run` runs an IGA Pages build without remote changes
+    *   Providers: `volcengine-iga` (default)
 
 ### `search` - Search Runtime and Scenes
 *   `vs search run --application-id <id> --scene-id <id> --query <text>`

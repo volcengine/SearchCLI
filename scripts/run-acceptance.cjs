@@ -241,7 +241,6 @@ async function testProjectFeatureFlag() {
     env: { VIKING_ENABLE_PROJECT: '1' }
   });
   assert.match(stdout, /project create \[project-name\]/i);
-  assert.match(stdout, /project deploy --provider <provider>/i);
   return `VIKING_ENABLE_PROJECT=1 ${command.prefix} project --help`;
 }
 
@@ -380,44 +379,104 @@ async function testProjectCreateDeploy() {
     const projectDir = path.join(workspace, 'demo');
     assert.equal(created.ok, true);
     assert.equal(fs.realpathSync(created.result.projectDir), fs.realpathSync(projectDir));
-    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=1.0.0');
-    assert.match(fs.readFileSync(path.join(projectDir, 'apps/api/src/env.ts'), 'utf8'), /secret-1/);
-    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /apps\/api\/src\/env\.ts/);
+    assert.equal(fs.readFileSync(path.join(projectDir, '.viking'), 'utf8').trim(), 'templateVersion=2.1.0');
+    assert.match(fs.readFileSync(path.join(projectDir, '.env.local'), 'utf8'), /VIKING_API_KEY=secret-1/);
+    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /\.env\.local/);
+    assert.match(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /\.iga\//);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/page.tsx')), true);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/api/chat/route.ts')), true);
+    assert.equal(fs.existsSync(path.join(projectDir, 'apps')), false);
+    const generatedPackage = JSON.parse(fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8'));
+    assert.match(generatedPackage.dependencies.next, /^\^16\./);
+    assert.match(generatedPackage.dependencies['@volcengine/search-sdk-js'], /^\^0\.7\./);
+    assert.equal(generatedPackage.dependencies['@volcengine/search-node'], undefined);
+    assert.equal(generatedPackage.dependencies.express, undefined);
+    assert.equal(generatedPackage.devDependencies?.vite, undefined);
+    assert.equal(fs.existsSync(path.join(projectDir, 'wrangler.jsonc')), false);
+    assert.equal(fs.existsSync(path.join(projectDir, 'src/app/api/cloudflare.ts')), false);
+    assert.doesNotMatch(fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf8'), /wrangler/i);
+    assert.doesNotMatch(fs.readFileSync(path.join(projectDir, 'README.md'), 'utf8'), /cloudflare|wrangler/i);
+    assert.match(fs.readFileSync(path.join(projectDir, 'README.md'), 'utf8'), /vs project deploy/i);
+    assert.deepEqual(created.result.nextSteps, [
+      'cd demo',
+      'npm install',
+      'npm run dev',
+      'npm run build',
+      'vs project deploy'
+    ]);
     assert.doesNotMatch(stdout, /secret-1/);
 
     const fakeBin = path.join(workspace, 'bin');
+    const npmLog = path.join(workspace, 'npm-calls.jsonl');
+    const npxLog = path.join(workspace, 'npx-calls.jsonl');
     fs.mkdirSync(fakeBin);
     writeExecutable(path.join(fakeBin, 'npm'), `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
-if (process.argv[2] === 'install') fs.mkdirSync(path.join(process.cwd(), 'node_modules'));
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.NPM_CALL_LOG, JSON.stringify(args) + '\\n');
+if (args[0] === 'install') fs.mkdirSync(path.join(process.cwd(), 'node_modules'));
 `);
     writeExecutable(path.join(fakeBin, 'npx'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
 const args = process.argv.slice(2);
-if (args.includes('whoami')) process.exit(0);
-console.log('https://demo.example.workers.dev');
+fs.appendFileSync(process.env.NPX_CALL_LOG, JSON.stringify(args) + '\\n');
+if (args.includes('link')) {
+  fs.mkdirSync(path.join(process.cwd(), '.iga'), { recursive: true });
+  fs.writeFileSync(
+    path.join(process.cwd(), '.iga', 'project.json'),
+    JSON.stringify({ projectId: 'project-1' })
+  );
+}
+if (args.includes('env') && args.includes('list')) {
+  console.log(JSON.stringify({
+    status: 'success',
+    command: 'env.list',
+    env: [{ key: 'VIKING_APP_ID' }, { key: 'OTHER_REMOTE_VARIABLE' }]
+  }));
+}
+if (args.includes('deploy')) {
+  console.log('Console     : https://console.volcengine.com/dcdn/pages/detail/project-1/deploy/deploy-1');
+  console.log('Preview URL : https://demo.preview.iga-pages.com');
+}
 `);
 
-    const outputPath = path.join(workspace, 'deploy.json');
+    const deployEnv = {
+      ...featureEnv,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+      NPM_CALL_LOG: npmLog,
+      NPX_CALL_LOG: npxLog
+    };
     const deployed = await runCli([
       'project',
       'deploy',
-      '--provider',
-      'cloudflare',
       '--project-dir',
       projectDir,
-      '--dry-run',
-      '--json',
-      '--output',
-      outputPath
-    ], {
-      env: {
-        ...featureEnv,
-        PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`
-      }
-    });
-    assert.equal(deployed.stdout, '');
-    assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).result.deploymentUrl, 'https://demo.example.workers.dev');
+      '--json'
+    ], { env: deployEnv });
+    const deployedPayload = JSON.parse(deployed.stdout);
+    assert.equal(deployedPayload.result.deploymentUrl, 'https://demo.preview.iga-pages.com');
+    assert.equal(
+      deployedPayload.result.consoleUrl,
+      'https://console.volcengine.com/dcdn/pages/detail/project-1/deploy/deploy-1'
+    );
+    assert.deepEqual(readJsonLines(npmLog), [['install'], ['run', 'build']]);
+    const deployNpxCalls = readJsonLines(npxLog);
+    assert.deepEqual(deployNpxCalls[0].slice(0, 4), [
+      '-y',
+      '@iga-pages/cli@latest',
+      'pages',
+      'link'
+    ]);
+    assert.equal(deployNpxCalls.some(call => call.includes('VIKING_API_KEY')), true);
+    assert.deepEqual(deployNpxCalls.at(-1), [
+      '-y',
+      '@iga-pages/cli@latest',
+      'pages',
+      'deploy'
+    ]);
+    assert.doesNotMatch(`${deployed.stdout}\n${deployed.stderr}`, /secret-1/);
     return `${command.prefix} project create/deploy`;
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
@@ -427,6 +486,14 @@ console.log('https://demo.example.workers.dev');
 function writeExecutable(filePath, content) {
   fs.writeFileSync(filePath, content);
   fs.chmodSync(filePath, 0o755);
+}
+
+function readJsonLines(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  return fs.readFileSync(filePath, 'utf8')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map(line => JSON.parse(line));
 }
 
 async function testSearchTuneHelp() {
