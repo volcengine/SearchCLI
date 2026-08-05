@@ -8,13 +8,27 @@
 
 将稳定、可调优的搜索、推荐与对话检索能力接入你的 Agent 系统或业务系统。
 
-[快速开始（开发者）](#快速开始开发者) · [AI Agent 接入](#快速开始ai-agent) · [完整 Agent 指南](docs/agent-quick-start.md) · [贡献指南](CONTRIBUTING.md) · [安全说明](SECURITY.md)
+[交流群](#加入交流群) · [快速开始（开发者）](#快速开始开发者) · [AI Agent 接入](#快速开始ai-agent) · [完整 Agent 指南](docs/agent-quick-start.md) · [贡献指南](CONTRIBUTING.md) · [安全说明](SECURITY.md)
 
 SearchCLI 是 AI Search on Volcengine 的开放 CLI。
 
 如果你的 Agent 系统或业务系统需要稳定、可调优的信息分发服务，SearchCLI 提供了一条把生产可用的搜索、推荐和对话检索能力接入真实工作流的实际路径。
 
 外部 Agent 通过集成 SearchCLI 和配套的 `Viking skills`，可以自己完成数据 onboarding、搜索与推荐链路搭建和验证、对话检索运行、策略调优、bad case 排查，以及检索效果的持续迭代，而且整个过程是稳定、可审阅、可验证的。
+
+## 加入交流群
+
+<p align="center">
+  <strong>加入 SearchCLI 微信用户交流群</strong><br />
+  使用微信扫描下方二维码，与用户和维护者交流。<br />
+  <sub>二维码会定期更新；如已失效，请稍后查看最新版本。</sub>
+</p>
+
+<p align="center">
+  <a href="docs/assets/wechat-group-qr.jpg">
+    <img src="docs/assets/wechat-group-qr.jpg" alt="SearchCLI 微信用户交流群二维码" width="320" />
+  </a>
+</p>
 
 ## SearchCLI 是什么
 
