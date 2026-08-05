@@ -8,13 +8,27 @@
 
 Conecta búsqueda estable y ajustable, recomendaciones y retrieval conversacional a tu sistema Agent o sistema de negocio.
 
-[Inicio rápido (desarrolladores)](#inicio-rápido-desarrolladores) · [Configuración de AI Agent](#inicio-rápido-ai-agents) · [Guía completa para Agent](docs/agent-quick-start.md) · [Contribuir](CONTRIBUTING.md) · [Seguridad](SECURITY.md)
+[Comunidad](#comunidad) · [Inicio rápido (desarrolladores)](#inicio-rápido-desarrolladores) · [Configuración de AI Agent](#inicio-rápido-ai-agents) · [Guía completa para Agent](docs/agent-quick-start.md) · [Contribuir](CONTRIBUTING.md) · [Seguridad](SECURITY.md)
 
 SearchCLI es la CLI abierta para AI Search on Volcengine.
 
 Si tu sistema Agent o sistema de negocio necesita servicios de distribución de información estables y ajustables, SearchCLI ofrece una ruta práctica para integrar búsqueda, recomendaciones y retrieval conversacional de nivel production en workflows reales.
 
 Con SearchCLI y sus `Viking skills` instalables, los Agents externos pueden hacer onboarding de datos, construir y validar flujos de búsqueda y recomendación, ejecutar retrieval conversacional, ajustar configuraciones de estrategia, investigar bad cases e iterar sobre la calidad del retrieval de forma estable y verificable.
+
+## Comunidad
+
+<p align="center">
+  <strong>Únete al grupo de usuarios de SearchCLI en WeChat</strong><br />
+  Escanea el código QR con WeChat para conectar con otros usuarios y mantenedores.<br />
+  <sub>El código QR se actualiza periódicamente. Si ha caducado, vuelve más tarde para consultar la versión más reciente.</sub>
+</p>
+
+<p align="center">
+  <a href="docs/assets/wechat-group-qr.jpg">
+    <img src="docs/assets/wechat-group-qr.jpg" alt="Código QR del grupo de usuarios de SearchCLI en WeChat" width="320" />
+  </a>
+</p>
 
 ## Qué es SearchCLI
 
