@@ -34,7 +34,7 @@ export async function uploadFileWithConsoleSignature(
   );
 
   const signatureResponse = unwrapResultEnvelope(
-    await openapi.post('/open/GetPresignedImportUrlV2', {
+    await openapi.post('GetPresignedImportUrlV2', {
       FileName: fileName,
       ProjectName: options.projectName ?? config.projectName
     })

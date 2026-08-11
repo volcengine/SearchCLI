@@ -8,6 +8,12 @@ import { serviceFlags } from '../../../command-support/service-flags';
 export default class SearchSceneCreate extends Command {
   static override description = 'Create a search scene.';
 
+  static override examples = [
+    '<%= config.bin %> search scene create --application-id app_xxx --name default-search',
+    '<%= config.bin %> search scene create --application-id app_xxx --name default-search --description "Main search scene"',
+    '<%= config.bin %> search scene create --data @create-search-scene.json'
+  ];
+
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),

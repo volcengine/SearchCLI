@@ -160,7 +160,7 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
     FieldsConfigVersion: options.fieldConfigVersion,
     DryRun: options.dryRun
   });
-  const bindResponse = await client.post('/open/AttachDatasetToApplicationV2', bindPayload);
+  const bindResponse = await client.post('AttachDatasetToApplicationV2', bindPayload);
   steps.push({
     step: 'bind_dataset',
     ok: true,
@@ -339,7 +339,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
   const steps: WorkflowStepResult[] = [];
 
   const importUrlResponse = unwrapResult(
-    await client.post('/open/GetPresignedImportUrlV2', compactObject({
+    await client.post('GetPresignedImportUrlV2', compactObject({
       FileName: fileName,
       ProjectName: projectName
     }))
@@ -364,7 +364,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
   const normalizedTheme = parseDatasetThemeValue(options.theme);
 
   const inferTaskResponse = unwrapResult(
-    await client.post('/open/AddInferDatasetSchemaTaskV2', compactObject({
+    await client.post('AddInferDatasetSchemaTaskV2', compactObject({
       TosKey: fileKey,
       Type: normalizedType,
       Name: options.datasetName,
@@ -384,7 +384,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
   let inferResult: Record<string, unknown> | undefined;
   while (Date.now() <= deadline) {
     const polled = unwrapResult(
-      await client.post('/open/GetInferDatasetSchemaResultV2', { TaskID: taskId, ProjectName: projectName })
+      await client.post('GetInferDatasetSchemaResultV2', { TaskID: taskId, ProjectName: projectName })
     );
     const status = readStatus(polled.Status);
     if (status === 'success') {
@@ -420,7 +420,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
     ProjectName: projectName
   });
   const datasetCreateResponse = unwrapResult(
-    await client.post('/open/CreateDatasetV2', datasetCreatePayload)
+    await client.post('CreateDatasetV2', datasetCreatePayload)
   );
   const datasetId = stringField(datasetCreateResponse, ['DatasetID', 'DatasetId']);
   if (!options.dryRun && !datasetId) {

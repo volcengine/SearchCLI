@@ -21,12 +21,6 @@ import { buildInferSchemaConfirm, renderInferSchemaConfirmText } from '../core/i
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
 import {
-  describeSearchModeOptions,
-  describeUserDefinedRecallModeOptions,
-  normalizeSearchMode,
-  normalizeUserDefinedRecallMode
-} from '../core/search-mode';
-import {
   isUserEventDatasetType,
   getUserEventBizAttr,
   getUserEventFieldType,
@@ -146,6 +140,19 @@ export interface DatasetListOptions extends ServiceCommandOptions {
   name?: string;
   applicationId?: string;
   full?: boolean;
+}
+
+export interface DataSourceSubscriptionCreateOptions extends ProjectScopedOptions {
+  clientToken?: string;
+  needCreateDataset?: boolean;
+  datasetId?: string;
+  createDatasetConfig?: string;
+  type?: string;
+  dataSourceConfig?: string;
+}
+
+export interface DataSourceSubscriptionTaskOptions extends ProjectScopedOptions {
+  taskId?: string;
 }
 
 export interface DatasetSchemaCheckOptions extends ProjectScopedOptions {
@@ -566,7 +573,7 @@ export async function runAppCreateCommand(options: AppCreateOptions): Promise<vo
     options.industry
   );
   requireNonEmptyObject(payload, 'Need --data or --name for app create.');
-  await printResult(callOpenApi('/open/CreateApplicationV2', payload, options));
+  await printResult(callOpenApi('CreateApplicationV2', payload, options));
 }
 
 export async function runAppUpdateCommand(options: AppUpdateOptions): Promise<void> {
@@ -843,7 +850,7 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
 
   const payload = normalizeDatasetV2Payload(rawPayload, CREATE_DATASET_TYPES);
   requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
-  await printResult(callOpenApi('/open/CreateDatasetV2', payload, options));
+  await printResult(callOpenApi('CreateDatasetV2', payload, options));
 }
 
 export async function runDatasetSchemaCheckCommand(options: DatasetSchemaCheckOptions): Promise<void> {
@@ -922,6 +929,61 @@ export async function runDatasetDeleteCommand(options: ResourceIdOptions): Promi
   await printResult(callOpenApi('/api/v1/DeleteDataset', payload, options));
 }
 
+export async function runDataSourceSubscriptionCreateCommand(
+  options: DataSourceSubscriptionCreateOptions
+): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ClientToken: options.clientToken,
+      NeedCreateDataset: options.needCreateDataset === true ? true : undefined,
+      DatasetId: options.datasetId,
+      CreateDatasetConfig: await loadJsonInput(options.createDatasetConfig),
+      Type: options.type,
+      DataSourceConfig: await loadJsonInput(options.dataSourceConfig),
+      ProjectName: options.projectName
+    });
+  requireNonEmptyObject(payload, 'Need --data or subscription create fields.');
+  await printResult(callOpenApi('CreateDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionCloseCommand(options: DataSourceSubscriptionTaskOptions): Promise<void> {
+  if (!options.data && !options.taskId) {
+    throw new Error('Need --task-id or --data for dataset subscription close.');
+  }
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      TaskId: options.taskId,
+      ProjectName: options.projectName
+    });
+  requireNonEmptyObject(payload, 'Need --task-id or --data for dataset subscription close.');
+  await printResult(callOpenApi('CloseDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionGetCommand(options: DataSourceSubscriptionTaskOptions): Promise<void> {
+  if (!options.data && !options.taskId) {
+    throw new Error('Need --task-id or --data for dataset subscription get.');
+  }
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      TaskId: options.taskId,
+      ProjectName: options.projectName
+    });
+  requireNonEmptyObject(payload, 'Need --task-id or --data for dataset subscription get.');
+  await printResult(callOpenApi('GetDataSourceSubscription', payload, options));
+}
+
+export async function runDataSourceSubscriptionListCommand(options: ProjectScopedOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      ProjectName: options.projectName
+    });
+  await printResult(callOpenApi('ListDataSourceSubscriptions', payload, options));
+}
+
 export async function runDataWriteCommand(options: DataWriteOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
@@ -989,118 +1051,86 @@ export async function runSearchRunCommand(options: SearchRunOptions): Promise<vo
 }
 
 export async function runSearchSceneCreateCommand(options: SearchSceneCreateOptions): Promise<void> {
+  if (!options.data && !options.name?.trim()) {
+    throw new Error('Need --data or --name for search scene create.');
+  }
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName,
       Name: options.name,
       Description: options.description
     });
   requireNonEmptyObject(payload, 'Need --data or --name for search scene create.');
-  await printResult(callOpenApi('/api/v1/CreateSearchScene', payload, options));
+  await printResult(callOpenApi('CreateSearchSceneV2', payload, options));
 }
 
 export async function runSearchSceneListCommand(options: ProjectScopedOptions & { applicationId: string }): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('/api/v1/ListSearchScene', payload, options));
+  await printResult(callOpenApi('ListSearchScenesV2', payload, options));
 }
 
 export async function runSearchSceneGetCommand(options: SearchSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('/api/v1/GetSearchScene', payload, options));
-}
-
-function normalizeSearchSceneModeValue(value: unknown, fieldPath: string): number {
-  const normalized = normalizeSearchMode(value);
-  if (normalized === undefined) {
-    throw new Error(`Invalid ${fieldPath}: '${String(value)}'. Allowed values are: ${describeSearchModeOptions()}`);
-  }
-  return normalized;
-}
-
-function normalizeUserDefinedRecallModeValue(value: unknown, fieldPath: string): number {
-  const normalized = normalizeUserDefinedRecallMode(value);
-  if (normalized === undefined) {
-    throw new Error(
-      `Invalid ${fieldPath}: '${String(value)}'. Allowed values are: ${describeUserDefinedRecallModeOptions()}`
-    );
-  }
-  return normalized;
-}
-
-function normalizeRetrieveConfigEnums(rc: any, fieldPath: string): void {
-  if (rc?.Mode !== undefined) {
-    rc.Mode = normalizeSearchSceneModeValue(rc.Mode, `${fieldPath}.Mode`);
-  }
-  if (rc?.UserDefinedRecallMode !== undefined) {
-    rc.UserDefinedRecallMode = normalizeUserDefinedRecallModeValue(
-      rc.UserDefinedRecallMode,
-      `${fieldPath}.UserDefinedRecallMode`
-    );
-  }
-  if (Array.isArray(rc?.ServingControls)) {
-    rc.ServingControls.forEach((control: any, index: number) => {
-      if (control?.RecallWeight?.Mode !== undefined) {
-        control.RecallWeight.Mode = normalizeSearchSceneModeValue(
-          control.RecallWeight.Mode,
-          `${fieldPath}.ServingControls[${index}].RecallWeight.Mode`
-        );
-      }
-      if (control?.RecallWeight?.UserDefinedRecallMode !== undefined) {
-        control.RecallWeight.UserDefinedRecallMode = normalizeUserDefinedRecallModeValue(
-          control.RecallWeight.UserDefinedRecallMode,
-          `${fieldPath}.ServingControls[${index}].RecallWeight.UserDefinedRecallMode`
-        );
-      }
-    });
-  }
+  await printResult(callOpenApi('GetSearchSceneV2', payload, options));
 }
 
 function validateSearchSceneConfig(config: any): void {
-  // Validate SearchConfig
-  if (config?.SearchConfig?.RetrieveConfigs) {
+  if (config?.PerDatasetConfigs) {
     const validOperators = [
       'eq', 'ne', 'contains', 'not_contains', 'must', 'must_not', 
       'any_must', 'any_must_not', 'gt', 'gte', 'lt', 'lte', 
       'geo_distance_inner', 'geo_distance_outer', 'time_gt', 
       'time_gte', 'time_lt', 'time_lte'
     ];
+    const validTextModes = ['balanced', 'semantic_priority', 'keyword_priority', 'user_defined'];
+    const validUserDefinedRecallModes = ['keyword_semantic', 'keyword_only', 'semantic_only'];
     
-    for (const rc of config.SearchConfig.RetrieveConfigs) {
-      normalizeRetrieveConfigEnums(rc, 'SearchConfig.RetrieveConfigs[]');
+    for (const rc of config.PerDatasetConfigs) {
+      if (rc.TextSearchConfig?.Mode && !validTextModes.includes(rc.TextSearchConfig.Mode)) {
+        throw new Error(`Invalid TextSearchConfig.Mode: '${rc.TextSearchConfig.Mode}'. Allowed values are: ${validTextModes.join(', ')}`);
+      }
+      if (
+        rc.TextSearchConfig?.UserDefinedRecallMode &&
+        !validUserDefinedRecallModes.includes(rc.TextSearchConfig.UserDefinedRecallMode)
+      ) {
+        throw new Error(
+          `Invalid TextSearchConfig.UserDefinedRecallMode: '${rc.TextSearchConfig.UserDefinedRecallMode}'. Allowed values are: ${validUserDefinedRecallModes.join(', ')}`
+        );
+      }
 
-      if (rc.BoostBuryConfig?.Rules) {
-        for (const rule of rc.BoostBuryConfig.Rules) {
+      if (rc.BoostBuryCondConfig?.Rules) {
+        for (const rule of rc.BoostBuryCondConfig.Rules) {
           if (rule.Operator && !validOperators.includes(rule.Operator)) {
             throw new Error(`Invalid BoostBuryRule Operator: '${rule.Operator}'. Allowed values are: ${validOperators.join(', ')}.\nNote: Make sure the field '${rule.Field}' is configured as a FilterField in the dataset schema, and the operator matches its type (e.g., use 'eq' for strings instead of 'contains' or '==').`);
           }
         }
       }
 
-      if (rc.QueryConfig?.InstructionType) {
+      if (rc.ImageSearchConfig?.InstructionType) {
         const validQueryInstTypes = ['preset_image', 'preset_item', 'custom'];
-        if (!validQueryInstTypes.includes(rc.QueryConfig.InstructionType)) {
-          throw new Error(`Invalid QueryConfig.InstructionType: '${rc.QueryConfig.InstructionType}'. Allowed values are: ${validQueryInstTypes.join(', ')}`);
+        if (!validQueryInstTypes.includes(rc.ImageSearchConfig.InstructionType)) {
+          throw new Error(`Invalid ImageSearchConfig.InstructionType: '${rc.ImageSearchConfig.InstructionType}'. Allowed values are: ${validQueryInstTypes.join(', ')}`);
         }
-        if (rc.QueryConfig.InstructionType === 'custom' && !rc.QueryConfig.ImageInstruction?.trim()) {
-          throw new Error(`QueryConfig.ImageInstruction cannot be empty when InstructionType is 'custom'.`);
+        if (rc.ImageSearchConfig.InstructionType === 'custom' && !rc.ImageSearchConfig.ImageInstruction?.trim()) {
+          throw new Error(`ImageSearchConfig.ImageInstruction cannot be empty when InstructionType is 'custom'.`);
         }
       }
 
-      if (rc.RerankDoubaoConfig?.Instruction) {
-        if (rc.RerankDoubaoConfig.Instruction.length >= 1024) {
+      if (rc.RerankConfig?.RerankDoubaoConfig?.Instruction) {
+        if (rc.RerankConfig.RerankDoubaoConfig.Instruction.length >= 1024) {
           throw new Error(`RerankDoubaoConfig.Instruction length must be less than 1024 characters.`);
         }
       }
@@ -1138,7 +1168,7 @@ export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOpti
   
   if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig)) {
     configPayload = compactObject({
-      SearchConfig: await loadJsonInput(options.searchConfig),
+      PerDatasetConfigs: await loadJsonInput(options.searchConfig),
       QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
       WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
       OverviewConfig: await loadJsonInput(options.overviewConfig)
@@ -1152,26 +1182,26 @@ export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOpti
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId,
       Name: options.name,
       Description: options.description,
       Config: configPayload,
       ProjectName: options.projectName
     });
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for search scene update.');
-  await printResult(callOpenApi('/api/v1/OnlineSearchScene', payload, options));
+  await printResult(callOpenApi('PublishSearchSceneV2', payload, options));
 }
 
 export async function runSearchSceneDeleteCommand(options: SearchSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('/api/v1/DeleteSearchScene', payload, options));
+  await printResult(callOpenApi('DeleteSearchSceneV2', payload, options));
 }
 
 export async function runRecommendRunCommand(options: RecommendRunOptions): Promise<void> {
@@ -1833,6 +1863,7 @@ export function printProductDomainsHelp(): void {
     'vs app online-config get|update',
     'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result|validate-schema',
     'vs dataset schema check',
+    'vs dataset subscription create|get|list|close',
     'vs data write|import|delete',
     'vs connector init|run|status|stop|inspect',
     'vs search run|scene create|list|get|update|delete',
@@ -1883,6 +1914,10 @@ COMMON FLAGS
         'vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]',
         'vs dataset validate-schema --input <path> --dataset-type <multi_modal|user_event>',
         'vs dataset schema check --type <item|query|video|user-event|doc|document> [--schema @schema.json] [service flags]',
+        'vs dataset subscription create --data @subscription-create.json [service flags]',
+        'vs dataset subscription get --task-id <task-id> [service flags]',
+        'vs dataset subscription list [service flags]',
+        'vs dataset subscription close --task-id <task-id> [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
       ]
@@ -1996,18 +2031,18 @@ COMMON FLAGS
   --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output
 
 SEARCH SCENE ENUMS
-  RetrieveConfigs[].Mode
-    Balanced=1
-    SemanticPriority=2
-    KeywordPriority=3
-    UserDefined=4
+  PerDatasetConfigs[].TextSearchConfig.Mode
+    balanced
+    semantic_priority
+    keyword_priority
+    user_defined
 
-  RetrieveConfigs[].UserDefinedRecallMode
-    KeywordSemantic=0
-    KeywordOnly=1
-    SemanticOnly=2
+  PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode
+    keyword_semantic
+    keyword_only
+    semantic_only
 
-  When \`Mode=UserDefined(4)\`, also set \`UserDefinedRecallMode\` in the same retrieve config.`,
+  When \`Mode=user_defined\`, also set \`UserDefinedRecallMode\` in the same TextSearchConfig.`,
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
@@ -2259,7 +2294,37 @@ KEY FLAGS
 
 EXAMPLES
   vs dataset validate-schema --input ./infer-result.json --dataset-type multi_modal
-  vs dataset validate-schema --input ./.viking/item-plans/my-dataset/infer-result.json --dataset-type user_event`
+  vs dataset validate-schema --input ./.viking/item-plans/my-dataset/infer-result.json --dataset-type user_event`,
+    subscription: `Manage data-source subscription tasks.
+
+USAGE
+  vs dataset subscription create --data @subscription-create.json [service flags]
+  vs dataset subscription create --dataset-id <id> --type mysql --data-source-config @mysql-source.json [--client-token <token>] [service flags]
+  vs dataset subscription get --task-id <task-id> [service flags]
+  vs dataset subscription list [service flags]
+  vs dataset subscription close --task-id <task-id> [service flags]
+
+DESCRIPTION
+  Creates and manages backend data-source subscription tasks. For MySQL credentials and source settings,
+  prefer \`--data @subscription-create.json\` or \`--data-source-config @mysql-source.json\` so secrets do not
+  appear directly in shell history.
+
+KEY FLAGS
+  --data                   Full request payload. Recommended for create because DataSourceConfig may contain credentials.
+  --client-token           Idempotency token for create. Same token requires exactly the same request payload.
+  --need-create-dataset    Let the backend sample the source and create a new multi_modal dataset.
+  --dataset-id             Existing dataset ID when --need-create-dataset is not set.
+  --create-dataset-config  JSON object for creating a new dataset when --need-create-dataset is set.
+  --type                   Data source type. Currently supports mysql.
+  --data-source-config     JSON object for DataSourceConfig. Use @file for credentials.
+  --task-id                Subscription task ID for get/close.
+
+EXAMPLES
+  vs dataset subscription create --data @subscription-create.json
+  vs dataset subscription create --dataset-id ds_xxx --type mysql --data-source-config @mysql-source.json --client-token token-1
+  vs dataset subscription get --task-id task_xxx
+  vs dataset subscription list
+  vs dataset subscription close --task-id task_xxx`
   };
 
   console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
@@ -2388,15 +2453,15 @@ EXAMPLES
 
 function printAppCommandHelp(action: string, subAction?: string): void {
   const helpByAction: Record<string, string> = {
-    create: `Create a Viking application (V2 CreateApplicationV2).
+    create: `Create a Viking application.
 
 USAGE
   vs app create --name <name> [--description <text>] [--industry <industry>] [--language <lang>] [--color <color>] [--icon-color <color>] [--risk-check] [--project-name <name>] [--dry-run] [service flags]
   vs app create --data @app-create.json [service flags]
 
 DESCRIPTION
-  Creates an application via /open/CreateApplicationV2. The CLI normalizes industry aliases
-  (e.g. \`ecommerce\` → \`e_commerce\`) before forwarding the payload.
+  Creates an application. The CLI normalizes industry aliases (e.g. \`ecommerce\` → \`e_commerce\`)
+  before forwarding the payload.
 
 KEY FLAGS
   --data           Full create payload. Use when you already have app-create.json.
@@ -2711,8 +2776,8 @@ USAGE
   vs search scene create --application-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
-  Creates a new search scene under the target application. Use \`--name\` and \`--description\` for the
-  simple path, or pass \`--data\` when you need full control over the create payload.
+  Creates a new search scene under the target application. Use \`--name\` and \`--description\`
+  for the simple path, or pass \`--data\` when you need full control over the create payload.
 
 KEY FLAGS
   --application-id  Target application ID.
@@ -2760,7 +2825,7 @@ KEY FLAGS
 EXAMPLES
   vs search scene get --application-id 123 --scene-id abc
   vs search scene get --application-id 123 --scene-id abc --format json
-  vs search scene get --application-id 123 --scene-id abc --jq '.Result.Scene.Config'`,
+  vs search scene get --application-id 123 --scene-id abc --jq '.Result.Config'`,
     'scene:delete': `Delete a search scene from an application.
 
 USAGE
@@ -2788,8 +2853,8 @@ USAGE
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
-  Updates a published search scene through \`OnlineSearchScene\`. Prefer inspecting the current scene with
-  \`vs search scene get\` first, then update only the intended parts. Use \`--config\` when you already
+  Updates and publishes a search scene. Prefer inspecting the current scene with \`vs search scene get\`
+  first, then update only the intended parts. Use \`--config\` when you already
   have a complete \`Config\` object; use \`--search-config\` and companion flags when you only want to
   replace selected config sections.
 
@@ -2797,26 +2862,25 @@ KEY FLAGS
   --application-id           Target application ID.
   --scene-id                 Target search scene ID.
   --config                   Full scene \`Config\` object.
-  --search-config            \`Config.SearchConfig\` object only.
+  --search-config            \`Config.PerDatasetConfigs\` array only.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
   --overview-config          \`Config.OverviewConfig\` object only.
   --data                     Full request payload. Use this when you need to control top-level fields directly.
 
 SEARCH MODE ENUMS
-  RetrieveConfigs[].Mode
-    Balanced=1
-    SemanticPriority=2
-    KeywordPriority=3
-    UserDefined=4
+  PerDatasetConfigs[].TextSearchConfig.Mode
+    balanced
+    semantic_priority
+    keyword_priority
+    user_defined
 
-  RetrieveConfigs[].UserDefinedRecallMode
-    KeywordSemantic=0
-    KeywordOnly=1
-    SemanticOnly=2
+  PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode
+    keyword_semantic
+    keyword_only
+    semantic_only
 
-  When \`RetrieveConfigs[].Mode=UserDefined(4)\`, also set \`RetrieveConfigs[].UserDefinedRecallMode\`
-  in the same retrieve config.
+  When \`Mode=user_defined\`, also set \`UserDefinedRecallMode\` in the same TextSearchConfig.
 
 EXAMPLES
   vs search scene get --application-id 123 --scene-id abc --format json > scene.json
@@ -2958,8 +3022,8 @@ USAGE
   vs search tune apply --application-id <id> --run-id <id> [--scene-name <name>] [--scene-description <text>] [--dry-run | --confirm-create-scene] [service flags]
 
 DESCRIPTION
-  Loads a completed tuning report, converts the recommended SearchDynamic into SearchConfig.RetrieveConfigs[0],
-  creates a new search scene, publishes it with OnlineSearchScene, and reads it back.
+  Loads a completed tuning report, converts the recommended SearchDynamic into Config.PerDatasetConfigs[0],
+  creates a new search scene, publishes it, and reads it back.
   Request-only params such as query_keyword_match_percent cannot be persisted in scene config and are returned
   as unappliedRequestParams. Use --dry-run first to inspect payloads.
 
@@ -3329,6 +3393,40 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         full: optionalBoolean(values.full)
       });
       return;
+    case 'subscription': {
+      const subAction = argv[1];
+      if (subAction === 'create') {
+        await runDataSourceSubscriptionCreateCommand({
+          ...projectOptions,
+          clientToken: optionalString(values['client-token']),
+          needCreateDataset: optionalBoolean(values['need-create-dataset']),
+          datasetId: optionalString(values['dataset-id']),
+          createDatasetConfig: optionalString(values['create-dataset-config']),
+          type: optionalString(values.type),
+          dataSourceConfig: optionalString(values['data-source-config'])
+        });
+        return;
+      }
+      if (subAction === 'close') {
+        await runDataSourceSubscriptionCloseCommand({
+          ...projectOptions,
+          taskId: optionalString(values['task-id'])
+        });
+        return;
+      }
+      if (subAction === 'get') {
+        await runDataSourceSubscriptionGetCommand({
+          ...projectOptions,
+          taskId: optionalString(values['task-id'])
+        });
+        return;
+      }
+      if (subAction === 'list') {
+        await runDataSourceSubscriptionListCommand(projectOptions);
+        return;
+      }
+      throw new Error(`Unknown dataset subscription subcommand: ${subAction}`);
+    }
     case 'delete':
       await runDatasetDeleteCommand({ 
         ...serviceOptions, 
@@ -4158,6 +4256,10 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'field-config': { type: 'string' },
       'online-config': { type: 'string' },
       'dataset-id': { type: 'string' },
+      'client-token': { type: 'string' },
+      'need-create-dataset': { type: 'boolean' },
+      'create-dataset-config': { type: 'string' },
+      'data-source-config': { type: 'string' },
       fields: { type: 'string' },
       full: { type: 'boolean' },
       'app-id': { type: 'string' },
@@ -4683,7 +4785,7 @@ export async function runDatasetImportUrlCommand(options: DatasetImportUrlOption
     ProjectName: options.projectName
   });
   requireNonEmptyObject(payload, 'Need --file-name (or --data) for dataset import-url.');
-  await printResult(callOpenApi('/open/GetPresignedImportUrlV2', payload, options));
+  await printResult(callOpenApi('GetPresignedImportUrlV2', payload, options));
 }
 
 export interface DatasetInferSchemaOptions extends ServiceCommandOptions {
@@ -4709,7 +4811,7 @@ export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOp
   const rawPayload = (await loadJsonInput(options.data)) ?? fallbackPayload;
   const payload = normalizeDatasetV2Payload(rawPayload, INFER_SCHEMA_DATASET_TYPES);
   requireNonEmptyObject(payload, 'Need --tos-key and --type (or --data) for dataset infer-schema.');
-  await printResult(callOpenApi('/open/AddInferDatasetSchemaTaskV2', payload, options));
+  await printResult(callOpenApi('AddInferDatasetSchemaTaskV2', payload, options));
 }
 
 export interface DatasetInferResultOptions extends ServiceCommandOptions {
@@ -4724,7 +4826,7 @@ export async function runDatasetInferResultCommand(options: DatasetInferResultOp
   });
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
   requireNonEmptyObject(payload, 'Need --task-id (or --data) for dataset infer-result.');
-  const response = await callOpenApi('/open/GetInferDatasetSchemaResultV2', payload, options);
+  const response = await callOpenApi('GetInferDatasetSchemaResultV2', payload, options);
   await printResult(response);
 }
 
@@ -4776,7 +4878,7 @@ export async function runAppAttachDatasetCommand(options: AppAttachDatasetOption
   });
   const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
   requireNonEmptyObject(payload, 'Need --app-id and --dataset-id (or --data) for app attach-dataset.');
-  await printResult(callOpenApi('/open/AttachDatasetToApplicationV2', payload, options));
+  await printResult(callOpenApi('AttachDatasetToApplicationV2', payload, options));
 }
 
 function normalizeAppUpdatePayload(payload: unknown, industry?: string): unknown {

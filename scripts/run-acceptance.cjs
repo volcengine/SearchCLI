@@ -128,6 +128,8 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-create-mock', testDatasetCreateMock);
   await runTest('v2-app-create-mock', testAppCreateMock);
   await runTest('v2-app-attach-dataset-mock', testAppAttachDatasetMock);
+  await runTest('v2-search-scene-actions-mock', testSearchSceneV2ActionsMock);
+  await runTest('data-source-subscription-actions-mock', testDataSourceSubscriptionActionsMock);
   await runTest('v2-data-write-mock', testDataWriteMock);
 
   const orchestrator = loadV2OnboardingOrchestrator();
@@ -1205,11 +1207,11 @@ async function testSearchTuneApplyDryRun() {
   const payload = JSON.parse(stdout);
   assert.equal(payload.ok, true);
   assert.equal(payload.dryRun, true);
-  assert.equal(payload.createPayload.AppID, 'app-1');
-  assert.equal(payload.onlinePayload.Config.SearchConfig.RetrieveConfigs[0].Mode, 4);
-  assert.equal(payload.onlinePayload.Config.SearchConfig.RetrieveConfigs[0].UserDefinedRecallMode, 0);
-  assert.equal(payload.onlinePayload.Config.SearchConfig.RetrieveConfigs[0].MaxRecallNum, 100);
-  assert.equal(payload.onlinePayload.Config.SearchConfig.RetrieveConfigs[0].DenseWeight, 0.5);
+  assert.equal(payload.createPayload.ApplicationId, 'app-1');
+  assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.Mode, 'user_defined');
+  assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.UserDefinedRecallMode, 'keyword_semantic');
+  assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].MaxRecallNum, 100);
+  assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.DenseWeight, 0.5);
   assert.equal(payload.unappliedRequestParams.query_keyword_match_percent, 0.5);
   return `${command.prefix} search tune apply --application-id app-1 --run-id ${runId} --output-dir ${workspace} --dry-run --json`;
 }
@@ -2219,6 +2221,229 @@ async function testAppAttachDatasetMock() {
     assert.ok(Array.isArray(call.body.DataConfig.IndexFields));
     assert.match(stdout, /req-attach/);
     return `${command.prefix} app attach-dataset --data @${fixture}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testSearchSceneV2ActionsMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateSearchSceneV2: () => ({
+        ResponseMetadata: { RequestId: 'req-search-scene-create' },
+        Result: { SceneId: 'scene-v2-1' }
+      }),
+      ListSearchScenesV2: () => ({
+        ResponseMetadata: { RequestId: 'req-search-scene-list' },
+        Result: { Scenes: [] }
+      }),
+      GetSearchSceneV2: () => ({
+        ResponseMetadata: { RequestId: 'req-search-scene-get' },
+        Result: { SceneId: 'scene-v2-1' }
+      }),
+      PublishSearchSceneV2: () => ({
+        ResponseMetadata: { RequestId: 'req-search-scene-publish' },
+        Result: { SceneId: 'scene-v2-1' }
+      }),
+      DeleteSearchSceneV2: () => ({
+        ResponseMetadata: { RequestId: 'req-search-scene-delete' },
+        Result: {}
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const perDatasetConfigPath = path.join(reportDir, 'search-scene-per-dataset-configs.json');
+    fs.writeFileSync(
+      perDatasetConfigPath,
+      JSON.stringify([
+        {
+          DatasetId: 'ds-v2-1',
+          TextSearchConfig: {
+            Mode: 'balanced'
+          }
+        }
+      ])
+    );
+
+    await runCli(
+      [
+        'search',
+        'scene',
+        'create',
+        '--application-id',
+        'app-v2-1',
+        '--name',
+        'search-v2',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['search', 'scene', 'list', '--application-id', 'app-v2-1', ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      [
+        'search',
+        'scene',
+        'get',
+        '--application-id',
+        'app-v2-1',
+        '--scene-id',
+        'scene-v2-1',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      [
+        'search',
+        'scene',
+        'update',
+        '--application-id',
+        'app-v2-1',
+        '--scene-id',
+        'scene-v2-1',
+        '--search-config',
+        `@${perDatasetConfigPath}`,
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      [
+        'search',
+        'scene',
+        'delete',
+        '--application-id',
+        'app-v2-1',
+        '--scene-id',
+        'scene-v2-1',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+
+    assert.deepEqual(
+      state.requests.map(call => call.action),
+      [
+        'CreateSearchSceneV2',
+        'ListSearchScenesV2',
+        'GetSearchSceneV2',
+        'PublishSearchSceneV2',
+        'DeleteSearchSceneV2'
+      ]
+    );
+    assert.equal(state.requests[0].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[1].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[2].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[2].body.SceneId, 'scene-v2-1');
+    assert.equal(state.requests[3].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[3].body.SceneId, 'scene-v2-1');
+    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].DatasetId, 'ds-v2-1');
+    assert.equal(state.requests[4].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[4].body.SceneId, 'scene-v2-1');
+
+    return `${command.prefix} search scene create/list/get/update/delete use V2 actions`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testDataSourceSubscriptionActionsMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-sub-create' },
+        Result: { TaskId: 'sub-task-1', Message: 'created' }
+      }),
+      GetDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-sub-get' },
+        Result: { Task: { TaskId: 'sub-task-1', Status: 'importing', ImportedCount: 10, DatasetId: 'ds-sub-1' } }
+      }),
+      ListDataSourceSubscriptions: () => ({
+        ResponseMetadata: { RequestId: 'req-sub-list' },
+        Result: { Tasks: [{ TaskId: 'sub-task-1', Status: 'importing', ImportedCount: 10, DatasetId: 'ds-sub-1' }] }
+      }),
+      CloseDataSourceSubscription: () => ({
+        ResponseMetadata: { RequestId: 'req-sub-close' },
+        Result: { TaskId: 'sub-task-1', Status: 'finish', Message: 'closed' }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const dataSourceConfigPath = path.join(reportDir, 'subscription-mysql-source.json');
+    fs.writeFileSync(
+      dataSourceConfigPath,
+      JSON.stringify({
+        MysqlConfig: {
+          SourceTable: {
+            Database: 'shop',
+            Table: 'products'
+          },
+          SourceConfig: {
+            Host: 'mysql.example.com',
+            Port: 3306,
+            Username: 'reader',
+            Password: 'secret'
+          },
+          SyncMode: 'full_only'
+        }
+      })
+    );
+
+    await runCli(
+      [
+        'dataset',
+        'subscription',
+        'create',
+        '--dataset-id',
+        'ds-sub-1',
+        '--type',
+        'mysql',
+        '--client-token',
+        'token-sub-1',
+        '--data-source-config',
+        `@${dataSourceConfigPath}`,
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'get', '--task-id', 'sub-task-1', ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'list', ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      ['dataset', 'subscription', 'close', '--task-id', 'sub-task-1', ...v2ServiceFlags(server.baseUrl)],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+
+    assert.deepEqual(
+      state.requests.map(call => call.action),
+      [
+        'CreateDataSourceSubscription',
+        'GetDataSourceSubscription',
+        'ListDataSourceSubscriptions',
+        'CloseDataSourceSubscription'
+      ]
+    );
+    assert.equal(state.requests[0].body.ClientToken, 'token-sub-1');
+    assert.equal(state.requests[0].body.DatasetId, 'ds-sub-1');
+    assert.equal(state.requests[0].body.Type, 'mysql');
+    assert.equal(state.requests[0].body.DataSourceConfig.MysqlConfig.SourceTable.Database, 'shop');
+    assert.equal(state.requests[0].body.DataSourceConfig.MysqlConfig.SourceConfig.Port, 3306);
+    assert.equal(state.requests[1].body.TaskId, 'sub-task-1');
+    assert.equal(state.requests[3].body.TaskId, 'sub-task-1');
+
+    return `${command.prefix} dataset subscription create/get/list/close use DataSourceSubscription actions`;
   } finally {
     await server.close();
   }

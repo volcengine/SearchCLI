@@ -47,9 +47,9 @@ Comma-separated string flags such as `--bhv-scene-types`, `--types`, `--click-ev
 
 If `--data` is provided, SearchCLI uses that JSON object as the entire request payload and does not synthesize request fields from the other command flags.
 
-### Console path translation rule
+### Console action translation rule
 
-All console commands below eventually call `POST /api/v1/<Action>`, which SearchCLI translates into a control-plane OpenAPI request of the form:
+Console commands below eventually call an action name, which SearchCLI translates into a control-plane OpenAPI request of the form:
 
 `POST {controlPlaneBaseUrl}?Action=<Action>&Version=2025-03-01&Region=<region>`
 
@@ -83,6 +83,10 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dataset update` | console | `POST /api/v1/UpdateDataset` | [UpdateDataset](./api-references/modules/dataset-management/UpdateDataset.md) |
 | `dataset delete` | console | `POST /api/v1/DeleteDataset` | [DeleteDataset](./api-references/modules/dataset-management/DeleteDataset.md) |
 | `dataset schema check` | console | `POST /api/v1/CheckDatasetSchema` | [CheckDatasetSchema](./api-references/modules/dataset-management/CheckDatasetSchema.md) |
+| `dataset subscription create` | console | `CreateDataSourceSubscription` | [CreateDataSourceSubscription](./api-references/modules/data-source-subscriptions/CreateDataSourceSubscription.md) |
+| `dataset subscription get` | console | `GetDataSourceSubscription` | [GetDataSourceSubscription](./api-references/modules/data-source-subscriptions/GetDataSourceSubscription.md) |
+| `dataset subscription list` | console | `ListDataSourceSubscriptions` | [ListDataSourceSubscriptions](./api-references/modules/data-source-subscriptions/ListDataSourceSubscriptions.md) |
+| `dataset subscription close` | console | `CloseDataSourceSubscription` | [CloseDataSourceSubscription](./api-references/modules/data-source-subscriptions/CloseDataSourceSubscription.md) |
 | `dataset ingest` | mixed | `file mode: GetPresignedImportUrlV2 -> PUT upload -> AddInferDatasetSchemaTaskV2 -> GetInferDatasetSchemaResultV2 -> CreateDatasetV2; legacy mode: POST /api/v1/dataset/{datasetId}/write` | none; workflow behavior derived from CLI |
 | `data write` | runtime | `POST /api/v1/dataset/{datasetId}/write` | none; runtime payload derived from CLI |
 | `data import` | runtime shortcut | `POST /api/v1/dataset/{datasetId}/write` | none; wraps `data write` |
@@ -96,11 +100,11 @@ Commands marked as `runtime` do **not** call console OpenAPI. They call data-pla
 | `dict check-input` | console | `POST /api/v1/CheckDictInput` | [CheckDictInput](./api-references/modules/dictionary-management/CheckDictInput.md) |
 | `dict bind-scenes` | console | `POST /api/v1/BindDictToScenes` | [BindDictToScenes](./api-references/modules/dictionary-management/BindDictToScenes.md) |
 | `dict write-terms` | workflow over console + data plane | `GetPresignedImportUrlV2` -> HTTP PUT -> `POST /api/v1/dict/{dictId}/write_terms` | none; file upload is internal when `--file` is used |
-| `search scene create` | console | `POST /api/v1/CreateSearchScene` | [CreateSearchScene](./api-references/modules/search-scenes/CreateSearchScene.md) |
-| `search scene list` | console | `POST /api/v1/ListSearchScene` | [ListSearchScene](./api-references/modules/search-scenes/ListSearchScene.md) |
-| `search scene get` | console | `POST /api/v1/GetSearchScene` | [GetSearchScene](./api-references/modules/search-scenes/GetSearchScene.md) |
-| `search scene update` | console | `POST /api/v1/OnlineSearchScene` | [OnlineSearchScene](./api-references/modules/search-scenes/OnlineSearchScene.md) |
-| `search scene delete` | console | `POST /api/v1/DeleteSearchScene` | [DeleteSearchScene](./api-references/modules/search-scenes/DeleteSearchScene.md) |
+| `search scene create` | console | `CreateSearchSceneV2` | V2 action |
+| `search scene list` | console | `ListSearchScenesV2` | V2 action |
+| `search scene get` | console | `GetSearchSceneV2` | V2 action |
+| `search scene update` | console | `PublishSearchSceneV2` | V2 action |
+| `search scene delete` | console | `DeleteSearchSceneV2` | V2 action |
 | `recommend scene create` | console | `POST /api/v1/CreateRecommendScene` | [CreateRecommendScene](./api-references/modules/recommendation-scenes/CreateRecommendScene.md) |
 | `recommend scene list` | console | `POST /api/v1/ListRecommendScene` | [ListRecommendScene](./api-references/modules/recommendation-scenes/ListRecommendScene.md) |
 | `recommend scene get` | console | `POST /api/v1/GetRecommendScene` | [GetRecommendScene](./api-references/modules/recommendation-scenes/GetRecommendScene.md) |
@@ -400,6 +404,43 @@ SearchCLI sends `--data` or `{}`. The flags `--type`, `--name`, `--application-i
 | `dataset schema check` | `--schema` | `Schema` | array/object | usually yes | JSON schema payload. |
 | `dataset schema check` | `--project-name` | `ProjectName` | string | no | Project scope. |
 
+### `dataset subscription create`, `dataset subscription get`, `dataset subscription list`, `dataset subscription close`
+
+- API docs: [CreateDataSourceSubscription](./api-references/modules/data-source-subscriptions/CreateDataSourceSubscription.md), [GetDataSourceSubscription](./api-references/modules/data-source-subscriptions/GetDataSourceSubscription.md), [ListDataSourceSubscriptions](./api-references/modules/data-source-subscriptions/ListDataSourceSubscriptions.md), [CloseDataSourceSubscription](./api-references/modules/data-source-subscriptions/CloseDataSourceSubscription.md)
+
+#### `dataset subscription create`
+
+Prefer `--data @payload.json` when `DataSourceConfig` contains MySQL credentials. The smaller flags are only a convenience layer for non-secret fields or for referencing JSON files.
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | `dataset.CreateDataSourceSubscriptionReq` | yes if equivalent flags absent | Full JSON object. Recommended for credential-bearing requests. |
+| `--client-token` | `ClientToken` | string | recommended | Idempotency token; same token requires an identical payload. |
+| `--need-create-dataset` | `NeedCreateDataset` | boolean | no | When set, backend samples the source and creates a new `multi_modal` dataset. |
+| `--dataset-id` | `DatasetId` | string | yes when `NeedCreateDataset=false` | Existing target dataset ID; backend supports existing `multi_modal` / `user_event` datasets. |
+| `--create-dataset-config` | `CreateDatasetConfig` | object | yes when `NeedCreateDataset=true` | Inline JSON / `@file` / JSON file path. `Type` currently supports `multi_modal` only. |
+| `--type` | `Type` | string | yes unless in `--data` | Data source type; currently `mysql`. |
+| `--data-source-config` | `DataSourceConfig` | object | yes unless in `--data` | Inline JSON / `@file` / JSON file path. Use `@file` for credentials. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dataset subscription get`, `dataset subscription close`
+
+| Command | CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- | --- |
+| `dataset subscription get` | `--data` | whole request | `dataset.GetDataSourceSubscriptionReq` | yes if `--task-id` absent | Full JSON object. |
+| `dataset subscription get` | `--task-id` | `TaskId` | string | yes unless in `--data` | Data-source subscription task ID. |
+| `dataset subscription get` | `--project-name` | `ProjectName` | string | no | Project scope. |
+| `dataset subscription close` | `--data` | whole request | `dataset.CloseDataSourceSubscriptionReq` | yes if `--task-id` absent | Full JSON object. |
+| `dataset subscription close` | `--task-id` | `TaskId` | string | yes unless in `--data` | Data-source subscription task ID. |
+| `dataset subscription close` | `--project-name` | `ProjectName` | string | no | Project scope. |
+
+#### `dataset subscription list`
+
+| CLI flag | Request field | API type | Required | Format / range |
+| --- | --- | --- | --- | --- |
+| `--data` | whole request | `dataset.ListDataSourceSubscriptionsReq` | no | Full JSON object. |
+| `--project-name` | `ProjectName` | string | no | Project scope. |
+
 ### `dataset ingest`, `data write`, `data import`
 
 `dataset ingest` is overloaded and has two distinct backends:
@@ -459,50 +500,55 @@ These commands are primarily local connector lifecycle helpers, not console Open
 
 ### `search scene create`, `search scene list`, `search scene get`, `search scene delete`
 
-- API docs: [CreateSearchScene](./api-references/modules/search-scenes/CreateSearchScene.md), [ListSearchScene](./api-references/modules/search-scenes/ListSearchScene.md), [GetSearchScene](./api-references/modules/search-scenes/GetSearchScene.md), [DeleteSearchScene](./api-references/modules/search-scenes/DeleteSearchScene.md)
+- API actions: `CreateSearchSceneV2`, `ListSearchScenesV2`, `GetSearchSceneV2`, `DeleteSearchSceneV2`.
 
 | Command | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- | --- |
 | `search scene create` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `search scene create` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `search scene create` | `--application-id` | `ApplicationId` | string | yes unless in `--data` | Application ID. |
 | `search scene create` | `--project-name` | `ProjectName` | string | no | Project scope. |
 | `search scene create` | `--name` | `Name` | string | no | Scene name. |
 | `search scene create` | `--description` | `Description` | string | no | Scene description. |
 | `search scene list` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `search scene list` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
+| `search scene list` | `--application-id` | `ApplicationId` | string | yes unless in `--data` | Application ID. |
 | `search scene list` | `--project-name` | `ProjectName` | string | no | Project scope. |
 | `search scene get` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `search scene get` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
-| `search scene get` | `--scene-id` | `SceneID` | string | yes unless in `--data` | Scene ID. |
+| `search scene get` | `--application-id` | `ApplicationId` | string | yes unless in `--data` | Application ID. |
+| `search scene get` | `--scene-id` | `SceneId` | string | yes unless in `--data` | Scene ID. |
 | `search scene get` | `--project-name` | `ProjectName` | string | no | Project scope. |
 | `search scene delete` | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `search scene delete` | `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
-| `search scene delete` | `--scene-id` | `SceneID` | string | yes unless in `--data` | Scene ID. |
+| `search scene delete` | `--application-id` | `ApplicationId` | string | yes unless in `--data` | Application ID. |
+| `search scene delete` | `--scene-id` | `SceneId` | string | yes unless in `--data` | Scene ID. |
 | `search scene delete` | `--project-name` | `ProjectName` | string | no | Project scope. |
 
 ### `search scene update`
 
 - API kind: `console`
-- Action: `OnlineSearchScene`
-- Request doc: [OnlineSearchScene](./api-references/modules/search-scenes/OnlineSearchScene.md)
+- Action: `PublishSearchSceneV2`
 
 If `--config` is absent, SearchCLI synthesizes `Config` from the more granular nested JSON flags.
 
 | CLI flag | Request field | API type | Required | Format / range |
 | --- | --- | --- | --- | --- |
 | `--data` | whole request | object | yes if equivalent flags absent | Full JSON object. |
-| `--application-id` | `AppID` | string | yes unless in `--data` | Application ID. |
-| `--scene-id` | `SceneID` | string | yes unless in `--data` | Scene ID. |
+| `--application-id` | `ApplicationId` | string | yes unless in `--data` | Application ID. |
+| `--scene-id` | `SceneId` | string | yes unless in `--data` | Scene ID. |
 | `--project-name` | `ProjectName` | string | no | Project scope. |
 | `--name` | `Name` | string | no | Scene name. |
 | `--description` | `Description` | string | no | Scene description. |
-| `--config` | `Config` | object | yes unless granular config flags are used | Full nested `SearchSceneConfig` object. |
-| `--search-config` | `Config.SearchConfig` | object | no | JSON object matching `SearchConfig`. |
+| `--config` | `Config` | object | yes unless granular config flags are used | Full nested `SearchSceneConfigV2` object. |
+| `--search-config` | `Config.PerDatasetConfigs` | array | no | JSON array matching `PerDatasetConfig[]`. |
 | `--query-completion-config` | `Config.QueryCompletionConfig` | object | no | JSON object matching `QueryCompletionConfig`. |
 | `--want-to-search-config` | `Config.WantToSearchConfig` | object | no | JSON object matching `WantToSearchConfig`. |
 | `--overview-config` | `Config.OverviewConfig` | object | no | JSON object matching `OverviewConfig`. |
 
-Local validation normalizes and constrains several nested fields before upload, including `SearchMode`, `UserDefinedRecallMode`, `QueryConfig.InstructionType`, `WantToSearchConfig`, and `OverviewConfig.Mode`. For exact nested field rules, use [OnlineSearchScene](./api-references/modules/search-scenes/OnlineSearchScene.md).
+Local validation constrains several nested V2 fields before upload, including `TextSearchConfig.Mode`, `TextSearchConfig.UserDefinedRecallMode`, `ImageSearchConfig.InstructionType`, `WantToSearchConfig`, and `OverviewConfig.Mode`.
+
+Search scene response shape:
+
+- `search scene create`, `search scene get`, and `search scene update` return a `SearchSceneV2` object directly under `Result`; read scene config from `Result.Config`, not `Result.Item.Config` or `Result.Scene.Config`.
+- `search scene list` returns `Result.Scenes[]`.
+- `search scene delete` returns an empty `Result` object on success.
 
 ### `recommend scene create`, `recommend scene list`, `recommend scene get`, `recommend scene delete`
 

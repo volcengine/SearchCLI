@@ -42,7 +42,7 @@ export function buildSceneApplyDraft(report: TuningRunReportShape, options: Buil
     options.sceneDescription ??
     `SearchCLI tuning candidate from run ${report.runId}, strategy ${strategy.id}. Request-only params are not persisted in scene config.`;
   const appliedSearchConfig = {
-    RetrieveConfigs: [buildRetrieveConfig(report.datasetId, strategy)]
+    PerDatasetConfigs: [buildPerDatasetConfig(report.datasetId, strategy)]
   };
 
   return {
@@ -53,19 +53,17 @@ export function buildSceneApplyDraft(report: TuningRunReportShape, options: Buil
     sceneName,
     sceneDescription,
     createPayload: compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName,
       Name: sceneName,
       Description: sceneDescription
     }),
     onlinePayload: compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName,
       Name: sceneName,
       Description: sceneDescription,
-      Config: {
-        SearchConfig: appliedSearchConfig
-      }
+      Config: appliedSearchConfig
     }),
     appliedSearchConfig,
     unappliedRequestParams: strategy.requestParams
@@ -75,44 +73,73 @@ export function buildSceneApplyDraft(report: TuningRunReportShape, options: Buil
 export function withSceneId(payload: Record<string, unknown>, sceneId: string): Record<string, unknown> {
   return {
     ...payload,
-    SceneID: sceneId
+    SceneId: sceneId
   };
 }
 
-function buildRetrieveConfig(datasetId: string, strategy: TuningStrategy): Record<string, unknown> {
+function buildPerDatasetConfig(datasetId: string, strategy: TuningStrategy): Record<string, unknown> {
   const dynamic = strategy.searchDynamic;
   return compactObject({
-    DatasetID: datasetId,
-    Mode: normalizeSceneMode(dynamic.mode),
-    UserDefinedRecallMode: normalizeSceneUserDefinedRecallMode(dynamic.user_defined_recall_mode),
+    DatasetId: datasetId,
     MaxRecallNum: dynamic.max_retrieved_num,
-    DenseWeight: dynamic.dense_weight,
-    TextWeight: dynamic.text_weight,
-    RerankEnabled: dynamic.rerank_enabled,
-    RerankTopK: dynamic.rerank_topk,
-    EnableImage: dynamic.enable_image,
     EnableRerankWithHot: dynamic.enable_rerank_with_hot,
-    RerankModel: dynamic.rerank_model,
-    RerankDoubaoConfig: toPascalObject(dynamic.rerank_doubao_config)
+    TextSearchConfig: compactObject({
+      Mode: normalizeSceneMode(dynamic.mode),
+      UserDefinedRecallMode: normalizeSceneUserDefinedRecallMode(dynamic.user_defined_recall_mode),
+      DenseWeight: dynamic.dense_weight,
+      TextWeight: dynamic.text_weight
+    }),
+    ImageSearchConfig:
+      dynamic.enable_image === undefined
+        ? undefined
+        : {
+            Enable: dynamic.enable_image
+          },
+    RerankConfig: compactObject({
+      Enable: dynamic.rerank_enabled,
+      RerankTopK: dynamic.rerank_topk,
+      RerankModel: dynamic.rerank_model,
+      RerankDoubaoConfig: toPascalObject(dynamic.rerank_doubao_config)
+    })
   });
 }
 
-function normalizeSceneMode(value: SearchDynamic['mode']): number | undefined {
+function normalizeSceneMode(value: SearchDynamic['mode']): string | undefined {
   if (value === undefined) return undefined;
   const normalized = normalizeSearchMode(value);
   if (normalized === undefined) {
     throw new Error(`Invalid recommended search_dynamic.mode: ${String(value)}.`);
   }
-  return normalized;
+  switch (normalized) {
+    case 1:
+      return 'balanced';
+    case 2:
+      return 'semantic_priority';
+    case 3:
+      return 'keyword_priority';
+    case 4:
+      return 'user_defined';
+    default:
+      return undefined;
+  }
 }
 
-function normalizeSceneUserDefinedRecallMode(value: SearchDynamic['user_defined_recall_mode']): number | undefined {
+function normalizeSceneUserDefinedRecallMode(value: SearchDynamic['user_defined_recall_mode']): string | undefined {
   if (value === undefined) return undefined;
   const normalized = normalizeUserDefinedRecallMode(value);
   if (normalized === undefined) {
     throw new Error(`Invalid recommended search_dynamic.user_defined_recall_mode: ${String(value)}.`);
   }
-  return normalized;
+  switch (normalized) {
+    case 0:
+      return 'keyword_semantic';
+    case 1:
+      return 'keyword_only';
+    case 2:
+      return 'semantic_only';
+    default:
+      return undefined;
+  }
 }
 
 function defaultSceneName(runId: string, strategyId: string): string {

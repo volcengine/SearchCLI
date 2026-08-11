@@ -399,7 +399,7 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
       ProjectName: projectName
     });
     validateFieldDescriptionsForApply(datasetCreatePayload);
-    const datasetCreateResponse = await openapi.post('/open/CreateDatasetV2', datasetCreatePayload);
+    const datasetCreateResponse = await openapi.post('CreateDatasetV2', datasetCreatePayload);
     datasetId = extractStringField(datasetCreateResponse, ['DatasetID', 'DatasetId']);
     if (!datasetId) {
       throw new Error('CreateDatasetV2 did not return DatasetID.');
@@ -460,7 +460,7 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
         ?? (plan.defaults.datasetType === 'video' ? 'video' : 'e_commerce'),
       ProjectName: projectName
     });
-    const appCreateResponse = await openapi.post('/open/CreateApplicationV2', appCreatePayload);
+    const appCreateResponse = await openapi.post('CreateApplicationV2', appCreatePayload);
     applicationId = extractStringField(appCreateResponse, ['AppID', 'AppId', 'ApplicationId']);
     if (!applicationId) {
       throw new Error('CreateApplicationV2 did not return AppID.');
@@ -688,9 +688,9 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
     const searchSceneDescription = asOptionalString(searchSceneCreateArtifact.Description) ?? plan.defaults.search.sceneDescription;
     if (!searchSceneId) {
       const searchSceneCreateResponse = await openapi.post(
-        '/api/v1/CreateSearchScene',
+        'CreateSearchSceneV2',
         compactObject({
-          AppID: applicationId,
+          ApplicationId: applicationId,
           ProjectName: projectName,
           Name: searchSceneName,
           Description: searchSceneDescription
@@ -698,7 +698,7 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
       );
       searchSceneId = extractStringField(searchSceneCreateResponse, ['SceneID', 'SceneId']);
       if (!searchSceneId) {
-        throw new Error('CreateSearchScene did not return SceneID.');
+        throw new Error('CreateSearchSceneV2 did not return SceneID.');
       }
       steps.push({
         step: 'search_scene_bootstrap_create',
@@ -716,10 +716,10 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
     }
 
     const searchSceneUpdateResponse = await openapi.post(
-      '/api/v1/OnlineSearchScene',
+      'PublishSearchSceneV2',
       compactObject({
-        AppID: applicationId,
-        SceneID: searchSceneId,
+        ApplicationId: applicationId,
+        SceneId: searchSceneId,
         Name: asOptionalString(searchSceneUpdateArtifact.Name) ?? searchSceneName,
         Description: asOptionalString(searchSceneUpdateArtifact.Description) ?? searchSceneDescription,
         Config: isRecord(searchSceneUpdateArtifact.Config) ? searchSceneUpdateArtifact.Config : undefined,
@@ -733,10 +733,10 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
       response: searchSceneUpdateResponse
     });
     const searchSceneReadback = await openapi.post(
-      '/api/v1/GetSearchScene',
+      'GetSearchSceneV2',
       compactObject({
-        AppID: applicationId,
-        SceneID: searchSceneId,
+        ApplicationId: applicationId,
+        SceneId: searchSceneId,
         ProjectName: projectName
       })
     );
@@ -1010,7 +1010,7 @@ function buildVerifyDryRunSummary(
       },
       {
         step: 'search_scene_bootstrap',
-        action: options.skipSearch && options.skipChat ? 'skip' : 'CreateSearchScene/OnlineSearchScene when needed'
+        action: options.skipSearch && options.skipChat ? 'skip' : 'CreateSearchSceneV2/PublishSearchSceneV2 when needed'
       },
       {
         step: 'search_trial',

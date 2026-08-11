@@ -5,8 +5,8 @@
     "modulesDir": ".viking/api-references/modules",
     "note": "Rebuilt from the currently retained module and endpoint markdown files."
   },
-  "endpointCount": 123,
-  "categoryCount": 22,
+  "endpointCount": 127,
+  "categoryCount": 23,
   "categories": [
     {
       "category": "API Key Authentication",
@@ -621,6 +621,57 @@
           "topAction": "StartDataSourceSyncJob",
           "topVersion": "2025-03-01",
           "doc": "modules/data-integration-task-management/StartDataSourceSyncJob.md"
+        }
+      ]
+    },
+    {
+      "category": "Data Source Subscriptions",
+      "dir": "modules/data-source-subscriptions",
+      "endpointCount": 4,
+      "endpoints": [
+        {
+          "name": "CreateDataSourceSubscription",
+          "service": "DashboardService",
+          "method": "POST",
+          "path": "/open/CreateDataSourceSubscription",
+          "requestType": "dataset.CreateDataSourceSubscriptionReq",
+          "responseType": "dataset.CreateDataSourceSubscriptionResp",
+          "topAction": "CreateDataSourceSubscription",
+          "topVersion": "2025-03-01",
+          "doc": "modules/data-source-subscriptions/CreateDataSourceSubscription.md"
+        },
+        {
+          "name": "CloseDataSourceSubscription",
+          "service": "DashboardService",
+          "method": "POST",
+          "path": "/open/CloseDataSourceSubscription",
+          "requestType": "dataset.CloseDataSourceSubscriptionReq",
+          "responseType": "dataset.CloseDataSourceSubscriptionResp",
+          "topAction": "CloseDataSourceSubscription",
+          "topVersion": "2025-03-01",
+          "doc": "modules/data-source-subscriptions/CloseDataSourceSubscription.md"
+        },
+        {
+          "name": "GetDataSourceSubscription",
+          "service": "DashboardService",
+          "method": "POST",
+          "path": "/open/GetDataSourceSubscription",
+          "requestType": "dataset.GetDataSourceSubscriptionReq",
+          "responseType": "dataset.GetDataSourceSubscriptionResp",
+          "topAction": "GetDataSourceSubscription",
+          "topVersion": "2025-03-01",
+          "doc": "modules/data-source-subscriptions/GetDataSourceSubscription.md"
+        },
+        {
+          "name": "ListDataSourceSubscriptions",
+          "service": "DashboardService",
+          "method": "POST",
+          "path": "/open/ListDataSourceSubscriptions",
+          "requestType": "dataset.ListDataSourceSubscriptionsReq",
+          "responseType": "dataset.ListDataSourceSubscriptionsResp",
+          "topAction": "ListDataSourceSubscriptions",
+          "topVersion": "2025-03-01",
+          "doc": "modules/data-source-subscriptions/ListDataSourceSubscriptions.md"
         }
       ]
     },
@@ -1387,73 +1438,62 @@
     {
       "category": "Search Scenes",
       "dir": "modules/search-scenes",
-      "endpointCount": 6,
+      "endpointCount": 5,
       "endpoints": [
         {
-          "name": "CreateSearchScene",
-          "service": "DashboardService",
+          "name": "CreateSearchSceneV2",
+          "service": "DashboardServiceV2",
           "method": "POST",
-          "path": "/api/v1/CreateSearchScene",
-          "requestType": "search_scene.CreateSearchSceneReq",
-          "responseType": "search_scene.CreateSearchSceneResp",
-          "topAction": "CreateSearchScene",
+          "path": "/api/v1/CreateSearchSceneV2",
+          "requestType": "search_scene.CreateSearchSceneV2Req",
+          "responseType": "search_scene.SearchSceneV2",
+          "topAction": "CreateSearchSceneV2",
           "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/CreateSearchScene.md"
+          "doc": "modules/search-scenes/CreateSearchSceneV2.md"
         },
         {
-          "name": "DeleteSearchScene",
-          "service": "DashboardService",
+          "name": "ListSearchScenesV2",
+          "service": "DashboardServiceV2",
           "method": "POST",
-          "path": "/api/v1/DeleteSearchScene",
-          "requestType": "search_scene.DeleteSearchSceneReq",
+          "path": "/api/v1/ListSearchScenesV2",
+          "requestType": "search_scene.ListSearchScenesV2Req",
+          "responseType": "search_scene.ListSearchScenesV2Resp",
+          "topAction": "ListSearchScenesV2",
+          "topVersion": "2025-03-01",
+          "doc": "modules/search-scenes/ListSearchScenesV2.md"
+        },
+        {
+          "name": "GetSearchSceneV2",
+          "service": "DashboardServiceV2",
+          "method": "POST",
+          "path": "/api/v1/GetSearchSceneV2",
+          "requestType": "search_scene.GetSearchSceneV2Req",
+          "responseType": "search_scene.SearchSceneV2",
+          "topAction": "GetSearchSceneV2",
+          "topVersion": "2025-03-01",
+          "doc": "modules/search-scenes/GetSearchSceneV2.md"
+        },
+        {
+          "name": "PublishSearchSceneV2",
+          "service": "DashboardServiceV2",
+          "method": "POST",
+          "path": "/api/v1/PublishSearchSceneV2",
+          "requestType": "search_scene.PublishSearchSceneV2Req",
+          "responseType": "search_scene.SearchSceneV2",
+          "topAction": "PublishSearchSceneV2",
+          "topVersion": "2025-03-01",
+          "doc": "modules/search-scenes/PublishSearchSceneV2.md"
+        },
+        {
+          "name": "DeleteSearchSceneV2",
+          "service": "DashboardServiceV2",
+          "method": "POST",
+          "path": "/api/v1/DeleteSearchSceneV2",
+          "requestType": "search_scene.DeleteSearchSceneV2Req",
           "responseType": "search_scene.EmptyResp",
-          "topAction": "DeleteSearchScene",
+          "topAction": "DeleteSearchSceneV2",
           "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/DeleteSearchScene.md"
-        },
-        {
-          "name": "GetSearchScene",
-          "service": "DashboardService",
-          "method": "POST",
-          "path": "/api/v1/GetSearchScene",
-          "requestType": "search_scene.GetSearchSceneReq",
-          "responseType": "search_scene.GetSearchSceneResp",
-          "topAction": "GetSearchScene",
-          "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/GetSearchScene.md"
-        },
-        {
-          "name": "ListAllSearchSceneMeta",
-          "service": "DashboardService",
-          "method": "POST",
-          "path": "/api/v1/ListAllSearchSceneMeta",
-          "requestType": "search_scene.ListAllSearchSceneMetaReq",
-          "responseType": "search_scene.ListAllSearchSceneMetaResp",
-          "topAction": "ListAllSearchSceneMeta",
-          "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/ListAllSearchSceneMeta.md"
-        },
-        {
-          "name": "ListSearchScene",
-          "service": "DashboardService",
-          "method": "POST",
-          "path": "/api/v1/ListSearchScene",
-          "requestType": "search_scene.ListSearchSceneReq",
-          "responseType": "search_scene.ListSearchSceneResp",
-          "topAction": "ListSearchScene",
-          "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/ListSearchScene.md"
-        },
-        {
-          "name": "OnlineSearchScene",
-          "service": "DashboardService",
-          "method": "POST",
-          "path": "/api/v1/OnlineSearchScene",
-          "requestType": "search_scene.OnlineSearchSceneReq",
-          "responseType": "search_scene.EmptyResp",
-          "topAction": "OnlineSearchScene",
-          "topVersion": "2025-03-01",
-          "doc": "modules/search-scenes/OnlineSearchScene.md"
+          "doc": "modules/search-scenes/DeleteSearchSceneV2.md"
         }
       ]
     },

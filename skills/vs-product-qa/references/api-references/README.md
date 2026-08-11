@@ -7,8 +7,8 @@ It reflects the APIs that are still present after manual cleanup, rather than th
 
 Current totals:
 
-- Module count: **22**
-- Endpoint count: **123**
+- Module count: **23**
+- Endpoint count: **127**
 
 ## Directory Index
 
@@ -25,6 +25,7 @@ Current totals:
 | Console Common | 1 | [Index](./modules/console-common/README.md) |
 | Data Integration Datasource Management | 4 | [Index](./modules/data-integration-datasource-management/README.md) |
 | Data Integration Task Management | 1 | [Index](./modules/data-integration-task-management/README.md) |
+| Data Source Subscriptions | 4 | [Index](./modules/data-source-subscriptions/README.md) |
 | Dataset Management | 28 | [Index](./modules/dataset-management/README.md) |
 | Dataset Sample Data List | 1 | [Index](./modules/dataset-sample-data-list/README.md) |
 | Dataset Sample Preview | 1 | [Index](./modules/dataset-sample-preview/README.md) |
@@ -33,7 +34,7 @@ Current totals:
 | Premium | 11 | [Index](./modules/Premium/README.md) |
 | Recommendation Rules | 4 | [Index](./modules/recommendation-rules/README.md) |
 | Recommendation Scenes | 9 | [Index](./modules/recommendation-scenes/README.md) |
-| Search Scenes | 6 | [Index](./modules/search-scenes/README.md) |
+| Search Scenes | 5 | [Index](./modules/search-scenes/README.md) |
 | User Console Config | 3 | [Index](./modules/user-console-config/README.md) |
 | User Dataset Management | 1 | [Index](./modules/user-dataset-management/README.md) |
 

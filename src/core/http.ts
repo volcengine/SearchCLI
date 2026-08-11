@@ -126,18 +126,28 @@ async function sendSignedJson<T = unknown>(
 }
 
 function translateOpenApiPath(config: ServiceConfig, pathname: string, params?: Record<string, string>): URL | undefined {
-  const parsedPath = new URL(pathname, 'https://placeholder.local');
-  const matched = parsedPath.pathname.match(/^(?:\/open|\/api\/v1)\/([^/]+)\/?$/);
-  if (!matched) return undefined;
+  let action: string | undefined;
+  let searchParams: URLSearchParams | undefined;
 
-  const [, action] = matched;
+  if (/^[A-Za-z][A-Za-z0-9_]*$/.test(pathname)) {
+    action = pathname;
+  } else {
+    const parsedPath = new URL(pathname, 'https://placeholder.local');
+    const matched = parsedPath.pathname.match(/^(?:\/open|\/api\/v1)\/([^/]+)\/?$/);
+    if (!matched) return undefined;
+    action = matched[1];
+    searchParams = parsedPath.searchParams;
+  }
+
   const url = new URL(config.controlPlaneBaseUrl);
   url.searchParams.set('Action', action);
   url.searchParams.set('Version', DEFAULT_OPENAPI_VERSION);
   url.searchParams.set('Region', config.region);
 
-  for (const [key, value] of parsedPath.searchParams.entries()) {
-    url.searchParams.set(key, value);
+  if (searchParams) {
+    for (const [key, value] of searchParams.entries()) {
+      url.searchParams.set(key, value);
+    }
   }
   if (params) {
     appendQueryParams(url, params);
