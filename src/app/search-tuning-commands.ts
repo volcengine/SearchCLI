@@ -506,13 +506,10 @@ function extractSceneId(response: unknown): string | undefined {
   return undefined;
 }
 
-function buildApplyNotes(unappliedRequestParams: { query_keyword_match_percent?: number; disable_personalize?: boolean }): string[] {
+function buildApplyNotes(unappliedRequestParams: { disable_personalize?: boolean }): string[] {
   const notes: string[] = [];
   if (Object.keys(unappliedRequestParams).length > 0) {
     notes.push('Request-only params are not persisted in scene config; keep them in caller request payloads when needed.');
-  }
-  if (unappliedRequestParams.query_keyword_match_percent !== undefined) {
-    notes.push('query_keyword_match_percent is a request-level parameter and is reported as unappliedRequestParams.');
   }
   return notes;
 }

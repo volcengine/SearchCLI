@@ -91,7 +91,7 @@ This first version is for similarity tuning. It defaults to text-query/text-item
    For scene compare, every query must include `sourceItemIds`; otherwise use `search tune run` with LLM labels and compare completed run IDs.
 13. If the user asks to materialize the recommendation as a candidate scene, inspect first:
    - `vs search tune apply --application-id <id> --run-id <run-id> --dry-run --json`
-   Explain `unappliedRequestParams`; request-only params such as `query_keyword_match_percent` are not persisted in scene config.
+   Explain `unappliedRequestParams`; `query_keyword_match_percent` is persisted as V2 `TextSearchConfig.QueryKeywordMatchPercent`, while remaining request-only params such as `disable_personalize` are not persisted in scene config.
 14. If the user accepts the dry-run payload, create a new candidate scene:
    - `vs search tune apply --application-id <id> --run-id <run-id> --confirm-create-scene --json`
 

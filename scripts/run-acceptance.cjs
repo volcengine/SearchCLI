@@ -1212,7 +1212,33 @@ async function testSearchTuneApplyDryRun() {
   assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.UserDefinedRecallMode, 'keyword_semantic');
   assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].MaxRecallNum, 100);
   assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.DenseWeight, 0.5);
-  assert.equal(payload.unappliedRequestParams.query_keyword_match_percent, 0.5);
+  assert.equal(payload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.QueryKeywordMatchPercent, 0.5);
+  assert.equal(payload.unappliedRequestParams.query_keyword_match_percent, undefined);
+  assert.equal(payload.unappliedRequestParams.disable_personalize, true);
+
+  const reportPath = path.join(runDir, 'report.json');
+  const zeroThresholdReport = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  zeroThresholdReport.strategies[0].requestParams.query_keyword_match_percent = 0;
+  fs.writeFileSync(reportPath, JSON.stringify(zeroThresholdReport, null, 2));
+  const zeroThresholdResult = await runCli([
+    'search',
+    'tune',
+    'apply',
+    '--application-id',
+    'app-1',
+    '--run-id',
+    runId,
+    '--output-dir',
+    workspace,
+    '--dry-run',
+    '--json'
+  ]);
+  const zeroThresholdPayload = JSON.parse(zeroThresholdResult.stdout);
+  assert.equal(
+    zeroThresholdPayload.onlinePayload.Config.PerDatasetConfigs[0].TextSearchConfig.QueryKeywordMatchPercent,
+    undefined
+  );
+  assert.equal(zeroThresholdPayload.unappliedRequestParams.query_keyword_match_percent, undefined);
   return `${command.prefix} search tune apply --application-id app-1 --run-id ${runId} --output-dir ${workspace} --dry-run --json`;
 }
 
