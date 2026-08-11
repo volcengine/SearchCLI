@@ -1088,6 +1088,50 @@ export async function runSearchSceneGetCommand(options: SearchSceneGetOptions): 
 }
 
 function validateSearchSceneConfig(config: any): void {
+  const validateRelevanceCutoffConfig = (cutoffConfig: any, fieldPath: string): void => {
+    if (!cutoffConfig) return;
+
+    const validScoreTypes = ['keyword', 'text_semantic', 'image_semantic', 'final'];
+    const validModes = ['static', 'relative'];
+    const rules = cutoffConfig.Rules;
+
+    if (rules !== undefined && !Array.isArray(rules)) {
+      throw new Error(`${fieldPath}.Rules must be an array.`);
+    }
+
+    const seenScoreTypes = new Set<string>();
+    for (const [idx, rule] of (rules ?? []).entries()) {
+      const rulePath = `${fieldPath}.Rules[${idx}]`;
+      if (!validScoreTypes.includes(rule.ScoreType)) {
+        throw new Error(`${rulePath}.ScoreType must be one of: ${validScoreTypes.join(', ')}`);
+      }
+      if (seenScoreTypes.has(rule.ScoreType)) {
+        throw new Error(`${rulePath}.ScoreType duplicates '${rule.ScoreType}'. Each score type can appear at most once.`);
+      }
+      seenScoreTypes.add(rule.ScoreType);
+      if (!validModes.includes(rule.Mode)) {
+        throw new Error(`${rulePath}.Mode must be one of: ${validModes.join(', ')}`);
+      }
+      const threshold = rule.Threshold ?? 0;
+      if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0) {
+        throw new Error(`${rulePath}.Threshold must be a non-negative number.`);
+      }
+      if (rule.Mode === 'relative' && threshold > 1) {
+        throw new Error(`${rulePath}.Threshold must be <= 1 when Mode is 'relative'.`);
+      }
+      if (rule.Mode === 'static' && ['text_semantic', 'image_semantic'].includes(rule.ScoreType) && threshold > 1) {
+        throw new Error(`${rulePath}.Threshold must be <= 1 when Mode is 'static' and ScoreType is '${rule.ScoreType}'.`);
+      }
+    }
+
+    if (cutoffConfig.Fallback?.Enable) {
+      const minResultCount = cutoffConfig.Fallback.MinResultCount ?? 0;
+      if (!Number.isInteger(minResultCount) || minResultCount <= 0) {
+        throw new Error(`${fieldPath}.Fallback.MinResultCount must be a positive integer when Fallback.Enable is true.`);
+      }
+    }
+  };
+
   if (config?.PerDatasetConfigs) {
     const validOperators = [
       'eq', 'ne', 'contains', 'not_contains', 'must', 'must_not', 
@@ -1132,6 +1176,17 @@ function validateSearchSceneConfig(config: any): void {
       if (rc.RerankConfig?.RerankDoubaoConfig?.Instruction) {
         if (rc.RerankConfig.RerankDoubaoConfig.Instruction.length >= 1024) {
           throw new Error(`RerankDoubaoConfig.Instruction length must be less than 1024 characters.`);
+        }
+      }
+
+      validateRelevanceCutoffConfig(rc.RelevanceCutoffConfig, 'RelevanceCutoffConfig');
+
+      if (rc.ServingControlConfig?.ServingControls) {
+        for (const [idx, control] of rc.ServingControlConfig.ServingControls.entries()) {
+          validateRelevanceCutoffConfig(
+            control.RelevanceCutoffConfig,
+            `ServingControlConfig.ServingControls[${idx}].RelevanceCutoffConfig`
+          );
         }
       }
     }

@@ -542,7 +542,7 @@ If `--config` is absent, SearchCLI synthesizes `Config` from the more granular n
 | `--want-to-search-config` | `Config.WantToSearchConfig` | object | no | JSON object matching `WantToSearchConfig`. |
 | `--overview-config` | `Config.OverviewConfig` | object | no | JSON object matching `OverviewConfig`. |
 
-Local validation constrains several nested V2 fields before upload, including `TextSearchConfig.Mode`, `TextSearchConfig.UserDefinedRecallMode`, `ImageSearchConfig.InstructionType`, `WantToSearchConfig`, and `OverviewConfig.Mode`.
+Local validation constrains several nested V2 fields before upload, including `TextSearchConfig.Mode`, `TextSearchConfig.UserDefinedRecallMode`, `ImageSearchConfig.InstructionType`, `RelevanceCutoffConfig`, `WantToSearchConfig`, and `OverviewConfig.Mode`.
 
 Search scene response shape:
 

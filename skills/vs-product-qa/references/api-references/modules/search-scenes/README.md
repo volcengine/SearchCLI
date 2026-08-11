@@ -68,6 +68,30 @@ SearchCLI search-scene commands use the V2 control-plane actions. The old v1 act
 | `CorrectionConfig` | CorrectionConfigV2 | 搜索词纠错配置。 |
 | `SynonymConfig` | SynonymConfigV2 | 同义词配置。 |
 | `FacetConfig` | FacetConfig | 分面聚合配置。 |
+| `RelevanceCutoffConfig` | RelevanceCutoffConfig | 低相关性结果截断配置。 |
+
+### RelevanceCutoffConfig
+
+| 字段 | 类型 | 业务含义 |
+| --- | --- | --- |
+| `Rules` | array<RelevanceCutoffRule> | 截断规则列表。每个 `ScoreType` 最多出现一次。 |
+| `Fallback` | RelevanceCutoffFallback | 截断兜底配置，用于避免截断后结果数量过少。 |
+
+### RelevanceCutoffRule
+
+| 字段 | 类型 | 业务含义 |
+| --- | --- | --- |
+| `ScoreType` | string | 参与截断判断的相关性分数类型。 |
+| `Mode` | string | 阈值模式：固定阈值或相对 top score 的比例。 |
+| `Threshold` | double | 截断阈值。`relative` 使用 `[0,1]`；`static` 下的 `text_semantic` / `image_semantic` 也使用 `[0,1]`。 |
+| `Enable` | boolean | 是否启用该规则；不传时服务端按启用处理。 |
+
+### RelevanceCutoffFallback
+
+| 字段 | 类型 | 业务含义 |
+| --- | --- | --- |
+| `Enable` | boolean | 是否开启截断兜底。 |
+| `MinResultCount` | int32 | 兜底最少保留结果数；开启兜底时必须大于 0。 |
 
 ### 常用枚举
 
@@ -77,3 +101,5 @@ SearchCLI search-scene commands use the V2 control-plane actions. The old v1 act
 | `TextSearchConfig.UserDefinedRecallMode` | `keyword_semantic`, `keyword_only`, `semantic_only` | 自定义模式下的召回路径。 |
 | `ImageSearchConfig.InstructionType` | `preset_image`, `preset_item`, `custom` | 图片搜索指令类型。 |
 | `OverviewConfig.Mode` | `ondemand`, `always` | 搜索摘要触发模式。 |
+| `RelevanceCutoffRule.ScoreType` | `keyword`, `text_semantic`, `image_semantic`, `final` | 截断使用的相关性分数类型；图片相关性截断使用 `image_semantic`。 |
+| `RelevanceCutoffRule.Mode` | `static`, `relative` | `static` 为固定阈值；`relative` 为相对 top score 的比例。 |

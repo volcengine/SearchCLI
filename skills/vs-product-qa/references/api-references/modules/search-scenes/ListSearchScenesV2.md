@@ -44,7 +44,7 @@ message ListSearchScenesV2Resp {
 | `SceneIds` | array<string> | 否 | 空数组 | - | 只查询指定场景；为空表示应用下全部搜索场景。 |
 | `Statuses` | array<string> | 否 | 空数组 | `unpublished`, `published` | 按场景状态过滤；为空表示不过滤状态。 |
 | `ConfigLabels` | array<string> | 否 | 空数组 | `config`, `draft_config`。IDL 注释中 `draft_conig` 为拼写问题，实际使用建议按接口实现确认。 | 控制返回正式配置、草稿配置或二者。 |
-| `ConfigKeys` | array<string> | 否 | 空数组 | 场景级：`OverviewConfig`, `WantToSearchConfig`, `QueryCompletionConfig`；数据集级：`TextSearchConfig`, `ImageSearchConfig`, `MaxRecallNum`, `FilterConfig`, `AuxiliaryPoolsConfig`, `PersonalizedRecallConfig`, `EnableRerankWithHot`, `RerankConfig`, `BoostBuryCondConfig`, `SortRulesConfig`, `ShuffleConfig`, `ServingControlConfig`, `CorrectionConfig`, `SynonymConfig`, `FacetConfig`。 | 裁剪返回配置字段，降低响应体积。 |
+| `ConfigKeys` | array<string> | 否 | 空数组 | 场景级：`OverviewConfig`, `WantToSearchConfig`, `QueryCompletionConfig`；数据集级：`TextSearchConfig`, `ImageSearchConfig`, `MaxRecallNum`, `FilterConfig`, `AuxiliaryPoolsConfig`, `PersonalizedRecallConfig`, `EnableRerankWithHot`, `RerankConfig`, `BoostBuryCondConfig`, `SortRulesConfig`, `ShuffleConfig`, `ServingControlConfig`, `CorrectionConfig`, `SynonymConfig`, `FacetConfig`, `RelevanceCutoffConfig`。 | 裁剪返回配置字段，降低响应体积。 |
 | `DatasetIds` | array<string> | 否 | 空数组 | - | 只返回指定数据集的 `PerDatasetConfigs`；仅对数据集级配置有效。 |
 
 ## 出参解释

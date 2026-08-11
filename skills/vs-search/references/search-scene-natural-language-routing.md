@@ -21,6 +21,7 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 | image-search preset, image-search strategy, image instruction type | Run `search scene update` and modify `Config.PerDatasetConfigs[].ImageSearchConfig.InstructionType` |
 | custom image-search prompt, custom image instruction | Run `search scene update` and modify `Config.PerDatasetConfigs[].ImageSearchConfig.ImageInstruction` |
 | enable image recall, disable image recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].ImageSearchConfig.Enable` |
+| image relevance cutoff, image similarity cutoff, truncate low-relevance image results, 图片相关性截断, 图片低相关性结果截断 | Run `search scene update` and modify `Config.PerDatasetConfigs[].RelevanceCutoffConfig`; use `Rules[].ScoreType=image_semantic` for image relevance |
 | recall count, recall upper bound, returned items upper bound | Run `search scene update` and modify `Config.PerDatasetConfigs[].MaxRecallNum` |
 | filter item scope, restrict search scope, search only within some items | Run `search scene update` and modify `Config.PerDatasetConfigs[].FilterConfig.Config`; optionally set `Config.PerDatasetConfigs[].FilterConfig.Name` |
 | protected recall channel, guaranteed recall source, auxiliary recall pool | Run `search scene update` and modify `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[]` |
@@ -60,6 +61,7 @@ Common V2 serving-control override fields:
 | `ShuffleConfig` | `ServingControls[].ShuffleConfig` |
 | `FilterConfig` | `ServingControls[].FilterConfig` |
 | `BoostBuryCondConfig` | `ServingControls[].BoostBuryCondConfig` |
+| `RelevanceCutoffConfig` | `ServingControls[].RelevanceCutoffConfig` |
 
 ## Dictionary Binding Workflow
 

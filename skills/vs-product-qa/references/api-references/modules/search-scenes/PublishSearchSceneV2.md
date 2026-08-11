@@ -87,6 +87,7 @@ message PerDatasetConfig {
   CorrectionConfigV2 CorrectionConfig = 23; // 搜索词纠错
   SynonymConfigV2 SynonymConfig = 24; // 同义词
   FacetConfig FacetConfig = 25; // 搜索结果分类统计
+  RelevanceCutoffConfig RelevanceCutoffConfig = 26; // 低相关性结果截断
 }
 
 message TextSearchConfig {
@@ -113,6 +114,23 @@ message RerankConfig {
 message RerankDoubaoConfig {
   string ItemFeature = 1; // text | mixed | image
   string Instruction = 2; // doubao 重排指令
+}
+
+message RelevanceCutoffConfig {
+  repeated RelevanceCutoffRule Rules = 1;
+  RelevanceCutoffFallback Fallback = 2;
+}
+
+message RelevanceCutoffRule {
+  string ScoreType = 1; // keyword | text_semantic | image_semantic | final
+  string Mode = 2; // static | relative
+  double Threshold = 3; // static 为固定阈值；relative 为相对 top score 的比例，范围 [0,1]
+  optional bool Enable = 4; // 是否启用；默认启用
+}
+
+message RelevanceCutoffFallback {
+  bool Enable = 1;
+  int32 MinResultCount = 2;
 }
 
 message FilterConfigV2 {
@@ -198,6 +216,7 @@ message ServingControlV2 {
   ShuffleConfig ShuffleConfig = 24; // 命中后覆盖打散配置
   FilterConfigV2 FilterConfig = 25; // 命中后覆盖过滤条件
   BoostBuryCondConfig BoostBuryCondConfig = 26; // 命中后覆盖提权/降权配置
+  RelevanceCutoffConfig RelevanceCutoffConfig = 27; // 命中后覆盖低相关性结果截断；显式空对象表示关闭全局配置
 }
 
 message CorrectionConfigV2 {
@@ -306,6 +325,7 @@ message NumberRange {
 | `CorrectionConfig` | `CorrectionConfigV2` | 否 | 不传不覆盖 | `Mode`、`MatchMode` 枚举见下表 | 搜索词纠错配置。 |
 | `SynonymConfig` | `SynonymConfigV2` | 否 | 不传不覆盖；`DictIds: []` 清空 | 字典 ID 应存在且可用于该应用 | 同义词召回配置。 |
 | `FacetConfig` | `FacetConfig` | 否 | 不传不覆盖；`Facets: []` 清空 | 聚合字段必须是可过滤且支持分面类型 | 控制搜索结果的分类统计/分面聚合。 |
+| `RelevanceCutoffConfig` | `RelevanceCutoffConfig` | 否 | 不传不覆盖；`Rules: []` 表示清空截断规则；显式空对象在 ServingControl 中表示关闭全局截断 | 每个 `ScoreType` 最多一条规则；阈值校验见下表 | 低相关性结果截断。可按关键词、文本语义、图片语义或最终相关性分数截断低质量结果。 |
 
 ### 常用子结构字段
 
@@ -319,6 +339,12 @@ message NumberRange {
 | `ImageSearchConfig.Enable` | boolean | 否 | `false` | `true` / `false` | 是否开启图片搜索。 |
 | `ImageSearchConfig.InstructionType` | string | 否 | 空值按 `preset_image` 处理 | `preset_image` / `preset_item` / `custom` | 图片搜索指令来源。 |
 | `ImageSearchConfig.ImageInstruction` | string | `InstructionType=custom` 时是 | - | `custom` 时不能为空 | 自定义图片搜索指令。 |
+| `RelevanceCutoffConfig.Rules[].ScoreType` | string | 配置规则时是 | - | `keyword` / `text_semantic` / `image_semantic` / `final`，同一配置内不可重复 | 选择用于截断的相关性分数。图片相关性截断使用 `image_semantic`。 |
+| `RelevanceCutoffConfig.Rules[].Mode` | string | 配置规则时是 | - | `static` / `relative` | `static` 表示固定阈值；`relative` 表示相对 top score 的比例。 |
+| `RelevanceCutoffConfig.Rules[].Threshold` | double | 否 | 不传按 `0` 处理 | 必须 `>= 0`；`relative` 必须 `<= 1`；`static` 下 `text_semantic` / `image_semantic` 必须 `<= 1` | 截断阈值。低于阈值的低相关性结果会被截断。 |
+| `RelevanceCutoffConfig.Rules[].Enable` | boolean | 否 | 不传按启用处理 | `true` / `false` | 是否启用该条截断规则。 |
+| `RelevanceCutoffConfig.Fallback.Enable` | boolean | 否 | `false` | `true` / `false` | 是否开启截断兜底，避免截断后结果数量过少。 |
+| `RelevanceCutoffConfig.Fallback.MinResultCount` | int32 | `Fallback.Enable=true` 时是 | - | 必须 `> 0` | 开启兜底时至少保留的结果数量。 |
 | `RerankConfig.Enable` | boolean | 否 | `false` | `true` / `false` | 是否开启重排。 |
 | `RerankConfig.RerankTopK` | int64 | 否 | 服务端按请求值覆盖 | 建议为正整数 | 进入重排模型的候选物品数量。 |
 | `RerankConfig.RerankModel` | string | 否 | 为空时回读默认模型 | 通常为 `gte-rerank` / `doubao-rerank` | 选择重排模型。 |
@@ -348,7 +374,7 @@ message NumberRange {
 | `ServingControlConfig.ServingControls[].Enable` | boolean | 否 | `true` | `true` / `false` | 是否启用该精细化运营规则。 |
 | `ServingControlConfig.ServingControls[].Name` | string | 否 | - | - | 运营规则名称。 |
 | `ServingControlConfig.ServingControls[].QueryCondition` | object | 是 | - | 必须是合法查询条件 DSL，且不超过服务端复杂度限制 | 查询触发条件。命中后才应用该规则内的覆盖动作。 |
-| `ServingControlConfig.ServingControls[]` 的覆盖动作 | object | 是 | - | 至少配置一个覆盖动作 | 可覆盖 `TextSearchConfig`、`AuxiliaryPoolsConfig`、`SortRulesConfig`、`ShuffleConfig`、`FilterConfig`、`BoostBuryCondConfig`。 |
+| `ServingControlConfig.ServingControls[]` 的覆盖动作 | object | 是 | - | 至少配置一个覆盖动作 | 可覆盖 `TextSearchConfig`、`AuxiliaryPoolsConfig`、`SortRulesConfig`、`ShuffleConfig`、`FilterConfig`、`BoostBuryCondConfig`、`RelevanceCutoffConfig`。 |
 | `CorrectionConfig.Enable` | boolean | 否 | `false` | `true` / `false` | 是否开启搜索词纠错。 |
 | `CorrectionConfig.Mode` | string | 开启时可省略 | 开启且为空时按 `auto` 处理 | `auto` / `suggestion_only` | 纠错模式。 |
 | `CorrectionConfig.DictIds` | string[] | 否 | 整体替换；空数组清空 | 字典 ID 不能为空 | 纠错词库。 |

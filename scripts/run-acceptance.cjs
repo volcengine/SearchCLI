@@ -2262,6 +2262,20 @@ async function testSearchSceneV2ActionsMock() {
           DatasetId: 'ds-v2-1',
           TextSearchConfig: {
             Mode: 'balanced'
+          },
+          RelevanceCutoffConfig: {
+            Rules: [
+              {
+                ScoreType: 'image_semantic',
+                Mode: 'static',
+                Threshold: 0.72,
+                Enable: true
+              }
+            ],
+            Fallback: {
+              Enable: true,
+              MinResultCount: 5
+            }
           }
         }
       ])
@@ -2343,6 +2357,9 @@ async function testSearchSceneV2ActionsMock() {
     assert.equal(state.requests[3].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[3].body.SceneId, 'scene-v2-1');
     assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].DatasetId, 'ds-v2-1');
+    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].ScoreType, 'image_semantic');
+    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].Threshold, 0.72);
+    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Fallback.MinResultCount, 5);
     assert.equal(state.requests[4].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[4].body.SceneId, 'scene-v2-1');
 
