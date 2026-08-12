@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const skillsRoot = path.join(root, 'skills');
 const outputFile = path.join(root, 'src', 'skills', 'embedded-repo-skills.ts');
+const excludedRelativeDirs = new Set(['vs-product-qa/references/api-references']);
 
 const bundle = await buildBundle(skillsRoot);
 const content = renderBundle(bundle);
@@ -38,6 +39,8 @@ async function readDirectoryFiles(baseDir, currentDir) {
   for (const entry of sortedEntries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
+      const relativeDir = path.relative(path.join(baseDir, '..'), fullPath).split(path.sep).join('/');
+      if (excludedRelativeDirs.has(relativeDir)) continue;
       const nested = await readDirectoryFiles(baseDir, fullPath);
       Object.assign(result, nested);
       continue;
