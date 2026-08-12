@@ -76,7 +76,7 @@ The first version supports only the `openai-compatible` protocol. Non-secret LLM
 
 ## Constraints
 
-- Before executing any concrete `vs ...` command in this shared workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
+- **Mandatory command verification**: before executing any concrete `vs ...` command in this shared workflow, the agent MUST first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, allowed values, and relevant command-specific constraints. This is a non-optional precondition for all shared workflow commands, including auth, doctor, LLM setup, app readiness checks, search/chat runtime checks, and skill installation. Only after that verification may the agent finalize parameters and run the command.
 - If the user has already placed credentials in the current shell, prefer `auth import-env` and do not ask them to paste secrets into chat
 - If LLM credentials are needed, prefer `llm import-env` or `llm login`; do not ask the user to paste LLM API keys into chat
 - Before installing or distributing a skill, confirm that the current CLI version satisfies `requires_cli`

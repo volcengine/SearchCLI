@@ -2543,13 +2543,16 @@ USAGE
 DESCRIPTION
   Reports the effective (valid) and total record counts for an item/video dataset as seen by an
   application, via /api/v1/GetAppItemDataCount. Use this to answer "how much effective data does
-  this application have" for item/video datasets. Not applicable to document datasets.
+  this application have" for item/video datasets.
+  User behavior datasets (user_event) do not require data-volume statistics and should be omitted
+  from product-level data volume summaries. Document datasets are not counted by this command; use
+  application dataset config metadata for document counts.
   The compact output surfaces validCnt/totalCnt (and image/duration counts for video); pass \`--full\`
   for the raw response payload.
 
 KEY FLAGS
   --application-id  Target application ID.
-  --dataset-id      Target item/video dataset ID.
+  --dataset-id      Target item/video dataset ID. Do not pass user_event datasets.
   --project-name    Viking project name when the API requires project scoping.
   --full            Return the raw GetAppItemDataCount response.
 

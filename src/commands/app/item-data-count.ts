@@ -7,7 +7,7 @@ import { serviceFlags } from '../../command-support/service-flags';
 
 export default class AppItemDataCount extends Command {
   static override description =
-    'Get the effective item data count (ValidCnt/TotalCnt) for an item/video dataset under an application. Not applicable to document datasets.';
+    'Get the effective item data count (ValidCnt/TotalCnt) for an item/video dataset under an application. User behavior datasets (user_event) do not require data-volume statistics; document datasets use document metadata instead.';
 
   static override examples = [
     '<%= config.bin %> app item-data-count --application-id 123 --dataset-id 456',
@@ -17,7 +17,10 @@ export default class AppItemDataCount extends Command {
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
-    'dataset-id': Flags.string({ required: true, description: 'Viking item/video dataset ID.' }),
+    'dataset-id': Flags.string({
+      required: true,
+      description: 'Viking item/video dataset ID. Do not pass user_event datasets; they do not require data-volume statistics.'
+    }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
     full: Flags.boolean({ description: 'Return the raw GetAppItemDataCount response instead of the compact summary.' })
   };
