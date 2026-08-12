@@ -44,6 +44,11 @@ export function buildSceneApplyDraft(report: TuningRunReportShape, options: Buil
   const appliedSearchConfig = {
     PerDatasetConfigs: [buildPerDatasetConfig(report.datasetId, strategy)]
   };
+  const unappliedRequestParams: TuningRequestParams = {
+    ...(strategy.requestParams.disable_personalize === undefined
+      ? {}
+      : { disable_personalize: strategy.requestParams.disable_personalize })
+  };
 
   return {
     runId: report.runId,
@@ -66,7 +71,7 @@ export function buildSceneApplyDraft(report: TuningRunReportShape, options: Buil
       Config: appliedSearchConfig
     }),
     appliedSearchConfig,
-    unappliedRequestParams: strategy.requestParams
+    unappliedRequestParams
   };
 }
 
@@ -85,6 +90,9 @@ function buildPerDatasetConfig(datasetId: string, strategy: TuningStrategy): Rec
     EnableRerankWithHot: dynamic.enable_rerank_with_hot,
     TextSearchConfig: compactObject({
       Mode: normalizeSceneMode(dynamic.mode),
+      QueryKeywordMatchPercent: normalizeSceneQueryKeywordMatchPercent(
+        strategy.requestParams.query_keyword_match_percent
+      ),
       UserDefinedRecallMode: normalizeSceneUserDefinedRecallMode(dynamic.user_defined_recall_mode),
       DenseWeight: dynamic.dense_weight,
       TextWeight: dynamic.text_weight
@@ -102,6 +110,14 @@ function buildPerDatasetConfig(datasetId: string, strategy: TuningStrategy): Rec
       RerankDoubaoConfig: toPascalObject(dynamic.rerank_doubao_config)
     })
   });
+}
+
+function normalizeSceneQueryKeywordMatchPercent(value: number | undefined): number | undefined {
+  if (value === undefined || value === 0) return undefined;
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`Invalid recommended query_keyword_match_percent: ${String(value)}.`);
+  }
+  return value;
 }
 
 function normalizeSceneMode(value: SearchDynamic['mode']): string | undefined {
