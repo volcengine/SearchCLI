@@ -57,6 +57,7 @@ enum DataSetState {
   DatasetReady = 3;
   DatasetDeleting = 4;
   DatasetDeleted = 5;
+  DatasetExpired = 6;
 }
 
 enum DatasetType {

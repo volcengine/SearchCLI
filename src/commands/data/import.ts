@@ -14,7 +14,7 @@ export default class DataImport extends Command {
     ...serviceFlags,
     'dataset-id': Flags.string({ required: true }),
     fields: Flags.string({
-      description: 'Inline JSON array, @file path, or JSON file path containing the fields array.'
+      description: 'Inline JSON array, @file path, or JSON/JSONL file path containing the fields array. JSONL (one record per line) is accepted and converted to an array automatically.'
     })
   };
 

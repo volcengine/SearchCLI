@@ -43,6 +43,11 @@ export default class DatasetIngest extends Command {
     'video-auto-delete': Flags.boolean({
       description: 'ProcessConfig.VideoAutoDelete: auto-delete source videos after processing.'
     }),
+    'post-paid-type': Flags.string({
+      description:
+        'Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).',
+      options: ['standard', 'premium', 'none']
+    }),
     'schema-wait-timeout-ms': Flags.integer({
       description: 'Timeout in milliseconds for polling the schema inference task. Default 120000.'
     }),
@@ -81,6 +86,7 @@ export default class DatasetIngest extends Command {
       abnormalImagePolicy: flags['abnormal-image-policy'],
       abnormalVideoPolicy: flags['abnormal-video-policy'],
       videoAutoDelete: flags['video-auto-delete'],
+      postPaidType: flags['post-paid-type'],
       schemaWaitTimeoutMs: flags['schema-wait-timeout-ms'],
       schemaPollIntervalMs: flags['schema-poll-interval-ms'],
       dryRun: flags['dry-run'],

@@ -9,8 +9,11 @@ const APP_STATE_NAMES: Record<number, string> = {
   1: 'AppReady',
   2: 'AppDeleting',
   3: 'AppDeleted',
-  4: 'AppNotReady'
+  4: 'AppNotReady',
+  5: 'AppExpired'
 };
+
+const APP_STATE_EXPIRED = 5;
 
 const APP_DATA_CONFIG_STATE_NAMES: Record<number, string> = {
   0: 'AppDataConfigInit',
@@ -61,7 +64,7 @@ export interface AppStatusSnapshot {
   appName?: string;
   appStateCode?: number;
   appState: string;
-  phase: 'unbound' | 'config_saved' | 'activating' | 'ready' | 'waiting_runtime' | 'unknown';
+  phase: 'unbound' | 'config_saved' | 'activating' | 'ready' | 'waiting_runtime' | 'expired' | 'unknown';
   ready: boolean;
   runtimeSearchReady: boolean;
   inferredSearchDataset?: SearchDatasetInference;
@@ -118,10 +121,13 @@ export function deriveAppStatusSnapshot(
   ]);
 
   const ready = appStateCode === 1;
+  const expired = appStateCode === APP_STATE_EXPIRED;
   const runtimeSearchReady = ready && (itemDatasetIds.length > 0 || documentDatasetIds.length > 0);
   const reasons: string[] = [];
 
-  if (appStateCode !== 1) {
+  if (expired) {
+    reasons.push('application has expired; upgrade to a standard/premium plan or re-enable it before use');
+  } else if (appStateCode !== 1) {
     reasons.push(`application state is ${appState}`);
   }
   if (boundDatasetIds.length === 0) {
@@ -136,6 +142,7 @@ export function deriveAppStatusSnapshot(
 
   const phase = derivePhase({
     ready,
+    expired,
     runtimeSearchReady,
     boundDatasetIds,
     activeConfigCount
@@ -196,10 +203,14 @@ export function inferSearchDatasetId(input: {
 
 function derivePhase(input: {
   ready: boolean;
+  expired: boolean;
   runtimeSearchReady: boolean;
   boundDatasetIds: string[];
   activeConfigCount: number;
 }): AppStatusSnapshot['phase'] {
+  if (input.expired) {
+    return 'expired';
+  }
   if (input.runtimeSearchReady) {
     return 'ready';
   }
@@ -240,6 +251,11 @@ function deriveNextActions(phase: AppStatusSnapshot['phase'], applicationId: str
       return [
         `Run search: vs search run --application-id ${applicationId} --query "<query>"`,
         `Run conversational search: vs chat run --application-id ${applicationId} --message "<message>"`
+      ];
+    case 'expired':
+      return [
+        `Application has expired. Upgrade to a standard/premium plan (post-paid free tier expires after 30 days) to restore access.`,
+        `Inspect current state: vs app status --application-id ${applicationId}`
       ];
     default:
       return [`Inspect current state: vs app status --application-id ${applicationId}`];

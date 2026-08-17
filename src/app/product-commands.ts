@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
-import { loadJsonInput, loadOptionalStringArray, parseBooleanString } from '../core/json-input';
+import { loadJsonInput, loadJsonOrJsonlInput, loadOptionalStringArray, parseBooleanString } from '../core/json-input';
 import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-status';
 import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
@@ -76,6 +76,7 @@ export interface AppCreateOptions extends ServiceCommandOptions {
   iconColor?: string;
   riskCheck?: boolean;
   dryRun?: boolean;
+  postPaidType?: string;
   projectName?: string;
 }
 
@@ -132,6 +133,7 @@ export interface DatasetCreateOptions extends ServiceCommandOptions {
   videoAutoDelete?: boolean;
   dryRun?: boolean;
   fieldDescMap?: string;
+  postPaidType?: string;
   projectName?: string;
 }
 
@@ -559,6 +561,7 @@ export interface PurchaseLinkOptions {
 
 export async function runAppCreateCommand(options: AppCreateOptions): Promise<void> {
   const iconColor = options.iconColor ?? options.color;
+  const postPaidType = parsePostPaidTypeValue(options.postPaidType);
   const fallbackPayload = compactObject({
     Name: options.name,
     Description: options.description,
@@ -566,12 +569,16 @@ export async function runAppCreateCommand(options: AppCreateOptions): Promise<vo
     Icon: iconColor ? { ColorName: iconColor } : undefined,
     EnableRiskCheck: options.riskCheck === true ? true : undefined,
     DryRun: options.dryRun === true ? true : undefined,
+    PostPaidType: postPaidType,
     ProjectName: options.projectName
   });
   const payload = normalizeAppCreateV2Payload(
     (await loadJsonInput(options.data)) ?? fallbackPayload,
     options.industry
   );
+  if (postPaidType !== undefined && isRecord(payload)) {
+    payload.PostPaidType = postPaidType;
+  }
   requireNonEmptyObject(payload, 'Need --data or --name for app create.');
   await printResult(callOpenApi('CreateApplicationV2', payload, options));
 }
@@ -759,6 +766,12 @@ export async function runAppWaitReadyCommand(options: AppWaitReadyOptions): Prom
       return;
     }
 
+    if (snapshot.phase === 'expired') {
+      throw new Error(
+        `Application ${options.applicationId} has expired; upgrade to a standard/premium plan or re-enable it. Stopped waiting after ${attempts} check(s).`
+      );
+    }
+
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
       break;
@@ -817,6 +830,7 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
       })
     : undefined;
   const filePayload = await loadJsonInput(options.data);
+  const postPaidType = parsePostPaidTypeValue(options.postPaidType);
 
   let rawPayload: Record<string, unknown>;
   if (isRecord(filePayload)) {
@@ -830,6 +844,7 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
     if (options.theme !== undefined) rawPayload.Theme = options.theme;
     if (processConfig !== undefined) rawPayload.ProcessConfig = processConfig;
     if (fieldDescMap !== undefined) rawPayload.FieldDescMap = fieldDescMap;
+    if (postPaidType !== undefined) rawPayload.PostPaidType = postPaidType;
     if (options.dryRun === true) rawPayload.DryRun = true;
     if (options.projectName !== undefined) rawPayload.ProjectName = options.projectName;
   } else {
@@ -843,6 +858,7 @@ export async function runDatasetCreateCommand(options: DatasetCreateOptions): Pr
       Theme: options.theme,
       ProcessConfig: processConfig,
       FieldDescMap: fieldDescMap,
+      PostPaidType: postPaidType,
       DryRun: options.dryRun === true ? true : undefined,
       ProjectName: options.projectName
     });
@@ -988,7 +1004,7 @@ export async function runDataWriteCommand(options: DataWriteOptions): Promise<vo
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      fields: await loadJsonInput(options.fields)
+      fields: await loadJsonOrJsonlInput(options.fields)
     });
   requireNonEmptyObject(payload, 'Need --data or --fields for data write.');
   await printResult(callRuntime(runtime => runtime.dataWrite(options.datasetId, payload), options));
@@ -2164,7 +2180,7 @@ function printDatasetCommandHelp(action: string): void {
     create: `Create a Viking dataset.
 
 USAGE
-  vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--project-name <name>] [--dry-run] [service flags]
+  vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--post-paid-type <standard|premium>] [--project-name <name>] [--dry-run] [service flags]
   vs dataset create --data @dataset-create.json [service flags]
 
 DESCRIPTION
@@ -2188,6 +2204,7 @@ KEY FLAGS
   --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy value (skip|block). skip=drop bad image rows; block=fail the import.
   --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy value (skip|block). skip=drop bad video rows; block=fail the import.
   --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
+  --post-paid-type          Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).
   --project-name            Viking project name when the API requires project scoping.
   --dry-run                 Validate the payload server-side without persisting the dataset.
 
@@ -2257,6 +2274,7 @@ KEY FLAGS
   --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy (skip|block) for multi_modal.
   --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy (skip|block) for multi_modal.
   --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
+  --post-paid-type          Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).
   --schema-wait-timeout-ms  Upper bound for polling GetInferDatasetSchemaResultV2 (default 120000).
   --schema-poll-interval-ms Wait between polling attempts in ms (default 2000).
   --project-name            Viking project name when the API requires project scoping.
@@ -2511,7 +2529,7 @@ function printAppCommandHelp(action: string, subAction?: string): void {
     create: `Create a Viking application.
 
 USAGE
-  vs app create --name <name> [--description <text>] [--industry <industry>] [--language <lang>] [--color <color>] [--icon-color <color>] [--risk-check] [--project-name <name>] [--dry-run] [service flags]
+  vs app create --name <name> [--description <text>] [--industry <industry>] [--language <lang>] [--color <color>] [--icon-color <color>] [--risk-check] [--post-paid-type <standard|premium>] [--project-name <name>] [--dry-run] [service flags]
   vs app create --data @app-create.json [service flags]
 
 DESCRIPTION
@@ -2528,6 +2546,7 @@ KEY FLAGS
   --color          Icon color shorthand (cyan|blue|purple|pink). Forwards to Icon.ColorName.
   --icon-color     Explicit alias for --color when both are present.
   --risk-check     Enable platform risk-check on the application (EnableRiskCheck=true).
+  --post-paid-type Post-paid tier for post-paid billing instances: standard|premium. Omit for non-post-paid (none) instances.
   --project-name   Viking project name when the API requires project scoping.
   --dry-run        Server-side dry run; returns DryRunOperation without persisting the app.
 
@@ -3170,6 +3189,7 @@ async function runAppCli(argv: string[]): Promise<void> {
         iconColor: optionalString(values['icon-color']),
         riskCheck: optionalBoolean(values['risk-check']),
         dryRun: optionalBoolean(values['dry-run']),
+        postPaidType: optionalString(values['post-paid-type']),
         projectName: optionalString(values['project-name'])
       });
       return;
@@ -3367,6 +3387,7 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         videoAutoDelete: optionalBoolean(values['video-auto-delete']),
         dryRun: optionalBoolean(values['dry-run']),
         fieldDescMap: optionalString(values['field-desc-map']),
+        postPaidType: optionalString(values['post-paid-type']),
         projectName: optionalString(values['project-name'])
       });
       return;
@@ -4465,7 +4486,38 @@ function toProjectScopedOptions(values: StandaloneValues): ProjectScopedOptions 
 
 async function callOpenApi(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
   const config = resolveServiceConfig(toServiceConfigInput(options));
-  return new VikingOpenApiClient(config).post(pathname, withProjectName(payload, config.projectName));
+  try {
+    return await new VikingOpenApiClient(config).post(pathname, withProjectName(payload, config.projectName));
+  } catch (error) {
+    throw translateQuotaExceededError(error);
+  }
+}
+
+const QUOTA_EXCEEDED_API_CODES = new Set([
+  'quotaexceeded',
+  'limitexceeded',
+  'quotaexceeded.application',
+  'quotaexceeded.dataset'
+]);
+
+// Post-paid free-tier instances enforce real quota limits (e.g. app/dataset
+// counts). Translate the raw quota error into an actionable hint so users know
+// to upgrade to a standard/premium plan.
+function translateQuotaExceededError(error: unknown): unknown {
+  if (!(error instanceof ApiRequestError)) return error;
+  const code = error.apiCode?.toLowerCase();
+  const looksLikeQuota =
+    (code !== undefined && QUOTA_EXCEEDED_API_CODES.has(code)) ||
+    (code !== undefined && (code.includes('quotaexceeded') || code.includes('limitexceeded')));
+  if (!looksLikeQuota) return error;
+  const detail = error.apiMessage ?? error.message;
+  return new ApiRequestError(
+    `API Error [${error.apiCode}]: ${detail} Quota exceeded — the post-paid free tier limits application/dataset counts. Upgrade to a standard/premium plan or remove unused resources, then retry.`,
+    error.statusCode,
+    error.apiCode,
+    error.apiMessage,
+    error.responseBody
+  );
 }
 
 async function callDataPlane(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
@@ -4560,7 +4612,8 @@ const DATASET_STATE_LABELS: Record<number, string> = {
   2: 'pending',
   3: 'ready',
   4: 'deleting',
-  5: 'deleted'
+  5: 'deleted',
+  6: 'expired'
 };
 
 const DATASET_TYPE_LABELS: Record<number, string> = {
@@ -4592,7 +4645,8 @@ const APP_STATE_LABELS: Record<number, string> = {
   1: 'AppReady',
   2: 'AppDeleting',
   3: 'AppDeleted',
-  4: 'AppNotReady'
+  4: 'AppNotReady',
+  5: 'AppExpired'
 };
 
 const APP_DATA_CONFIG_STATE_LABELS: Record<number, string> = {
@@ -4765,6 +4819,24 @@ export function parseDatasetTypeV2Value(value: unknown, allowed?: readonly strin
     );
   }
   return resolved;
+}
+
+const SUPPORTED_POST_PAID_TYPES = ['none', 'standard', 'premium'] as const;
+
+// Parses the --post-paid-type flag. Console PostPaidType is a string enum
+// (none/standard/premium); post-paid instances must send standard or premium,
+// while non-post-paid can omit the field entirely (undefined => not sent).
+export function parsePostPaidTypeValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid --post-paid-type value: ${String(value)}. Supported values: standard|premium (or none).`);
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '') return undefined;
+  if (!(SUPPORTED_POST_PAID_TYPES as readonly string[]).includes(normalized)) {
+    throw new Error(`Invalid --post-paid-type value: ${value}. Supported values: standard|premium (or none).`);
+  }
+  return normalized;
 }
 
 function normalizeDatasetV2Payload(payload: unknown, allowed?: readonly string[]): unknown {

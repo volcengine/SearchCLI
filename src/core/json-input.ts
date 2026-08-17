@@ -10,6 +10,39 @@ export async function loadJsonInput<T = unknown>(input?: string): Promise<T | un
   return JSON.parse(source) as T;
 }
 
+/**
+ * Like {@link loadJsonInput}, but tolerant of JSONL (one JSON value per line).
+ * Standard JSON (object/array) is parsed first; if that fails, the input is
+ * treated as JSONL and parsed line-by-line into an array. Use for row payloads
+ * such as `data write`/`data import` --fields where users commonly pass `.jsonl`.
+ */
+export async function loadJsonOrJsonlInput<T = unknown>(input?: string): Promise<T | undefined> {
+  if (!input) return undefined;
+  const source = await resolveJsonSource(input);
+  return parseJsonOrJsonl(source) as T;
+}
+
+function parseJsonOrJsonl(source: string): unknown {
+  const trimmed = source.trim();
+  if (trimmed.length === 0) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch (jsonError) {
+    const lines = trimmed
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+    if (lines.length <= 1) {
+      throw jsonError;
+    }
+    try {
+      return lines.map(line => JSON.parse(line));
+    } catch {
+      throw jsonError;
+    }
+  }
+}
+
 export async function loadOptionalStringArray(input?: string): Promise<string[] | undefined> {
   if (!input) return undefined;
   const trimmed = input.trim();

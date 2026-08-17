@@ -36,6 +36,11 @@ export default class AppCreate extends Command {
     'dry-run': Flags.boolean({
       description: 'Validate the request without persisting the application (DryRun=true).'
     }),
+    'post-paid-type': Flags.string({
+      description:
+        'Post-paid tier for post-paid billing instances: standard|premium. Omit for non-post-paid (none) instances.',
+      options: ['standard', 'premium', 'none']
+    }),
     'project-name': Flags.string({
       description: 'Viking project name when the API requires project scoping.'
     })
@@ -61,6 +66,7 @@ export default class AppCreate extends Command {
       iconColor: flags['icon-color'],
       riskCheck: flags['risk-check'],
       dryRun: flags['dry-run'],
+      postPaidType: flags['post-paid-type'],
       projectName: flags['project-name']
     });
   }

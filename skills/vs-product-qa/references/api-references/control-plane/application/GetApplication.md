@@ -58,6 +58,7 @@ enum AppState {
   AppDeleting = 2;
   AppDeleted = 3;
   AppNotReady = 4;
+  AppExpired = 5;
 }
 
 message Dataset {
@@ -127,6 +128,7 @@ enum DataSetState {
   DatasetReady = 3;
   DatasetDeleting = 4;
   DatasetDeleted = 5;
+  DatasetExpired = 6;
 }
 
 enum DatasetType {
