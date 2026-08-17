@@ -1,44 +1,54 @@
-# Console API References
+# API Reference Router
 
-## Overview
+This file is the first-level router for Viking AI Search API contracts. Use it only to decide whether to read control-plane or data-plane references next.
 
-This index is rebuilt from the **current retained documents** under `.viking/api-references/modules`.
-It reflects the APIs that are still present after manual cleanup, rather than the full proto source set.
+The QA skill normally starts from this GitHub main URL:
 
-Current totals:
+```text
+https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md
+```
 
-- Module count: **22**
-- Endpoint count: **123**
+When following links in this API Reference tree, resolve every relative Markdown link against the GitHub raw directory that contains the current document. Do not resolve these links against a local workspace checkout.
 
-## Directory Index
+For example, from this root README:
 
-| Module | Endpoint Count | Index |
+```text
+./control-plane/README.md
+=> https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/control-plane/README.md
+```
+
+## First-Level Routing Rules
+
+1. If the question is about managing resources or configuration, read [control-plane](./control-plane/README.md).
+2. If the question is about writing data, reading data, search runtime, chat runtime, or recommend runtime, read [data-plane](./data-plane/README.md).
+3. If the question is about CLI flags or command existence, check the installed `vs <cmd> --help`; use this API Reference only after deciding the question needs backend API contracts.
+4. If the question is about product concepts, console UI path, billing explanation, purchase, or quota policy rather than an API contract, use official product documentation instead of this tree.
+
+## Command To First-Level Route
+
+| User-facing command or resource | First-level route | Why |
 | --- | --- | --- |
-| API Key Authentication | 6 | [Index](./modules/api-key-auth/README.md) |
-| App Data Config | 14 | [Index](./modules/app-data-config/README.md) |
-| App Management | 8 | [Index](./modules/app-management/README.md) |
-| App Management OpenAPI | 2 | [Index](./modules/app-management-openapi/README.md) |
-| App Online Config | 6 | [Index](./modules/app-online-config/README.md) |
-| CLI Management | 1 | [Index](./modules/cli-management/README.md) |
-| Cloud Monitoring | 3 | [Index](./modules/cloud-monitoring/README.md) |
-| Config Center | 3 | [Index](./modules/config-center/README.md) |
-| Console Common | 1 | [Index](./modules/console-common/README.md) |
-| Data Integration Datasource Management | 4 | [Index](./modules/data-integration-datasource-management/README.md) |
-| Data Integration Task Management | 1 | [Index](./modules/data-integration-task-management/README.md) |
-| Dataset Management | 28 | [Index](./modules/dataset-management/README.md) |
-| Dataset Sample Data List | 1 | [Index](./modules/dataset-sample-data-list/README.md) |
-| Dataset Sample Preview | 1 | [Index](./modules/dataset-sample-preview/README.md) |
-| Dictionary Management | 9 | [Index](./modules/dictionary-management/README.md) |
-| Model Training | 1 | [Index](./modules/model-training/README.md) |
-| Premium | 11 | [Index](./modules/Premium/README.md) |
-| Recommendation Rules | 4 | [Index](./modules/recommendation-rules/README.md) |
-| Recommendation Scenes | 9 | [Index](./modules/recommendation-scenes/README.md) |
-| Search Scenes | 6 | [Index](./modules/search-scenes/README.md) |
-| User Console Config | 3 | [Index](./modules/user-console-config/README.md) |
-| User Dataset Management | 1 | [Index](./modules/user-dataset-management/README.md) |
+| `vs dataset create/get/list/update/delete` | [control-plane](./control-plane/README.md) | Dataset management. |
+| `vs dataset import-url`, `vs dataset infer-schema`, `vs dataset infer-result` | [control-plane](./control-plane/README.md) | Dataset task and provisioning APIs. |
+| `vs dataset subscription *` | [control-plane](./control-plane/README.md) | Datasource subscription management. |
+| `vs app create/get/list/update/delete` | [control-plane](./control-plane/README.md) | Application management. |
+| `vs app attach-dataset`, `vs app dataset-config *` | [control-plane](./control-plane/README.md) | Application-dataset configuration. |
+| `vs app item-data-count` | [control-plane](./control-plane/README.md) | Usage/count API under control-plane. |
+| `vs app online-config *` | [control-plane](./control-plane/README.md) | Online config management. |
+| `vs search scene *` | [control-plane](./control-plane/README.md) | Search scene management. |
+| `vs recommend scene *`, `vs recommend rule *` | [control-plane](./control-plane/README.md) | Recommendation scene and rule management. |
+| `vs dict *` | [control-plane](./control-plane/README.md) | Dictionary management; term write/list/delete are data-plane if the question is specifically about term runtime APIs. |
+| `vs data write/import` | [data-plane](./data-plane/README.md) | Dataset data write runtime. |
+| `vs dataset ingest --dataset-id --fields` | [data-plane](./data-plane/README.md) | Direct dataset data write runtime. |
+| `vs search run`, `vs chat run` | [data-plane](./data-plane/README.md) | Online search and chat runtime. |
+| `vs recommend run` | [data-plane](./data-plane/README.md) | Online recommendation runtime. |
+| `vs connector run` | [data-plane](./data-plane/README.md) | Local connector polling followed by data write runtime. |
+| `vs connector export/init/status/stop/inspect` | No API Reference route | Local connector state and artifacts only. |
 
-## Notes
+## API Name To First-Level Route
 
-1. The module directories under `modules/` have been normalized to English names.
-2. `index.json` is rebuilt from the currently existing module docs and endpoint docs.
-3. If endpoint documents are manually added or removed later, rerun the refresh script to sync the root indexes.
+| API name signal | First-level route |
+| --- | --- |
+| Application, Dataset, SearchScene, RecommendScene, RecommendRule, Dict, DataSourceSubscription, InferDatasetSchema, PresignedImportUrl, Billing, Quota, Usage | [control-plane](./control-plane/README.md) |
+| WriteData, DeleteData, ListItems, GetItem, BatchImport, WriteTerms, DeleteTerms, ListTerms | [data-plane](./data-plane/README.md) |
+| SearchWithScene, StreamChatSearch, QueryCompletionWithScene, QueryRecommendationWithScene, QuestionSuggestions, BrowseIndex, Recommend, Rerank, Deduplicate | [data-plane](./data-plane/README.md) |

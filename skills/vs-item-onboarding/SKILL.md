@@ -50,7 +50,7 @@ Do not use this skill when:
 
 `vs --help` still lists `vs item profile / plan / apply` at the top of QUICK START for backwards compatibility (annotated `[Deprecated]`). That is the V1 path; this skill does **not** use it. The only legal path here is V2 — `vs dataset import-url → infer-schema → infer-result → dataset create → data write → app create → app attach-dataset` — and any check for a V2 command must be confirmed via `vs dataset --help`, `vs dataset infer-schema --help`, `vs app --help`, or `vs app attach-dataset --help`, never by falling back to `vs item ...`. The workspace path `./.viking/item-plans/<dataset-name>/` is reused for V2 artifacts only because the directory name happens to match; it does not imply V1 or item type. The moment the user's ask is "create a multi-modal dataset / application from a raw JSONL / JSON / CSV / MySQL source", jump straight to the V2 workflow (steps 3–14 below) without detouring through `item plan/apply`.
 
-**Forbidden in this skill:** `vs item profile`, `vs item plan`, `vs item apply`, `vs item review`, `vs item provision`, `vs item verify`, or passing any `--type` other than `multi_modal` or `user_event` to dataset onboarding commands.
+**Forbidden in this skill:** passing any `--type` other than `multi_modal` or `user_event` to dataset onboarding commands.
 
 ## Preconditions
 

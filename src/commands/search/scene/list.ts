@@ -8,6 +8,12 @@ import { serviceFlags } from '../../../command-support/service-flags';
 export default class SearchSceneList extends Command {
   static override description = 'List search scenes.';
 
+  static override examples = [
+    '<%= config.bin %> search scene list --application-id app_xxx',
+    '<%= config.bin %> search scene list --application-id app_xxx --format json',
+    '<%= config.bin %> search scene list --data @list-search-scenes.json'
+  ];
+
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),

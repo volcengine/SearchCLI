@@ -20,7 +20,7 @@ export default class SearchTuneApply extends Command {
     'output-dir': Flags.string({ description: 'Tuning artifact root. Defaults to .viking/search-tuning.' }),
     'scene-name': Flags.string({ description: 'Name for the newly created search scene.' }),
     'scene-description': Flags.string({ description: 'Description for the newly created search scene.' }),
-    'dry-run': Flags.boolean({ description: 'Print the CreateSearchScene and OnlineSearchScene payloads without calling the service.' }),
+    'dry-run': Flags.boolean({ description: 'Print the CreateSearchSceneV2 and PublishSearchSceneV2 payloads without calling the service.' }),
     'confirm-create-scene': Flags.boolean({ description: 'Required for real scene creation.' })
   };
 

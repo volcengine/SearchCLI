@@ -8,10 +8,16 @@ import { serviceFlags } from '../../../command-support/service-flags';
 export default class SearchSceneDelete extends Command {
   static override description = 'Delete a search scene.';
 
+  static override examples = [
+    '<%= config.bin %> search scene delete --application-id app_xxx --scene-id scene_xxx',
+    '<%= config.bin %> search scene delete --application-id app_xxx --scene-id scene_xxx --format json',
+    '<%= config.bin %> search scene delete --data @delete-search-scene.json'
+  ];
+
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
-    'scene-id': Flags.string({ required: true, description: 'Viking scene ID.' }),
+    'scene-id': Flags.string({ required: true, description: 'Viking search scene ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' })
   };
 

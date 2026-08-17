@@ -6,7 +6,7 @@ import { runSearchSceneUpdateCommand } from '../../../app/product-commands';
 import { serviceFlags } from '../../../command-support/service-flags';
 
 export default class SearchSceneUpdate extends Command {
-  static override description = 'Update a search scene config.';
+  static override description = 'Update and publish a search scene.';
 
   static override examples = [
     '<%= config.bin %> search scene update --application-id 123 --scene-id abc --config @scene.json',
@@ -17,10 +17,10 @@ export default class SearchSceneUpdate extends Command {
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
-    'scene-id': Flags.string({ required: true, description: 'Viking scene ID.' }),
+    'scene-id': Flags.string({ required: true, description: 'Viking search scene ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
     config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' }),
-    'search-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for Config.SearchConfig.' }),
+    'search-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for Config.PerDatasetConfigs.' }),
     'query-completion-config': Flags.string({
       description: 'Inline JSON, @file path, or JSON file path for Config.QueryCompletionConfig.'
     }),

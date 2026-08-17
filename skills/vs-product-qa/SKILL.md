@@ -49,11 +49,11 @@ Classify the question before choosing a source.
 
 | Question type | Primary source | Example |
 |---|---|---|
-| CLI command / flag / usage | `references/api-references/` and `references/command-console-api-mapping.md` first; then `vs <cmd> --help` to confirm installed CLI surface | "How do I use `vs item apply`" |
+| CLI command / flag / usage | installed CLI output: `vs <cmd> --help`; use the API Reference router only when the user asks how that command maps to an API category | "How do I use `vs item apply`" |
 | Local authentication / credential | `vs auth status` / `vs doctor` | "Why does `vs auth status` say invalid" |
 | Local CLI error / stack trace | the error's own recovery output | "I see `ERR_AUTH_REQUIRED`; what now" |
 | Product concept | official docs via the bundled documentation helper | "What is a scene in Viking AI Search" |
-| API field semantics / request-response shape | official docs via the bundled documentation helper | "What does `recall_mode` accept" |
+| API contract / request-response shape / field semantics / enum / validation / error code | GitHub main API Reference, starting from the root README URL in the API Reference source section | "What does `RelevanceCutoffConfig` accept" |
 | Application / dataset **effective (valid) data volume** | first resolve each bound dataset's `Type` (via `app get` / `app dataset-config list`). For **item/video** datasets, call `app item-data-count` per dataset and sum `ValidCnt` (`DataNum` is not the answer). For **document** datasets, do NOT call `app item-data-count` (it returns `InvalidParameter: DatasetType`) — use `app dataset-config list --full` (the `--full` flag is required; the default compact output omits `DocumentStats`) and read the document count from `Config[].Dataset.DocumentStats` (`DocumentNum` + `DocumentFromHomepageNum`), not `DataNum`. Always report the document count, including when it is `0`. For **user_event (behavior)** datasets only, exclude them entirely because they have no effective-data-volume metric at all — do not query a count and do not list them (this "omit even when 0" rule applies to user_event only, never to item/video/document, which are always reported even when their count is 0). | "How much effective data does application X have" |
 | Purchase / billing / pricing / quota | official docs via the bundled documentation helper | "How do I upgrade my plan" |
 | Console UI path / where to click | official docs via the bundled documentation helper | "Where do I configure boost/bury" |
@@ -75,11 +75,38 @@ Allowed CLI checks include:
 - `vs skill search <query>`
 - `vs skill show <name>`
 
-For command-related questions, first read [references/api-references/README.md](references/api-references/README.md) and [references/command-console-api-mapping.md](references/command-console-api-mapping.md). Use them as the primary source for parameter shape, payload fields, input format, allowed values, and command-to-backend mapping. Then use `vs <domain> --help` or `vs <cmd> --help` to confirm the installed CLI surface and flag names on the current machine.
+For command-related questions, use `vs <domain> --help` or `vs <cmd> --help` as the primary source for command existence, flags, examples, and currently installed behavior. Use the online API Reference router only when the user asks how a command maps to an API category or contract.
 
-Before recommending any command or flag, verify that it exists through the copied API references plus `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
+Before recommending any command or flag, verify that it exists through `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
 
-For SearchCLI product commands that map to backend APIs, this skill also includes an internal code-grounded command mapping file under [references/command-console-api-mapping.md](references/command-console-api-mapping.md) and the copied console API corpus under [references/api-references/README.md](references/api-references/README.md). Use them to explain which backend action a command maps to and how uploaded command arguments are encoded into request payload fields.
+### API Reference source
+
+API contracts are not answered from local installed snapshots. When the user asks about OpenAPI request/response shape, field semantics, enums, validation rules, or error codes, fetch the latest API Reference from GitHub main:
+
+```text
+https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md
+```
+
+Read it progressively:
+
+```text
+api-references/README.md
+  -> command/resource routing or control-plane / data-plane
+  -> second-level category README, such as control-plane/scene/README.md
+  -> one OpenAPI Markdown file, such as PublishSearchSceneV2.md
+```
+
+Resolve every relative Markdown link in the API Reference tree against the GitHub raw URL of the current document, not against the local workspace. For example, `./control-plane/README.md` from the root README means:
+
+```text
+https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/control-plane/README.md
+```
+
+Rules:
+
+- CLI flags and command availability still come from the installed `vs --help`; the GitHub API Reference must not override observed CLI behavior.
+- API contract details come from GitHub main API Reference.
+- If GitHub fetching fails or the target API row is marked `missing`, say the online API Reference is unavailable or incomplete for that API. Do not fall back to old local snapshots and do not guess.
 
 ### Documentation source
 
@@ -137,9 +164,10 @@ These may be used later only if they become publicly available and are actually 
 
 1. Classify the question using **Question Routing**.
 2. Pick the source:
-   - CLI usage -> read `references/api-references/` and `references/command-console-api-mapping.md` first, then run the relevant `vs ... --help`
+   - CLI usage -> run the relevant `vs ... --help`; use the online API Reference router only for command-to-API-category questions
    - local auth / environment -> use `vs auth status`, `vs doctor`, or `vs llm status`
    - local CLI error -> use the recovery output from this turn first; only run more CLI checks if needed
+   - API contract -> fetch GitHub main API Reference from the root README, then follow category and endpoint links
    - product docs -> use the bundled documentation helper privately, with the hard `Universal AI Search` + `docs/85296` restriction
 3. Extract only the lines or sections needed to answer.
 4. Respond using the required output format.
@@ -183,7 +211,8 @@ Rules:
 3. **No fabricated URLs**: sub-page URLs must come from routing actually performed in this turn. Do not guess paths.
 4. **No CLI hallucination**: do not recommend commands or flags that do not exist.
 5. **CLI overrides docs**: when CLI help and documentation conflict, trust the installed CLI and say the docs may be stale.
-5a. **Command questions check local API references first**: when the user asks about a concrete command, its parameters, payload shape, or backend mapping, first consult [references/api-references/README.md](references/api-references/README.md) and [references/command-console-api-mapping.md](references/command-console-api-mapping.md), then confirm the installed CLI surface with `vs ... --help`.
+5a. **Command questions check installed CLI first**: when the user asks about a concrete command, its parameters, or flags, first confirm the installed CLI surface with `vs ... --help`. Use the online API Reference router only for command-to-API-category questions.
+5b. **API contract questions use GitHub main API Reference**: when the user asks about OpenAPI request/response, fields, enums, validation, or error codes, fetch the root API Reference README from GitHub main and follow links progressively to the target endpoint. Do not answer API contracts from local installed snapshots.
 6. **No silent execution**: do not run write commands such as `apply`, `update`, `create`, or `bind` on the user's behalf.
 7. **AK/SK notice required**: whenever credentials or `vs auth import-env` are involved, append the AK/SK security notice.
 8. **Honest unknowns**: if available sources cannot answer, say `unknown`, explain what source was checked, and suggest escalation.
@@ -240,5 +269,4 @@ Answer: "This is covered by `vs-user-onboarding` because it is a sign-up, purcha
 - AK/SK security notice: [references/aksk-notice.md](references/aksk-notice.md)
 - Delegation matrix: [references/delegation.md](references/delegation.md)
 - Bundled documentation helper: [references/volcengine-documentation/SKILL.md](references/volcengine-documentation/SKILL.md)
-- Command to console API mapping: [references/command-console-api-mapping.md](references/command-console-api-mapping.md)
-- Copied console API references: [references/api-references/README.md](references/api-references/README.md)
+- Online API Reference entry: `https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md`

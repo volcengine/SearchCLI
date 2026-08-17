@@ -48,7 +48,7 @@ export async function inferSchemaArtifactsWithConsole(
   const fileKey = uploadResult.fileKey;
 
   const addTaskResponse = unwrapResultEnvelope(
-    await openapi.post('/open/AddInferDatasetSchemaTaskV2', compactObject({
+    await openapi.post('AddInferDatasetSchemaTaskV2', compactObject({
       TosKey: fileKey,
       Type: options.datasetType === 'video' ? 'video' : 'item',
       Language: options.language ?? DEFAULT_LANGUAGE,
@@ -62,7 +62,7 @@ export async function inferSchemaArtifactsWithConsole(
 
   while (Date.now() <= deadline) {
     const resultResponse = unwrapResultEnvelope(
-      await openapi.post('/open/GetInferDatasetSchemaResultV2', {
+      await openapi.post('GetInferDatasetSchemaResultV2', {
         TaskID: taskId,
         ProjectName: options.projectName ?? config.projectName
       })

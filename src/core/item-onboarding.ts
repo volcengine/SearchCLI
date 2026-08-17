@@ -625,7 +625,7 @@ export function buildApplyDryRunSummary(
       { step: 'wait_ready', action: skipApp ? 'skip (--skip-app provided)' : 'skip (phase one ends after activation is requested)' },
       {
         step: 'search_scene_bootstrap',
-        action: skipApp ? 'skip (--skip-app provided)' : options.runTrials ? 'CreateSearchScene + update search scene + bind ChatConfig.SearchSceneID' : 'skip',
+        action: skipApp ? 'skip (--skip-app provided)' : options.runTrials ? 'CreateSearchSceneV2 + publish search scene + bind ChatConfig.SearchSceneID' : 'skip',
         payloadSource: plan.files.searchSceneCreate
       },
       { step: 'search_trial', action: skipApp ? 'skip (--skip-app provided)' : options.runTrials ? `search "${options.searchQuery ?? plan.defaults.searchQuery}"` : 'skip' },
@@ -1561,9 +1561,7 @@ function buildSearchSceneUpdateArtifact(defaults: ItemPlanFile['defaults']): Rec
     Name: defaults.search.sceneName,
     Description: defaults.search.sceneDescription,
     Config: {
-      SearchConfig: {
-        RetrieveConfigs: []
-      }
+      PerDatasetConfigs: []
     }
   };
 }
