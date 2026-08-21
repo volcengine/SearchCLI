@@ -4456,6 +4456,7 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'icon-color': { type: 'string' },
       'risk-check': { type: 'boolean' },
       theme: { type: 'string' },
+      'post-paid-type': { type: 'string' },
     }
   });
 
