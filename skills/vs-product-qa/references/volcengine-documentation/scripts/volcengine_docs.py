@@ -14,6 +14,13 @@ ALLOWED_DOC_PREFIX = "/docs/85296"
 # Negative keyword filtering has been removed; all queries are allowed by default
 
 
+def configure_utf8_stdout():
+    """Emit Unicode JSON consistently on Windows and POSIX terminals."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8")
+
+
 def normalize_service_codes(service_codes):
     if not service_codes:
         return [UNIVERSAL_AI_SEARCH_SERVICE_CODE]
@@ -128,6 +135,7 @@ def print_help():
     print(json.dumps(help_info, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
+    configure_utf8_stdout()
     if len(sys.argv) < 2:
         print_help()
         sys.exit(1)
