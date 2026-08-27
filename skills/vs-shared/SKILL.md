@@ -76,6 +76,7 @@ The first version supports only the `openai-compatible` protocol. Non-secret LLM
 
 ## Constraints
 
+- **Sandbox must allow writing `~/.viking/config.json`**: `vs auth login` / `vs auth import-env` / `vs auth use` (and even some `--help` paths) persist non-secret config to `~/.viking/config.json`. If the agent runs inside a sandbox with a read-only home directory, these commands fail with `EACCES: permission denied` / `Not allow operate files`. Before running any `vs` command that touches auth or config, ensure the sandbox grants write access to `~/.viking/` (or run those commands outside the sandbox). Do not misread this environment restriction as a CLI bug.
 - **Mandatory command verification**: before executing any concrete `vs ...` command in this shared workflow, the agent MUST first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, allowed values, and relevant command-specific constraints. This is a non-optional precondition for all shared workflow commands, including auth, doctor, LLM setup, app readiness checks, search/chat runtime checks, and skill installation. Only after that verification may the agent finalize parameters and run the command.
 - If the user has already placed credentials in the current shell, prefer `auth import-env` and do not ask them to paste secrets into chat
 - If LLM credentials are needed, prefer `llm import-env` or `llm login`; do not ask the user to paste LLM API keys into chat

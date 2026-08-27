@@ -837,6 +837,9 @@ export async function runPlatformDomainFromArgv(domain: string, argv: string[]):
     case 'auth':
       await runAuthCli(argv);
       return true;
+    case 'profile':
+      printProfileRedirectHelp(argv);
+      return true;
     case 'llm':
       await runLlmCli(argv);
       return true;
@@ -846,6 +849,42 @@ export async function runPlatformDomainFromArgv(domain: string, argv: string[]):
     default:
       return false;
   }
+}
+
+// `profile` is not a command; credential profiles live under `vs auth`.
+// Guide users (and agents) to the real entry points instead of a bare
+// "Unknown command" error.
+function printProfileRedirectHelp(argv: string[]): void {
+  const sub = argv[0];
+  const mapped: Record<string, string> = {
+    list: 'vs auth list',
+    ls: 'vs auth list',
+    status: 'vs auth status',
+    show: 'vs auth status',
+    use: 'vs auth use <profile>',
+    switch: 'vs auth use <profile>',
+    add: 'vs auth login',
+    login: 'vs auth login',
+    create: 'vs auth login',
+    remove: 'vs auth logout',
+    delete: 'vs auth logout',
+    logout: 'vs auth logout'
+  };
+  const suggestion = sub ? mapped[sub.toLowerCase()] : undefined;
+  const lines = [
+    "`vs profile` is not a command. Credential profiles are managed under `vs auth`."
+  ];
+  if (suggestion) {
+    lines.push(`Did you mean: ${suggestion}`);
+  }
+  lines.push('Common commands:');
+  lines.push('  vs auth list             List configured profiles');
+  lines.push('  vs auth status           Show the active profile and its config');
+  lines.push('  vs auth use <profile>    Switch the active profile');
+  lines.push('  vs auth login            Add or update a profile');
+  lines.push('Run `vs auth --help` for details.');
+  console.error(lines.join('\n'));
+  process.exitCode = 1;
 }
 
 export function printPlatformDomainsHelp(): void {

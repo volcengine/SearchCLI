@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-status';
-import { loadJsonInput, parseBooleanString } from '../core/json-input';
+import { loadJsonInput, loadJsonOrJsonlInput, parseBooleanString } from '../core/json-input';
 import { formatOutput, hasExplicitOutputFormatFlag, printOutput } from '../core/output-format';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
@@ -143,7 +143,7 @@ export async function runDataImportShortcutCommand(options: DataImportShortcutOp
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      fields: await loadJsonInput(options.fields)
+      fields: await loadJsonOrJsonlInput(options.fields)
     });
   requireNonEmptyObject(payload, 'Need --fields or --data for data import.');
 

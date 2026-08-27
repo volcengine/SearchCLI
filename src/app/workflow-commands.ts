@@ -52,6 +52,7 @@ export interface DatasetIngestWorkflowOptions extends WorkflowServiceOptions {
   abnormalImagePolicy?: string;
   abnormalVideoPolicy?: string;
   videoAutoDelete?: boolean;
+  postPaidType?: string;
   schemaWaitTimeoutMs?: number;
   schemaPollIntervalMs?: number;
   dryRun?: boolean;
@@ -83,7 +84,7 @@ interface DatasetIngestV2ExecutionResult {
 }
 
 import { isUserEventDatasetType } from '../core/types';
-import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, parseDatasetThemeValue, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
+import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, parseDatasetThemeValue, parsePostPaidTypeValue, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
 
 export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWorkflowOptions): Promise<void> {
   console.warn("Warning: 'vs app dataset bind' is deprecated; use 'vs app attach-dataset' instead.");
@@ -416,6 +417,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
     Theme: normalizedTheme,
     ProcessConfig: processConfig,
     FieldDescMap: inferResult.FieldDescMap,
+    PostPaidType: parsePostPaidTypeValue(options.postPaidType),
     DryRun: options.dryRun === true ? true : undefined,
     ProjectName: projectName
   });

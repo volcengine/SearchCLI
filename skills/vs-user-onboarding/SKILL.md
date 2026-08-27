@@ -75,7 +75,7 @@ Recovery routing:
  
 Always run `vs auth status --json` first and inspect the result. In CLI versions that expose structured status, this command first checks whether local AK/SK is configured; when AK/SK exists, it uses the same backend path as `vs purchase order status` to verify that the Viking AI Search billing instance is visible and healthy.
  
-- **Authenticated and product enabled** (`status: "ok"`) -> run `vs doctor --json`; if it passes, go directly to Step 8 (early exit; do not force a returning user through registration again).
+- **Authenticated and product enabled** (`status: "ok"`) -> run `vs doctor --json`; if it passes, go directly to Step 8 (early exit; do not force a returning user through registration again). A post-paid instance (including the free post-paid tier) also reports as enabled here, so do not push a post-paid user back through the purchase flow.
 - **`reason: "unconfigured"`** -> go to Step 2; if the user already has AK/SK, Step 2 routes to Step 6.
 - **`reason: "invalid"`** -> go to Step 6 and ask the user to reconfigure valid AK/SK.
 - **`reason: "product-not-enabled"`** -> go to Step 3 because credentials may be valid but `purchase order status` cannot confirm a visible, enabled billing instance.

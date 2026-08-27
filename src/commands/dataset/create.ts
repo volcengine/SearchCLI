@@ -57,6 +57,11 @@ export default class DatasetCreate extends Command {
     'field-desc-map': Flags.string({
       description: 'Inline JSON, @file path, or JSON file path for FieldDescMap (field path -> description).'
     }),
+    'post-paid-type': Flags.string({
+      description:
+        'Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).',
+      options: ['standard', 'premium', 'none']
+    }),
     'project-name': Flags.string({
       description: 'Viking project name when the API requires project scoping.'
     })
@@ -87,6 +92,7 @@ export default class DatasetCreate extends Command {
       videoAutoDelete: flags['video-auto-delete'],
       dryRun: flags['dry-run'],
       fieldDescMap: flags['field-desc-map'],
+      postPaidType: flags['post-paid-type'],
       projectName: flags['project-name']
     });
   }

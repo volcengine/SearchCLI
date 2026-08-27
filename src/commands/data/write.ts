@@ -17,7 +17,7 @@ export default class DataWrite extends Command {
     ...serviceFlags,
     'dataset-id': Flags.string({ required: true }),
     fields: Flags.string({
-      description: 'Inline JSON, @file path, or JSON file path for the fields array.'
+      description: 'Inline JSON, @file path, or JSON/JSONL file path for the fields array. JSONL (one record per line) is accepted and converted to an array automatically.'
     })
   };
 

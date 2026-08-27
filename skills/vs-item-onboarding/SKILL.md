@@ -44,7 +44,7 @@ The hallmark of V2 is that schema inference is fully backend-driven: the CLI upl
 
 Do not use this skill when:
 
-- The customer only wants to ingest more rows into an existing dataset (use `vs data write --dataset-id <id> --fields @items.json`).
+- The customer only wants to ingest more rows into an existing dataset (use `vs data write --dataset-id <id> --fields @items.jsonl`; `--fields` accepts a JSON array or a JSONL file directly).
 
 ## Do NOT be misled by `vs --help` top-level QUICK START
 
@@ -68,16 +68,16 @@ Do not use this skill when:
 | Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type <multi_modal\|user_event> [--theme <general\|e_commerce\|content\|long_video>] --language <zh\|en\|ko\|ja\|hi> [--name ...]` | Kick off backend schema inference; returns `TaskID`. `--theme` is **required for `multi_modal` only** (default `general`); omit it for `user_event`. The CLI accepts theme aliases such as `ecommerce` / `e-commerce` → `e_commerce`, `long-video` / `longvideo` → `long_video`, `common` / `default` → `general`. |
 | Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact). For `multi_modal`, includes `ImageIndexFields` / `VideoIndexFields` / `ChatFields`. |
 | Validate schema | `vs dataset validate-schema --input <path/to/infer-result.json> --dataset-type <multi_modal\|user_event>` | Render the deterministic schema-confirm block (metadata / fields / roles / warnings). Use `--dataset-type` to toggle validation rules. Save the output as the source-of-truth for schema confirmation. |
-| Create dataset | `vs dataset create --data @dataset-create.json [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr`. For `multi_modal`, the payload must include `Theme` and optionally `ProcessConfig`; for `user_event`, omit both. |
-| Write data | `vs data write --dataset-id <DatasetId> --fields @items.json` | Push the actual records into the dataset |
+| Create dataset | `vs dataset create --data @dataset-create.json [--post-paid-type <standard\|premium>] [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr`. For `multi_modal`, the payload must include `Theme` and optionally `ProcessConfig`; for `user_event`, omit both. Pass `--post-paid-type` only for post-paid billing instances (`standard`/`premium`); omit it for non-post-paid (`none`) instances. |
+| Write data | `vs data write --dataset-id <DatasetId> --fields @items.jsonl` | Push the actual records into the dataset. `--fields` accepts a JSON array **or** a JSONL file (one record per line); the bootstrap `items.jsonl` can be passed directly — no need to convert with `jq -s`. |
 | Export (MySQL) | `vs connector export --source mysql ...` | Export a MySQL table snapshot into `/tmp/viking/connector/<job>/bootstrap/items.jsonl` |
 | Export (local file) | `vs connector export --source jsonl --file <path>` | Export a local JSONL file snapshot into the bootstrap directory. For `JSON` (array) or `CSV` inputs, convert to JSONL (one object per line) before running this command. |
 | Sync config | `vs connector init --name <job> --source mysql\|jsonl --dataset-id <id> ...` | Persist the local sync job config for later incremental runs |
 | Sync run | `vs connector run --job <job> --daemon` | Start background incremental sync into the dataset |
-| Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--dry-run]` | Optional, only when the user asks for app-level setup. `--industry` here is an **application-level** attribute independent of the dataset; it is NOT passed to dataset create / infer-schema. |
+| Create application | `vs app create --name <name> --industry <industry> --language <lang> [--description ...] [--color cyan\|blue\|purple\|pink] [--risk-check] [--post-paid-type <standard\|premium>] [--dry-run]` | Optional, only when the user asks for app-level setup. `--industry` here is an **application-level** attribute independent of the dataset; it is NOT passed to dataset create / infer-schema. Pass `--post-paid-type` only for post-paid billing instances (`standard`/`premium`); omit for non-post-paid (`none`). |
 | Attach dataset | `vs app attach-dataset --data @attach.json [--dry-run]` | Optional, links the created dataset to an application. The `DataConfig` block is the `DataFieldConfig` straight out of the persisted infer artifact (must include `ImageIndexFields` / `VideoIndexFields` / `ChatFields` verbatim) |
 
-The "All-in-one" shortcut `vs dataset ingest --file <path> --type multi_modal --theme <theme> [--abnormal-image-policy skip|block] [--abnormal-video-policy skip|block] [--video-auto-delete] [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Schema Confirmation pause. In agent mode you should still drive each step individually so you can pause at step 7 (Schema Confirmation).
+The "All-in-one" shortcut `vs dataset ingest --file <path> --type multi_modal --theme <theme> [--abnormal-image-policy skip|block] [--abnormal-video-policy skip|block] [--video-auto-delete] [--post-paid-type <standard|premium>] [--dry-run]` orchestrates upload + infer-schema + poll + create + write, **without** the Schema Confirmation pause. In agent mode you should still drive each step individually so you can pause at step 7 (Schema Confirmation).
 
 ## Workflow
 
@@ -459,6 +459,8 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 - `attach-dataset` errors after a successful create → run `vs app diagnose --application-id <AppId>` to inspect the runtime state before retrying. If the error is `OperationDenied.ImageAndVideoDatasetNotSupport` (code 340023), the application already has a dataset of a conflicting modality (image-text vs video cannot be bound together); create a separate application instead.
 - `attach-dataset` errors with `OperationDenied.VideoDatasetFieldsInsufficient` (code 340025) → a multi-modal video dataset requires descriptive text/array<string> fields beyond numeric fields; add title/content/description columns to the source data.
 - `data write` returns a HTTP error → confirm the dataset is in the `Ready` state via `vs app status --application-id <AppId>` (if attached), or `vs dataset get --id <DatasetId> --full` for unattached writes.
+- `app create` / `dataset create` / `dataset ingest` rejects with `QuotaExceeded` (or `LimitExceeded`) → the post-paid free tier caps application/dataset counts. The CLI rewrites the error to suggest upgrading to a `standard`/`premium` plan or removing unused resources; relay that to the user and retry after they upgrade or clean up.
+- `app status` / `dataset get` shows `AppExpired` (state 5) or `DatasetExpired` (state 6) → the post-paid free tier expires 30 days after creation (and is auto-deleted after 60 days without an upgrade). Tell the user to upgrade to a `standard`/`premium` plan or re-enable the instance before continuing; do not retry writes/search until it leaves the expired state.
 
 ## Worked Example
 
