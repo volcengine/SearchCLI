@@ -52,7 +52,7 @@ async function readDirectoryFiles(baseDir, currentDir) {
     const relativePath = path.relative(baseDir, fullPath).split(path.sep).join('/');
     if (ignoredTemplatePaths.has(relativePath)) continue;
     const outputPath = templateOutputPaths.get(relativePath) ?? relativePath;
-    result[outputPath] = await readFile(fullPath, 'utf8');
+    result[outputPath] = (await readFile(fullPath, 'utf8')).replace(/\r\n?/g, '\n');
   }
 
   return result;
