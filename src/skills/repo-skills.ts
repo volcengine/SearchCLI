@@ -265,11 +265,12 @@ export function validateRepoSkills(root = getRepoSkillsRoot()): RepoSkillValidat
 
   for (const dirName of names) {
     const skillFile = path.join(root, dirName, 'SKILL.md');
-    const content = readRepoSkillFile(root, dirName, 'SKILL.md', embedded);
-    if (content === undefined) {
+    const rawContent = readRepoSkillFile(root, dirName, 'SKILL.md', embedded);
+    if (rawContent === undefined) {
       errors.push(`[${dirName}] missing SKILL.md`);
       continue;
     }
+    const content = rawContent.replace(/\r\n?/g, '\n');
     const frontmatter = parseFrontmatter(content);
     if (!frontmatter) {
       errors.push(`[${dirName}] SKILL.md must start with YAML frontmatter`);
