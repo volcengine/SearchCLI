@@ -10,7 +10,7 @@ const os = require('node:os');
 const FLAVOR_DEFINITIONS = {
   items: {
     fileName: 'items.jsonl',
-    datasetType: 'item',
+    datasetType: 'multi_modal',
     industry: 'ecommerce',
     industryValue: 'e_commerce',
     datasetName: 'acc-items-pipeline',
@@ -18,7 +18,7 @@ const FLAVOR_DEFINITIONS = {
   },
   videos: {
     fileName: 'videos.jsonl',
-    datasetType: 'video',
+    datasetType: 'multi_modal',
     industry: 'video',
     industryValue: 'video',
     datasetName: 'acc-videos-pipeline',

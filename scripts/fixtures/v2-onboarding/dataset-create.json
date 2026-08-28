@@ -1,6 +1,6 @@
 {
   "Name": "acc-items",
-  "Type": "item",
+  "Type": "multi_modal",
   "Description": "Acceptance fixture dataset for V2 onboarding",
   "Industry": "e_commerce",
   "Language": "zh",

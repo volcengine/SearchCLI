@@ -94,7 +94,7 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Parameters: `[--dry-run] [service flags]`
 
 ### `dataset` - Dataset Management
-*   `vs dataset create --name <name> --type <item|event|behavior|image_text|video|user-event|document>`
+*   `vs dataset create --name <name> --type <user_event|multi_modal>`
     *   Parameters: `[--description <text>] [--schema @schema.json] [service flags]`
 *   `vs dataset get --id <dataset-id>`
     *   Parameters: `[--full] [service flags]`
@@ -102,7 +102,7 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Parameters: `[--version <n>] [--description <text>] [--schema @schema.json] [service flags]`
 *   `vs dataset ingest --dataset-id <id> --fields @items.json`
     *   Parameters: `[workflow flags]`
-*   `vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document>`
+*   `vs dataset schema check --type <item|query|video|user-event|doc|document>`
     *   Parameters: `[--schema @schema.json] [service flags]`
 *   `vs dataset list`
     *   Parameters: `[--type <type> --name <text> --application-id <id> --full] [service flags]`

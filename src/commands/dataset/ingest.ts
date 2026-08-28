@@ -10,8 +10,8 @@ export default class DatasetIngest extends Command {
     'Run the remaining dataset-ingest workflow from a local file (`--file --type`) or write explicit rows into an existing dataset (`--dataset-id --fields`).';
 
   static override examples = [
-    '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --dataset-name demo-items',
-    '<%= config.bin %> dataset ingest --file ./items.jsonl --type item --industry ecommerce --language zh --dry-run',
+    '<%= config.bin %> dataset ingest --file ./items.jsonl --type multi_modal --dataset-name demo-items',
+    '<%= config.bin %> dataset ingest --file ./items.jsonl --type multi_modal --industry ecommerce --language zh --dry-run',
     '<%= config.bin %> dataset ingest --file ./products.jsonl --type multi_modal --theme e_commerce --abnormal-image-policy skip --industry ecommerce --language zh',
     '<%= config.bin %> dataset ingest --dataset-id 123 --fields @items.json'
   ];

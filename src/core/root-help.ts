@@ -77,7 +77,7 @@ QUICK START
   Onboard items into a fresh app (V2 — default, backend-driven schema inference)
     vs dataset import-url --file-name items.jsonl
     curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
-    vs dataset infer-schema --tos-key <FileKey> --type item --industry e_commerce --language zh --name <dataset-name>
+    vs dataset infer-schema --tos-key <FileKey> --type multi_modal --industry e_commerce --language zh --name <dataset-name>
     vs dataset infer-result --task-id <TaskID> --render-schema
     vs dataset create --data @dataset-create.json
     vs data write --dataset-id <DatasetId> --fields @items.json
