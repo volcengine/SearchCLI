@@ -10,13 +10,6 @@
       "brand": { "Type": "string" },
       "tags": { "Type": "array<string>" },
       "price": { "Type": "float" }
-    },
-    "FieldDescMap": {
-      "title": "Display title shown in search results",
-      "description": "Long text describing the item",
-      "brand": "Brand name",
-      "tags": "Free-form tags",
-      "price": "Price in USD"
     }
   }
 }

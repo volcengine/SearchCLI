@@ -51,11 +51,11 @@ message MysqlSourceConfig {
   int32 Port = 2;
   string Username = 3;
   string Password = 4;
-  SourceSSLSettings SSLSettings = 5;
+  SourceSslSettings SslSettings = 5;
 }
 
-message SourceSSLSettings {
-  bool EnableSSL = 1;
+message SourceSslSettings {
+  bool EnableSsl = 1;
   string Cert = 2;
 }
 ```

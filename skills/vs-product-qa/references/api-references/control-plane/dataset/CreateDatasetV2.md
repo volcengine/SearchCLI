@@ -35,7 +35,7 @@ message DatasetSchemaFieldV2 {
   string Name = 2 [(api.vd) = "regexp('^[a-zA-Z][a-zA-Z0-9_]{0,127}$'); msg:sprintf('berror(InvalidSchemaFieldName, \"%v\")', $)"];
   string Type = 3;
   string BizAttr = 4;
-  bool IsPK = 5;
+  bool IsPrimaryKey = 5;
   bool Required = 6;
   repeated EnumerateMetaV2 EnumerateMeta = 7;
 
@@ -62,8 +62,8 @@ message DatasetV2 {
   map<string, string> FieldDescMap = 6;
   string Description = 7;
   int64 SchemaVersion = 8;
-  string UpdatedTime = 9;
-  string CreatedTime = 10;
+  string UpdateTime = 9;
+  string CreateTime = 10;
   string UpdatedBy = 11;
   string Tag = 12;
   string Language = 13;
@@ -100,8 +100,8 @@ message EnumerateMetaV2{
 | `Tags[]` | array<Tag> | No | Tags. |
 | `Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Type` | string | See service validation | Type. |
-| `Schema[].BizAttr` | string | See service validation | Biz attr. |
-| `Schema[].IsPK` | bool | See service validation | Is pk. |
+| `Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Schema[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Schema[].Required` | bool | See service validation | Required. |
 | `Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
 | `Schema[].IsReadOnly` | bool | See service validation | Is read only. |
@@ -112,8 +112,8 @@ message EnumerateMetaV2{
 | `Tags[].Value` | string | See service validation | Value. |
 | `Schema[].Fields[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Fields[].Type` | string | See service validation | Type. |
-| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. |
-| `Schema[].Fields[].IsPK` | bool | See service validation | Is pk. |
+| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Schema[].Fields[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Schema[].Fields[].Required` | bool | See service validation | Required. |
 | `Schema[].Fields[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
 | `Schema[].Fields[].IsReadOnly` | bool | See service validation | Is read only. |
@@ -135,8 +135,8 @@ message EnumerateMetaV2{
 | `Dataset.FieldDescMap` | map<string, string> | See service validation | Field desc map. |
 | `Dataset.Description` | string | See service validation | Description. |
 | `Dataset.SchemaVersion` | int64 | See service validation | Schema version. |
-| `Dataset.UpdatedTime` | string | See service validation | Updated time. |
-| `Dataset.CreatedTime` | string | See service validation | Created time. |
+| `Dataset.UpdateTime` | string | See service validation | Updated time. |
+| `Dataset.CreateTime` | string | See service validation | Created time. |
 | `Dataset.UpdatedBy` | string | See service validation | Updated by. |
 | `Dataset.Tag` | string | See service validation | Tag. |
 | `Dataset.Language` | string | See service validation | Language. |
@@ -146,8 +146,8 @@ message EnumerateMetaV2{
 | `Dataset.Tags[]` | array<Tag> | No | Tags. |
 | `Dataset.Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Dataset.Schema[].Type` | string | See service validation | Type. |
-| `Dataset.Schema[].BizAttr` | string | See service validation | Biz attr. |
-| `Dataset.Schema[].IsPK` | bool | See service validation | Is pk. |
+| `Dataset.Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Dataset.Schema[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Dataset.Schema[].Required` | bool | See service validation | Required. |
 | `Dataset.Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
 | `Dataset.Schema[].IsReadOnly` | bool | See service validation | Is read only. |

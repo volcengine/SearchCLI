@@ -81,12 +81,12 @@ async function runV2OnboardingPipeline({ runCli, startV2MockServer, fixturesDir,
         if (inferPolls === 1) {
           return {
             ResponseMetadata: { RequestId: `req-infer-poll-${flavor}-${inferPolls}` },
-            Result: { Status: 'Running' }
+            Result: { Status: 'processing' }
           };
         }
         return {
           ResponseMetadata: { RequestId: `req-infer-poll-${flavor}-${inferPolls}` },
-          Result: { Status: 'Success', ...inferResultFixture }
+          Result: { Status: 'success', ...inferResultFixture }
         };
       },
       CreateDatasetV2: ({ body }) => {

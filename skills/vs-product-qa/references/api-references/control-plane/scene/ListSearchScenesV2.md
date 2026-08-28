@@ -119,7 +119,7 @@ message FilterConfigV2 {
 }
 
 message AuxiliaryPoolsConfig {
-  repeated dataset.DatasetFilter Pools = 1;
+  repeated search_scene.DatasetFilter Pools = 1;
 }
 
 message PersonalizedRecall {

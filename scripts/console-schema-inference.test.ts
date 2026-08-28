@@ -54,14 +54,14 @@ VikingOpenApiClient.prototype.post = async function mockPost<T = unknown>(
     if (pollCount === 1) {
       return {
         Result: {
-          Status: 'Processing'
+          Status: 'processing'
         }
       } as T;
     }
 
     return {
       Result: {
-        Status: 'Success',
+        Status: 'success',
         Schema: [
           {
             Name: 'item_id',

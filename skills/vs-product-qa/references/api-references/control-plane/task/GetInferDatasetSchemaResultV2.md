@@ -23,6 +23,7 @@ message GetInferDatasetSchemaResultRespV2 {
 
   string DatasetName = 6;
   string DatasetDescription = 7;
+  map<string, string> FieldDescMap = 8;
 }
 
 message DatasetSchemaFieldV2 {
@@ -30,7 +31,7 @@ message DatasetSchemaFieldV2 {
   string Name = 2 [(api.vd) = "regexp('^[a-zA-Z][a-zA-Z0-9_]{0,127}$'); msg:sprintf('berror(InvalidSchemaFieldName, \"%v\")', $)"];
   string Type = 3;
   string BizAttr = 4;
-  bool IsPK = 5;
+  bool IsPrimaryKey = 5;
   bool Required = 6;
   repeated EnumerateMetaV2 EnumerateMeta = 7;
 
@@ -45,7 +46,6 @@ message DataFieldConfigV2 {
   repeated string VideoIndexFields = 5;
   repeated string ChatFields = 6;
   map<string, FilterFieldsListV2> FilterFieldsMap = 7;
-  map<string, string> FieldDescMap = 8;
   repeated AugmentedFieldV2 AugmentedFields = 9;
 }
 
@@ -81,17 +81,18 @@ message AugmentedFieldV2 {
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `Status` | string | See service validation | Status. |
+| `Status` | string | See service validation | Status. Enum: `pending` / `processing` / `success` / `failed` / `canceled`. |
 | `Schema[]` | array<DatasetSchemaFieldV2> | No | Schema. |
 | `DataFieldConfig` | DataFieldConfigV2 | See service validation | Data field config. |
 | `Error` | string | See service validation | Error. |
 | `ErrorCode` | string | See service validation | Error code. |
 | `DatasetName` | string | See service validation | Dataset name. |
 | `DatasetDescription` | string | See service validation | Dataset description. |
+| `FieldDescMap` | map<string, string> | See service validation | Field desc map (top-level). |
 | `Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Type` | string | See service validation | Type. |
-| `Schema[].BizAttr` | string | See service validation | Biz attr. |
-| `Schema[].IsPK` | bool | See service validation | Is pk. |
+| `Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`, `title`, `description`). |
+| `Schema[].IsPrimaryKey` | bool | See service validation | Is primary key. |
 | `Schema[].Required` | bool | See service validation | Required. |
 | `Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
 | `Schema[].IsReadOnly` | bool | See service validation | Is read only. |
@@ -102,22 +103,21 @@ message AugmentedFieldV2 {
 | `DataFieldConfig.VideoIndexFields[]` | array<string> | No | Video index fields. |
 | `DataFieldConfig.ChatFields[]` | array<string> | No | Chat fields. |
 | `DataFieldConfig.FilterFieldsMap` | map<string, FilterFieldsListV2> | See service validation | Filter fields map. |
-| `DataFieldConfig.FieldDescMap` | map<string, string> | See service validation | Field desc map. |
 | `DataFieldConfig.AugmentedFields[]` | array<AugmentedFieldV2> | No | Augmented fields. |
 | `Schema[].Fields[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Fields[].Type` | string | See service validation | Type. |
-| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. |
-| `Schema[].Fields[].IsPK` | bool | See service validation | Is pk. |
+| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case. |
+| `Schema[].Fields[].IsPrimaryKey` | bool | See service validation | Is primary key. |
 | `Schema[].Fields[].Required` | bool | See service validation | Required. |
 | `Schema[].Fields[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
 | `Schema[].Fields[].IsReadOnly` | bool | See service validation | Is read only. |
 | `Schema[].EnumerateMeta[].EnumerateValue` | string | See service validation | Enumerate value. |
 | `Schema[].EnumerateMeta[].Name` | string | See service validation | Name. |
-| `Schema[].EnumerateMeta[].EnumerateBizAttr` | string | See service validation | Enumerate biz attr. |
+| `Schema[].EnumerateMeta[].EnumerateBizAttr` | string | See service validation | Enumerate biz attr. Enum values are snake_case (e.g. `exposure`, `click`). |
 | `Schema[].EnumerateMeta[].Required` | bool | See service validation | Required. |
 | `DataFieldConfig.FilterFieldsMap.Fields[]` | array<string> | No | Fields. |
 | `DataFieldConfig.AugmentedFields[].FieldName` | string | See service validation | Field name. |
-| `DataFieldConfig.AugmentedFields[].FieldType` | string | See service validation | Field type. |
+| `DataFieldConfig.AugmentedFields[].FieldType` | string | See service validation | Field type. Enum values are snake_case (e.g. `search_queries`, `item_summary`, `doc_chunk_id`). |
 | `DataFieldConfig.AugmentedFields[].SourceFields[]` | array<string> | No | Source fields. |
 | `DataFieldConfig.AugmentedFields[].MaxGenerationNum` | int32 | See service validation | Max generation num. |
 | `DataFieldConfig.AugmentedFields[].SystemPrompt` | string | See service validation | System prompt. |

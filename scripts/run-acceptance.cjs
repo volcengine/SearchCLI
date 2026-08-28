@@ -1670,7 +1670,7 @@ async function testDatasetIngestDryRun() {
         if (inferPolls < 1) {
           return {
             ResponseMetadata: { RequestId: `req-infer-poll-${inferPolls}` },
-            Result: { Status: 'Running' }
+            Result: { Status: 'processing' }
           };
         }
         return {
@@ -1945,10 +1945,10 @@ async function testDatasetInferResultMock() {
 
 async function testDatasetInferResultRenderSchemaMixed() {
   const mixedResult = {
-    Status: 'Success',
+    Status: 'success',
     Schema: [
-      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'QueryPK', IsPK: true, Required: true },
-      { Name: 'title', Type: 'string', BizAttr: 'Title', Required: false },
+      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'query_pk', IsPrimaryKey: true, Required: true },
+      { Name: 'title', Type: 'string', BizAttr: 'title', Required: false },
       { Name: 'tags', FieldType: 'array<string>' },
       { FieldName: 'price', Type: 'float' }
     ],
@@ -1967,9 +1967,9 @@ async function testDatasetInferResultRenderSchemaMixed() {
   return runInferResultRenderSchema(mixedResult, ({ stdout }) => {
     assert.match(stdout, /vs-schema-confirm: BEGIN/);
     assert.match(stdout, /Field count: 4/);
-    assert.match(stdout, /Primary key: item_id \(BizAttr=QueryPK\)/);
+    assert.match(stdout, /Primary key: item_id \(BizAttr=query_pk\)/);
     assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
-    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+QueryPK\s+\|\s+yes\s+\|\s+Primary key/);
+    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+query_pk\s+\|\s+yes\s+\|\s+Primary key/);
     assert.match(stdout, /tags\s+\|\s+`array<string>`\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
     assert.match(stdout, /price\s+\|\s+`float`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
     assert.match(stdout, /FieldDescMap is missing entries for: price/);
@@ -1979,7 +1979,7 @@ async function testDatasetInferResultRenderSchemaMixed() {
 
 async function testDatasetInferResultRenderSchemaDegenerate() {
   const degenerate = {
-    Status: 'Success',
+    Status: 'success',
     Schema: [
       { FieldName: 'doc_id', FieldType: 'string' },
       { FieldName: 'body', FieldType: 'string' }
@@ -1998,10 +1998,10 @@ async function testDatasetInferResultRenderSchemaDegenerate() {
 
 async function testDatasetInferResultRenderSchemaNoDataConfig() {
   const noDataConfig = {
-    Status: 'Success',
+    Status: 'success',
     Schema: [
-      { FieldName: 'video_id', FieldType: 'string', BizAttr: 'VideoContentID', IsPK: true },
-      { FieldName: 'cover', FieldType: 'string', BizAttr: 'ImagePK' }
+      { FieldName: 'video_id', FieldType: 'string', BizAttr: 'video_content_id', IsPrimaryKey: true },
+      { FieldName: 'cover', FieldType: 'string', BizAttr: 'image_pk' }
     ],
     FieldDescMap: {
       video_id: 'Primary key',
@@ -2010,7 +2010,7 @@ async function testDatasetInferResultRenderSchemaNoDataConfig() {
   };
   return runInferResultRenderSchema(noDataConfig, ({ stdout }) => {
     assert.match(stdout, /Field count: 2/);
-    assert.match(stdout, /Primary key: video_id \(BizAttr=VideoContentID\)/);
+    assert.match(stdout, /Primary key: video_id \(BizAttr=video_content_id\)/);
     assert.match(stdout, /IndexFields:\s+\(none\)/);
     assert.match(stdout, /FilterFields:\s+\(none\)/);
     assert.match(stdout, /SuggestFields:\s+\(none\)/);
@@ -2050,7 +2050,7 @@ async function testDatasetInferResultRenderSchemaStability() {
       assert.equal(outputs[i], outputs[0], `render-schema output drifted across runs (run ${i + 1})`);
     }
     assert.match(outputs[0], /vs-schema-confirm: BEGIN/);
-    assert.match(outputs[0], /Primary key: item_id \(BizAttr=QueryPK\)/);
+    assert.match(outputs[0], /Primary key: item_id \(BizAttr=query_pk\)/);
     assert.match(outputs[0], /Field count: 7/);
     return `${command.prefix} dataset infer-result --render-schema (5x stability)`;
   } finally {

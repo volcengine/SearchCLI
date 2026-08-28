@@ -2302,8 +2302,8 @@ USAGE
   vs dataset infer-result --data @infer-result.json [service flags]
 
 DESCRIPTION
-  Returns the current Status (Pending|Running|Success|Failed) along with Schema / FieldDescMap /
-  DataFieldConfig when Status is Success. This is a single-shot call; \`dataset ingest\` performs
+  Returns the current Status (pending|processing|success|failed|canceled) along with Schema / FieldDescMap /
+  DataFieldConfig when Status is success. This is a single-shot call; \`dataset ingest\` performs
   the polling internally.
 
   To render a human-readable schema confirmation block (fields table, field roles, warnings),
@@ -4907,7 +4907,7 @@ function summarizeDatasetRecord(dataset: Record<string, unknown>): Record<string
     filterFields: asStringArray(dataFieldConfig?.FilterFields),
     suggestFields: asStringArray(dataFieldConfig?.SuggestFields),
     imageIndexFields: asStringArray(dataFieldConfig?.ImageIndexFields),
-    fields: summarizeDatasetFields(asObjectArray(dataset.Schema), dataFieldConfig),
+    fields: summarizeDatasetFields(asObjectArray(dataset.Schema), dataFieldConfig, isRecord(dataset.FieldDescMap) ? dataset.FieldDescMap : undefined),
     updatedAt: dataset.UpdatedAt,
     createdAt: dataset.CreatedAt
   });
@@ -5020,8 +5020,8 @@ function summarizeAppOnlineConfigResponse(response: Record<string, unknown>, app
   };
 }
 
-function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?: Record<string, unknown>): Array<Record<string, unknown>> {
-  const fieldDescriptions = isRecord(config?.FieldDescMap) ? config.FieldDescMap : undefined;
+function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?: Record<string, unknown>, fieldDescMap?: Record<string, unknown>): Array<Record<string, unknown>> {
+  const fieldDescriptions = isRecord(fieldDescMap) ? fieldDescMap : undefined;
   const indexFields = new Set(asStringArray(config?.IndexFields));
   const filterFields = new Set(asStringArray(config?.FilterFields));
   const suggestFields = new Set(asStringArray(config?.SuggestFields));
@@ -5030,7 +5030,7 @@ function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?:
   return schema.map(field => {
     const name = String(field.Name ?? '');
     const roles = [];
-    if (readBoolean(field, ['Metadata', 'IsPK'])) roles.push('primary_key');
+    if (readBoolean(field, ['Metadata', 'IsPrimaryKey'])) roles.push('primary_key');
     if (indexFields.has(name)) roles.push('index');
     if (filterFields.has(name)) roles.push('filter');
     if (suggestFields.has(name)) roles.push('suggest');
@@ -5045,7 +5045,7 @@ function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?:
       typeCode: toInteger(field.Type),
       description,
       meaning: hasNonEmptyString(field.Meaning) ? String(field.Meaning) : undefined,
-      primaryKey: readBoolean(field, ['Metadata', 'IsPK']) || undefined,
+      primaryKey: readBoolean(field, ['Metadata', 'IsPrimaryKey']) || undefined,
       required: typeof field.Required === 'boolean' ? field.Required : undefined,
       readOnly: readBoolean(field, ['Metadata', 'IsReadOnly']) || undefined,
       bizAttrCode: bizAttrCode && bizAttrCode > 0 ? bizAttrCode : undefined,
@@ -5191,12 +5191,10 @@ function requireNonEmptyObject(value: unknown, message: string): void {
 
 export function validateFieldDescriptions(payload: unknown): void {
   if (!isRecord(payload)) return;
-  const fieldConfig = isRecord(payload.DataFieldConfig) ? payload.DataFieldConfig : isRecord(payload.DataConfig) ? payload.DataConfig : undefined;
-  if (!fieldConfig) return;
-  const fieldDescMap = isRecord(fieldConfig.FieldDescMap) ? fieldConfig.FieldDescMap : undefined;
+  const fieldDescMap = isRecord(payload.FieldDescMap) ? payload.FieldDescMap : undefined;
   if (!fieldDescMap || Object.keys(fieldDescMap).length === 0) {
     throw new Error(
-      'DataFieldConfig.FieldDescMap must contain at least one field description. ' +
+      'FieldDescMap must contain at least one field description. ' +
       'Add field descriptions to improve search quality and data discoverability.'
     );
   }

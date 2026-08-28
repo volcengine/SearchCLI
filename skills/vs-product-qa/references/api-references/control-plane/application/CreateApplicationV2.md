@@ -43,8 +43,8 @@ message ApplicationV2 {
   string Description = 5;
   IconV2 Icon = 6;
   string Industry = 7;
-  string CreatedTime = 8;
-  string UpdatedTime = 9;
+  string CreateTime = 8;
+  string UpdateTime = 9;
   string UpdatedBy = 10;
   string PostPaidType = 11;
   repeated volcengine_api.Tag Tags = 100;
@@ -76,13 +76,13 @@ message ApplicationV2 {
 | `Application` | ApplicationV2 | See service validation | Application. |
 | `Application.Id` | string | See service validation | Id. |
 | `Application.Name` | string | See service validation | Name. |
-| `Application.Status` | string | See service validation | Status. |
+| `Application.Status` | string | See service validation | Status. Enum: `init` / `not_ready` / `ready` / `deleting` / `deleted` (snake_case). |
 | `Application.Language` | string | See service validation | Language. |
 | `Application.Description` | string | See service validation | Description. |
 | `Application.Icon` | IconV2 | See service validation | Icon. |
 | `Application.Industry` | string | See service validation | Industry. |
-| `Application.CreatedTime` | string | See service validation | Created time. |
-| `Application.UpdatedTime` | string | See service validation | Updated time. |
+| `Application.CreateTime` | string | See service validation | Created time. |
+| `Application.UpdateTime` | string | See service validation | Updated time. |
 | `Application.UpdatedBy` | string | See service validation | Updated by. |
 | `Application.PostPaidType` | string | See service validation | Post paid type. |
 | `Application.Tags[]` | array<Tag> | No | Tags. |
