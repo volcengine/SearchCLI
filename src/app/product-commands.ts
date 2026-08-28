@@ -2069,7 +2069,7 @@ COMMON FLAGS
 
 USAGE
   vs dataset import-url --file-name <basename>
-  vs dataset infer-schema --tos-key <FileKey> --type <item|video> --industry <type> --language <lang>
+  vs dataset infer-schema --tos-key <FileKey> --type <user_event|multi_modal> --industry <type> --language <lang>
   vs dataset infer-result --task-id <TaskID>
   vs dataset create --data @dataset-create.json
   vs data write --dataset-id <DatasetId> --fields @items.json
@@ -2209,8 +2209,8 @@ KEY FLAGS
   --dry-run                 Validate the payload server-side without persisting the dataset.
 
 EXAMPLES
-  vs dataset create --name demo-items --type item --schema @schema.json
-  vs dataset create --name demo-items --type item --schema @schema.json --industry e_commerce --language zh --theme catalog
+  vs dataset create --name demo-items --type multi_modal --schema @schema.json
+  vs dataset create --name demo-items --type multi_modal --schema @schema.json --industry e_commerce --language zh --theme catalog
   vs dataset create --data @dataset-create.json
   vs item plan --file ./items.json --type item --goal "Build item search" --skip-app
   vs dataset create --data ./.viking/item-plans/<plan>/dataset-create.json`,
@@ -2282,11 +2282,11 @@ KEY FLAGS
 
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --language zh
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run
+  vs dataset ingest --file ./items.jsonl --type multi_modal --industry e_commerce --language zh
+  vs dataset ingest --file ./items.jsonl --type multi_modal --industry e_commerce --dry-run
   vs dataset ingest --file ./products.jsonl --type multi_modal --theme e_commerce --abnormal-image-policy skip --industry e_commerce --language zh
   vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
-  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type item --dataset-name demo-items`,
+  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type multi_modal --dataset-name demo-items`,
     'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
 
 USAGE
@@ -2325,8 +2325,8 @@ KEY FLAGS
   --project-name   Viking project name when the API requires project scoping.
 
 EXAMPLES
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item --industry e_commerce --language zh`,
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal --industry e_commerce --language zh`,
     'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
 
 USAGE

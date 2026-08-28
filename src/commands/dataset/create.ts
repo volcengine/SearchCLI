@@ -10,8 +10,8 @@ export default class DatasetCreate extends Command {
     'Create a Viking dataset via V2 CreateDatasetV2. For plan-driven onboarding, prefer `--data @dataset-create.json` so Schema, DataFieldConfig, and FieldDescMap stay together; use the inline flags for the manual schema path.';
 
   static override examples = [
-    '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json',
-    '<%= config.bin %> dataset create --name demo-items --type item --schema-json @schema.json --field-desc-map @field-desc-map.json --industry ecommerce --dry-run',
+    '<%= config.bin %> dataset create --name demo-items --type multi_modal --schema-json @schema.json',
+    '<%= config.bin %> dataset create --name demo-items --type multi_modal --schema-json @schema.json --field-desc-map @field-desc-map.json --industry ecommerce --dry-run',
     '<%= config.bin %> dataset create --name demo-mm --type multi_modal --theme e_commerce --schema-json @schema.json --industry ecommerce --language zh --abnormal-image-policy skip',
     '<%= config.bin %> dataset create --data @dataset-create.json'
   ];

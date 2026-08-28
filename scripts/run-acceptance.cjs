@@ -118,8 +118,8 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
   await runTest('v2-dataset-infer-schema-mock', testDatasetInferSchemaMock);
   await runTest('v2-dataset-infer-schema-rejects-document', testDatasetInferSchemaRejectsDocument);
-  await runTest('v2-dataset-infer-schema-rejects-multi-modal', testDatasetInferSchemaRejectsMultiModal);
-  await runTest('v2-dataset-create-rejects-multi-modal', testDatasetCreateRejectsMultiModal);
+  await runTest('v2-dataset-infer-schema-rejects-legacy-type', testDatasetInferSchemaRejectsLegacyType);
+  await runTest('v2-dataset-create-rejects-legacy-type', testDatasetCreateRejectsLegacyType);
   await runTest('v2-dataset-infer-result-mock', testDatasetInferResultMock);
   await runTest('v2-dataset-infer-result-render-schema-mixed', testDatasetInferResultRenderSchemaMixed);
   await runTest('v2-dataset-infer-result-render-schema-degenerate', testDatasetInferResultRenderSchemaDegenerate);
@@ -1631,7 +1631,7 @@ async function testDatasetCreateDryRun() {
     assert.equal(state.requests[0].kind, 'control-plane');
     assert.equal(state.requests[0].action, 'CreateDatasetV2');
     assert.equal(state.requests[0].body.DryRun, true);
-    assert.equal(state.requests[0].body.Type, 'item');
+    assert.equal(state.requests[0].body.Type, 'multi_modal');
     assert.equal(state.requests[0].body.Industry, 'e_commerce');
     assert.match(stdout, /req-create-dry-run/);
     return `${command.prefix} dataset create --data @${tempPath}`;
@@ -1781,7 +1781,7 @@ async function testDatasetIngestDryRun() {
         '--file',
         fixture,
         '--type',
-        'item',
+        'multi_modal',
         '--industry',
         'e_commerce',
         '--language',
@@ -1804,7 +1804,7 @@ async function testDatasetIngestDryRun() {
     assert.equal(uploadCallCount, 1, 'expected exactly one upload PUT');
     const createCall = state.requests.find(req => req.action === 'CreateDatasetV2');
     assert.equal(createCall.body.DryRun, true);
-    assert.equal(createCall.body.Type, 'item');
+    assert.equal(createCall.body.Type, 'multi_modal');
     assert.match(stdout, /dry_run/i);
     return `${command.prefix} dataset ingest --file items.jsonl --dry-run`;
   } finally {
@@ -1871,7 +1871,7 @@ async function testDatasetInferSchemaMock() {
         '--tos-key',
         'onboarding/items.jsonl',
         '--type',
-        'item',
+        'multi_modal',
         '--industry',
         'ecommerce',
         '--language',
@@ -1886,11 +1886,11 @@ async function testDatasetInferSchemaMock() {
     const call = state.requests[0];
     assert.equal(call.action, 'AddInferDatasetSchemaTaskV2');
     assert.equal(call.body.TosKey, 'onboarding/items.jsonl');
-    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Type, 'multi_modal');
     assert.equal(call.body.Industry, 'e_commerce');
     assert.equal(call.body.Language, 'zh');
     assert.match(stdout, /task_xyz/);
-    return `${command.prefix} dataset infer-schema --tos-key ... --type item`;
+    return `${command.prefix} dataset infer-schema --tos-key ... --type multi_modal`;
   } finally {
     await server.close();
   }
@@ -1922,14 +1922,14 @@ async function testDatasetInferSchemaRejectsDocument() {
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      pattern: /(not allowed here|Invalid dataset Type).*document.*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
   return `${command.prefix} dataset infer-schema --type document (rejected)`;
 }
 
-async function testDatasetInferSchemaRejectsMultiModal() {
+async function testDatasetInferSchemaRejectsLegacyType() {
   await expectCliRejection(
     [
       'dataset',
@@ -1937,34 +1937,34 @@ async function testDatasetInferSchemaRejectsMultiModal() {
       '--tos-key',
       'onboarding/items.jsonl',
       '--type',
-      'multi_modal',
+      'item',
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      pattern: /(not allowed here|Invalid dataset Type).*item.*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
-  return `${command.prefix} dataset infer-schema --type multi_modal (rejected)`;
+  return `${command.prefix} dataset infer-schema --type item (rejected)`;
 }
 
-async function testDatasetCreateRejectsMultiModal() {
+async function testDatasetCreateRejectsLegacyType() {
   await expectCliRejection(
     [
       'dataset',
       'create',
       '--name',
-      'demo-mm',
+      'demo-legacy',
       '--type',
-      'multi_modal',
+      'item',
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event.*document/i,
+      pattern: /(not allowed here|Invalid dataset Type).*item.*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
-  return `${command.prefix} dataset create --type multi_modal (rejected)`;
+  return `${command.prefix} dataset create --type item (rejected)`;
 }
 
 async function testDatasetInferResultMock() {
@@ -2170,7 +2170,7 @@ async function testDatasetCreateMock() {
     assert.equal(state.requests.length, 1);
     const call = state.requests[0];
     assert.equal(call.action, 'CreateDatasetV2');
-    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Type, 'multi_modal');
     assert.equal(call.body.Industry, 'e_commerce');
     assert.equal(call.body.Name, 'acc-items');
     assert.ok(Array.isArray(call.body.Schema));

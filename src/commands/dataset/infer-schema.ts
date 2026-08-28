@@ -10,7 +10,7 @@ export default class DatasetInferSchema extends Command {
     'Submit a V2 dataset schema inference task for an uploaded file (TOS key). Prints the TaskID; poll with `vs dataset infer-result --task-id <id>`.';
 
   static override examples = [
-    '<%= config.bin %> dataset infer-schema --tos-key imports/items.jsonl --type item --name demo-items --industry ecommerce',
+    '<%= config.bin %> dataset infer-schema --tos-key imports/items.jsonl --type multi_modal --name demo-items --industry ecommerce',
     '<%= config.bin %> dataset infer-schema --tos-key imports/products.jsonl --type multi_modal --theme e_commerce --industry ecommerce --language zh'
   ];
 
