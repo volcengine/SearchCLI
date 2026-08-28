@@ -28,14 +28,6 @@ import {
   USER_EVENT_TYPE_ENUMERATES,
   USER_EVENT_REQUIRED_FIELDS,
 } from '../core/types';
-import {
-  runItemApplyCommand,
-  runItemPlanCommand,
-  runItemProfileCommand,
-  runItemProvisionCommand,
-  runItemReviewCommand,
-  runItemVerifyCommand
-} from './item-commands';
 import { runDataImportShortcutCommand } from './shortcut-commands';
 import {
   runAppDatasetBindWorkflowCommand,
@@ -1903,13 +1895,6 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runPurchaseCli(argv);
       return true;
-    case 'item':
-      if (isDomainHelpRequest(argv)) {
-        printDomainHelp(domain);
-        return true;
-      }
-      await runItemCli(argv);
-      return true;
     case 'project':
       if (!isProjectFeatureEnabled()) {
         return false;
@@ -1927,7 +1912,6 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
 
 export function printProductDomainsHelp(): void {
   const publicLines = [
-    'vs item profile|plan|review|provision|verify|apply',
     'vs app create|get|list|delete|update|diagnose|status|wait-ready',
     'vs app dataset bind',
     'vs app dataset-config get|list|update',
@@ -2063,22 +2047,6 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
-    item: `DEPRECATED
-  The legacy V1 \`vs item\` onboarding (profile / plan / review / provision / verify / apply)
-  has been replaced by the V2 \`vs dataset\` + \`vs app\` flow.
-
-USAGE
-  vs dataset import-url --file-name <basename>
-  vs dataset infer-schema --tos-key <FileKey> --type <item|video> --industry <type> --language <lang>
-  vs dataset infer-result --task-id <TaskID>
-  vs dataset create --data @dataset-create.json
-  vs data write --dataset-id <DatasetId> --fields @items.json
-  vs app create --name <name> --industry <type> --language <lang>
-  vs app attach-dataset --data @attach.json
-
-MORE HELP
-  vs dataset --help
-  vs app --help`,
     search: `${renderUsageBlock(
       [
         'vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
@@ -2693,136 +2661,6 @@ EXAMPLES
 
   const key = `${action}:${subAction ?? ''}`;
   console.log(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
-}
-
-function printItemCommandHelp(action: string): void {
-  const helpByAction: Record<string, string> = {
-    plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
-
-USAGE
-  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--schema-source <auto|console|local>] [service flags]
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console [service flags]
-
-DESCRIPTION
-  Use this command to generate the plan artifacts an agent or operator will review before provisioning.
-  For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
-  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow. With
-  \`--schema-source console\`, the plan first runs the signed-upload + remote schema inference chain.
-
-KEY FLAGS
-  --file               Source JSON array, JSONL, or CSV file.
-  --type               Dataset type: item or video. Pass it explicitly for video data.
-  --goal               Business goal carried into generated reports and payload descriptions.
-  --output-dir         Custom directory for plan artifacts.
-  --dataset-name       Override the generated dataset name.
-  --application-name   Override the generated application name.
-  --skip-app           Generate a dataset-only plan without app creation artifacts.
-  --schema-source      auto uses console inference when auth is available; console requires it; local keeps the legacy local-only schema path.
-  --project-name       Project name for the console OpenAPI chain when remote inference is used.
-  --ak --sk --region   Service auth used by remote schema inference when \`schema-source\` is auto/console.
-
-EXAMPLES
-  vs item plan --file ./items.json --output-dir ./.viking/item-plan
-  vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app --schema-source console`,
-    apply: `Compatibility wrapper around item provision / verify.
-
-USAGE
-  vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
-  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase verify [workflow flags]
-  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase all --confirm-review [workflow flags]
-
-DESCRIPTION
-  Defaults to \`phase=provision\` unless \`--run-trials\` or \`--phase all\` is passed. Use
-  \`--confirm-review\` for a real apply after schema and bind-time field config review. Use
-  \`--skip-app\` to stop at dataset provisioning when you need to preserve the dataset-only boundary.
-
-KEY FLAGS
-  --plan-dir                        Directory containing plan.json and generated artifacts.
-  --phase                           Execution phase: provision, verify, or all.
-  --confirm-review                  Required for a real apply path.
-  --interactive-review              Render review summary and continue interactively.
-  --skip-app                        Skip app creation and app-level setup.
-  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
-  --run-trials                      Legacy alias for \`--phase all\`.
-  --dry-run                         Print planned actions without calling Viking APIs.
-
-EXAMPLES
-  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review
-  vs item apply --plan-dir ./.viking/item-plans/demo --phase verify
-  vs item apply --plan-dir ./.viking/item-plans/demo --phase all --confirm-review
-  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
-    provision: `Provision item onboarding resources up to dataset binding and activation start.
-
-USAGE
-  vs item provision --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
-  vs item provision --plan-dir ./.viking/item-plans/<plan> --interactive-review [workflow flags]
-  vs item provision --plan-dir ./.viking/item-plans/<plan> --dry-run [workflow flags]
-
-DESCRIPTION
-  Stage-one provisioning command. It creates or reuses the dataset and, unless \`--skip-app\` is passed,
-  continues through app creation and dataset binding. It does not wait for runtime readiness or run
-  search/chat verification.
-
-KEY FLAGS
-  --plan-dir                        Directory containing plan.json and generated artifacts.
-  --confirm-review                  Required for real provisioning after review is complete.
-  --interactive-review              Render review summary and continue interactively.
-  --skip-app                        Stop after dataset provisioning and skip app-level binding.
-  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
-  --dry-run                         Print planned actions without calling Viking APIs.
-
-EXAMPLES
-  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review
-  vs item provision --plan-dir ./.viking/item-plans/demo --interactive-review
-  vs item provision --plan-dir ./.viking/item-plans/demo --dry-run
-  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
-    verify: `Wait until provisioned item data becomes searchable, then run runtime verification.
-
-USAGE
-  vs item verify --plan-dir ./.viking/item-plans/<plan> [workflow flags]
-  vs item verify --plan-dir ./.viking/item-plans/<plan> --search-query "wireless headphones" [workflow flags]
-  vs item verify --plan-dir ./.viking/item-plans/<plan> --skip-chat [workflow flags]
-
-DESCRIPTION
-  Use this after provisioning to wait for indexing and run search/chat smoke checks. You can override
-  the generated search query or chat message, skip individual runtime checks, or bootstrap recommend
-  verification when the required recommend flags are present.
-
-KEY FLAGS
-  --plan-dir             Directory containing plan.json and provision artifacts.
-  --wait-indexed         Wait for dataset/app searchability before runtime checks.
-  --search-query         Override the generated search smoke query.
-  --chat-message         Override the generated chat smoke message.
-  --skip-search          Skip runtime search smoke.
-  --skip-chat            Skip runtime chat smoke.
-  --dry-run              Print planned verify actions without calling Viking APIs.
-
-EXAMPLES
-  vs item verify --plan-dir ./.viking/item-plans/demo
-  vs item verify --plan-dir ./.viking/item-plans/demo --search-query "wireless headphones"
-  vs item verify --plan-dir ./.viking/item-plans/demo --skip-chat`,
-    review: `Render the current schema and bind-time field-config summary for a plan.
-
-USAGE
-  vs item review --plan-dir ./.viking/item-plans/<plan> [output flags]
-  vs item review --plan-dir ./.viking/item-plans/<plan> --reviewer alice --review-notes "Reviewed with PM" [output flags]
-
-DESCRIPTION
-  Use this to inspect the current review state and write \`review-confirmation.json\` from the plan's
-  current artifacts. This is a review record command; it does not provision or verify runtime behavior.
-
-KEY FLAGS
-  --plan-dir      Directory containing plan.json and review-confirmation.json.
-  --reviewer      Reviewer name to record.
-  --review-notes  Optional notes to persist in review-confirmation.json.
-
-EXAMPLES
-  vs item review --plan-dir ./.viking/item-plans/demo
-  vs item review --plan-dir ./.viking/item-plans/demo --reviewer alice --review-notes "Reviewed with PM"`,
-  };
-
-  console.log(helpByAction[action] ?? `Unknown item subcommand: ${action}`);
 }
 
 function printSearchCommandHelp(action: string, subAction?: string): void {
@@ -3700,128 +3538,6 @@ async function runDictCli(argv: string[]): Promise<void> {
       return;
     default:
       throw new Error(`Unknown dict subcommand: ${action}`);
-  }
-}
-
-async function runItemCli(argv: string[]): Promise<void> {
-  const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    if (['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
-      printItemCommandHelp(action);
-    } else {
-      printDomainHelp('item');
-    }
-    return;
-  }
-  const values = parseStandaloneOptions(argv.slice(1));
-
-  switch (action) {
-    case 'profile':
-      await runItemProfileCommand({
-        file: requiredString(values.file, '--file'),
-        datasetType: optionalString(values.type) as 'item' | 'video'
-      });
-      return;
-    case 'plan':
-      await runItemPlanCommand({
-        ...toStandaloneServiceOptions(values),
-        file: requiredString(values.file, '--file'),
-        datasetType: optionalString(values.type) as 'item' | 'video',
-        goal: optionalString(values.goal),
-        outputDir: optionalString(values['output-dir']),
-        datasetName: optionalString(values['dataset-name']),
-        applicationName: optionalString(values['application-name']),
-        projectName: optionalString(values['project-name']),
-        skipApp: optionalBoolean(values['skip-app']),
-        schemaSource: optionalString(values['schema-source']) as 'auto' | 'console' | 'local' | undefined,
-        schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
-        schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
-        language: optionalString(values.language)
-      });
-      return;
-    case 'apply':
-      await runItemApplyCommand({
-        ...toStandaloneServiceOptions(values),
-        planDir: requiredString(values['plan-dir'], '--plan-dir'),
-        projectName: optionalString(values['project-name']),
-        applicationId: optionalString(values['application-id']),
-        datasetId: optionalString(values['dataset-id']),
-        applicationName: optionalString(values['application-name']),
-        datasetName: optionalString(values['dataset-name']),
-        phase: optionalString(values.phase) as 'provision' | 'verify' | 'all' | undefined,
-        waitReady: optionalBoolean(values['wait-ready']),
-        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
-        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
-        runTrials: optionalBoolean(values['run-trials']),
-        searchQuery: optionalString(values['search-query']),
-        chatMessage: optionalString(values['chat-message']),
-        confirmReview: optionalBoolean(values['confirm-review']),
-        interactiveReview: optionalBoolean(values['interactive-review']),
-        reviewer: optionalString(values.reviewer),
-        reviewNotes: optionalString(values['review-notes']),
-        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
-        force: optionalBoolean(values.force),
-        recommendSceneType: optionalString(values['recommend-scene-type']),
-        recommendSceneName: optionalString(values['recommend-scene-name']),
-        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
-        recommendUserId: optionalString(values['recommend-user-id']),
-        recommendParentId: optionalString(values['recommend-parent-id']),
-        dryRun: optionalBoolean(values['dry-run'])
-      });
-      return;
-    case 'provision':
-      await runItemProvisionCommand({
-        ...toStandaloneServiceOptions(values),
-        planDir: requiredString(values['plan-dir'], '--plan-dir'),
-        projectName: optionalString(values['project-name']),
-        applicationId: optionalString(values['application-id']),
-        datasetId: optionalString(values['dataset-id']),
-        applicationName: optionalString(values['application-name']),
-        datasetName: optionalString(values['dataset-name']),
-        skipApp: optionalBoolean(values['skip-app']),
-        waitReady: optionalBoolean(values['wait-ready']),
-        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
-        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
-        confirmReview: optionalBoolean(values['confirm-review']),
-        interactiveReview: optionalBoolean(values['interactive-review']),
-        reviewer: optionalString(values.reviewer),
-        reviewNotes: optionalString(values['review-notes']),
-        force: optionalBoolean(values.force),
-        dryRun: optionalBoolean(values['dry-run'])
-      });
-      return;
-    case 'verify':
-      await runItemVerifyCommand({
-        ...toStandaloneServiceOptions(values),
-        planDir: requiredString(values['plan-dir'], '--plan-dir'),
-        projectName: optionalString(values['project-name']),
-        applicationId: optionalString(values['application-id']),
-        datasetId: optionalString(values['dataset-id']),
-        waitIndexed: optionalBoolean(values['wait-indexed']),
-        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
-        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
-        searchQuery: optionalString(values['search-query']),
-        chatMessage: optionalString(values['chat-message']),
-        skipSearch: optionalBoolean(values['skip-search']),
-        skipChat: optionalBoolean(values['skip-chat']),
-        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
-        recommendSceneType: optionalString(values['recommend-scene-type']),
-        recommendSceneName: optionalString(values['recommend-scene-name']),
-        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
-        recommendUserId: optionalString(values['recommend-user-id']),
-        recommendParentId: optionalString(values['recommend-parent-id']),
-        dryRun: optionalBoolean(values['dry-run'])
-      });
-      return;
-    case 'review':
-      await runItemReviewCommand({
-        planDir: requiredString(values['plan-dir'], '--plan-dir'),
-        reviewer: optionalString(values.reviewer),
-        notes: optionalString(values['review-notes'])
-      });
-      return;
-    default:
-      throw new Error(`Unknown item subcommand: ${action}`);
   }
 }
 

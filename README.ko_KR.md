@@ -52,7 +52,6 @@ SearchCLI와 설치 가능한 `Viking skills`를 함께 사용하면 외부 Agen
 
 ## 핵심 기능
 
-- `vs item profile | plan | apply`를 통한 구조화된 item 온보딩.
 - `vs app`, `vs dataset`, `vs data`를 통한 애플리케이션 및 데이터 세트 관리.
 - `vs search run`, `vs recommend run`, `vs chat run`을 통한 런타임 검증.
 - `vs search tune query-generate | plan | run | report`를 통한 초기 버전의 자동 텍스트 유사도 평가 및 튜닝.
@@ -102,49 +101,20 @@ vs search tune llm-check --live --json
 
 ### 3. 첫 온보딩 플로 실행
 
-새 애플리케이션 생성, bind-time 구성 검토, 런타임 검증이 모두 필요하다면 `dataset+app` 경로를 사용합니다.
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-데이터 세트 프로비저닝만 필요하다면 `dataset-only` 경로를 사용하고, `--skip-app`으로 dataset-only plan을 생성한 뒤 dataset create + ingest 이후에 마무리합니다.
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-plan이 `dataset-create.json`을 생성했다면 이 파일을 우선 사용해 `Schema`와 `DataFieldConfig`를 함께 데이터 세트 생성 요청에 포함합니다. 전체 create payload가 없거나 적합하지 않은 경우에는 `--name <dataset-name> --type item --schema @schema.json` 형식을 수동 schema-only 대체 방식으로 사용할 수 있습니다.
+데이터 세트만 필요한 경우(앱 없음), `vs data write` 이후에 중단하세요.
 
-기존 plan에서 dataset-only 경계를 실행 시점에 강제해야 할 때는 `vs item provision`과 `vs item apply`에서도 실행 가드레일로 `--skip-app`을 사용할 수 있습니다.
-
-비디오 데이터 세트가 필요하다면 기본 타입에 의존하지 말고 항상 `--type video`를 명시적으로 전달합니다.
-
-`dataset+app`의 경우:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-`dataset-only`의 경우:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-비디오 dataset-only 프로비저닝에서는 요청에 `DataFieldConfig`가 포함되도록 `dataset-create.json` 사용을 우선합니다. `--schema @schema.json`만 사용하면 `MissingParameter.DefaultFieldStrategy` 오류가 발생할 수 있습니다.
+사용자 이벤트 데이터 세트의 경우 `--type user_event`를 사용하고 `--theme`은 생략하세요.
 
 ## 빠른 시작(AI Agents)
 

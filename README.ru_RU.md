@@ -52,7 +52,6 @@ SearchCLI — это открытый CLI для AI Search on Volcengine.
 
 ## Основные возможности
 
-- `vs item profile | plan | apply` для онбординга структурированных items.
 - `vs app`, `vs dataset` и `vs data` для управления приложениями и датасетами.
 - `vs search run`, `vs recommend run` и `vs chat run` для runtime-проверки.
 - `vs search tune query-generate | plan | run | report` для первой версии автоматической оценки и настройки текстовой похожести.
@@ -102,49 +101,20 @@ vs search tune llm-check --live --json
 
 ### 3. Запуск первого onboarding flow
 
-Если пользователю нужно создать новое приложение, выполнить bind-time review конфигурации и runtime-проверку, используйте путь `dataset+app`:
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Если нужно только подготовить датасет, используйте путь `dataset-only`, создайте dataset-only план с `--skip-app` и завершите после dataset create + ingest:
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-Предпочитайте `dataset-create.json`, если план его создал, чтобы при создании датасета вместе передавались `Schema` и `DataFieldConfig`. Форма `--name <dataset-name> --type item --schema @schema.json` остается ручным schema-only fallback, когда полный create payload недоступен или не подходит.
+Если вам нужен только датасет (без приложения), остановитесь после `vs data write`.
 
-`--skip-app` также поддерживается в `vs item provision` и `vs item apply` как runtime-защита, когда нужно принудительно сохранить границу dataset-only для уже существующего плана.
-
-Если нужен видеодатасет, не полагайтесь на тип по умолчанию. Всегда явно передавайте `--type video`:
-
-Для `dataset+app`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Для `dataset-only`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-Для dataset-only подготовки видеодатасета предпочитайте `dataset-create.json`, чтобы запрос включал `DataFieldConfig`; одного `--schema @schema.json` может быть недостаточно и он может привести к `MissingParameter.DefaultFieldStrategy`.
+Для датасетов пользовательских событий используйте `--type user_event` и не указывайте `--theme`.
 
 ## Быстрый старт (AI Agents)
 

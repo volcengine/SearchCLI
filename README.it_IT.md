@@ -52,7 +52,6 @@ Con SearchCLI e i suoi `Viking skills` installabili, gli Agent esterni possono e
 
 ## Funzionalità principali
 
-- `vs item profile | plan | apply` per l'onboarding di item strutturati.
 - `vs app`, `vs dataset` e `vs data` per la gestione di applicazioni e dataset.
 - `vs search run`, `vs recommend run` e `vs chat run` per la verifica runtime.
 - `vs search tune query-generate | plan | run | report` per una prima versione di valutazione e tuning automatizzati della similarità testuale.
@@ -102,49 +101,20 @@ Se la shell corrente ha già `VIKING_LLM_BASE_URL`, `VIKING_LLM_API_KEY` e `VIKI
 
 ### 3. Eseguire il primo flusso di onboarding
 
-Se l'utente vuole una nuova app con revisione della configurazione al momento del bind e verifica runtime, usa il percorso `dataset+app`:
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Se hai bisogno solo del provisioning del dataset, usa il percorso `dataset-only`, genera un piano dataset-only con `--skip-app` e fermati dopo dataset create + ingest:
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-Preferisci `dataset-create.json` quando il piano lo genera, così la creazione del dataset mantiene insieme `Schema` e `DataFieldConfig`. La forma `--name <dataset-name> --type item --schema @schema.json` resta il fallback manuale schema-only quando un payload di creazione completo non è disponibile o non è adatto.
+Se ti serve solo un dataset (nessuna app), fermati dopo `vs data write`.
 
-`--skip-app` è accettato anche da `vs item provision` e `vs item apply` come guard rail di esecuzione quando devi imporre il limite dataset-only da un piano esistente.
-
-Se hai bisogno di un dataset video, non fare affidamento sul tipo predefinito. Passa sempre esplicitamente `--type video`:
-
-Per `dataset+app`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Per `dataset-only`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-Per il provisioning dataset-only di dataset video, preferisci `dataset-create.json` così la richiesta include `DataFieldConfig`; usare solo `--schema @schema.json` può fallire con `MissingParameter.DefaultFieldStrategy`.
+Per i dataset di eventi utente, usa `--type user_event` e ometti `--theme`.
 
 ## Avvio rapido (AI Agents)
 

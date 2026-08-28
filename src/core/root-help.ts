@@ -47,7 +47,6 @@ export function printRootHelp(): void {
     "vs <command> --help",
     "vs dataset --help",
     "vs app --help",
-    "vs item --help",
     "vs connector --help",
     ...(projectEnabled ? ["vs project --help"] : []),
     "vs skill --help",
