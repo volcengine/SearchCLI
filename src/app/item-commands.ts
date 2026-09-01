@@ -16,10 +16,10 @@ import {
   normalizeFieldConfigForApi,
   normalizeSchemaForApi,
   type ItemApplyPlanOptions,
-  type ItemTypeResultMode,
   type ItemPlanFile,
   type ItemReviewConfirmationFile
 } from '../core/item-onboarding';
+import { type ItemTypeResultMode } from '../core/item-type-filter';
 import { printOutput } from '../core/output-format';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';

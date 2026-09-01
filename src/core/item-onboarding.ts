@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ensureDir, slugify, writeJson, writeText } from './files';
+import { buildItemTypeFilterConfig, normalizeItemTypeResultMode, type ItemTypeResultMode } from './item-type-filter';
 import { inferSchemaMetadataWithPrompt } from './schema-prompt-inference';
 
 export type ItemSourceFormat = 'json' | 'jsonl' | 'csv';
@@ -244,8 +245,6 @@ interface PromptInferenceMetadata {
   notUseFields?: string[];
   attrFields?: Record<string, string[]>;
 }
-
-export type ItemTypeResultMode = 'variant' | 'parent';
 
 const STRONG_PRIMARY_KEY_NAMES = {
   item: [
@@ -1721,40 +1720,6 @@ function buildRecommendSceneUpdateArtifact(
       FilterConfig: itemTypeFilterConfig ? { ItemTypeFilter: itemTypeFilterConfig } : undefined
     })
   };
-}
-
-function buildItemTypeFilterConfig(itemTypeField: string | undefined, itemTypeResult: ItemTypeResultMode): Record<string, unknown> | undefined {
-  if (!itemTypeField) {
-    return undefined;
-  }
-  if (itemTypeResult === 'parent') {
-    return {
-      ForParent: true,
-      Filter: {
-        op: 'must',
-        field: itemTypeField,
-        conds: ['parent']
-      }
-    };
-  }
-  return {
-    ForParent: false,
-    Filter: {
-      op: 'must_not',
-      field: itemTypeField,
-      conds: ['parent']
-    }
-  };
-}
-
-function normalizeItemTypeResultMode(value: ItemTypeResultMode | undefined): ItemTypeResultMode {
-  if (!value) {
-    return 'variant';
-  }
-  if (value === 'variant' || value === 'parent') {
-    return value;
-  }
-  throw new Error(`Invalid item type result mode: ${value}. Expected variant or parent.`);
 }
 
 function buildDatasetDescription(sourcePath: string, goal?: string): string {

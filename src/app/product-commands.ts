@@ -19,6 +19,7 @@ import {
 } from '../core/help-utils';
 import { isProjectFeatureEnabled } from '../core/feature-flags';
 import { ApiRequestError, postJson } from '../core/http';
+import { buildItemTypeFilterConfig, normalizeItemTypeResultMode, type ItemTypeResultMode } from '../core/item-type-filter';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
 import { hasExplicitOutputFormatFlag } from '../core/output-format';
@@ -432,6 +433,8 @@ export interface RecommendSceneCreateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   recommendModel?: string;
   optimizationTarget?: string;
   userEventScenes?: string;
@@ -461,6 +464,8 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   userEventScenes?: string;
   config?: string;
   count?: number;
@@ -494,6 +499,29 @@ export interface RecommendRuleGetOptions extends ProjectScopedOptions {
   applicationId: string;
   ruleId?: string;
   dryRun?: boolean;
+}
+
+function buildRecommendSceneItemTypeFilterConfig(options: { itemTypeResult?: ItemTypeResultMode; itemTypeField?: string }): Record<string, unknown> | undefined {
+  if (!options.itemTypeResult) {
+    return undefined;
+  }
+  return buildItemTypeFilterConfig(options.itemTypeField ?? 'item_type', normalizeItemTypeResultMode(options.itemTypeResult));
+}
+
+function mergeRecommendSceneFilterConfig(filterConfig: unknown, itemTypeFilterConfig: Record<string, unknown> | undefined): unknown {
+  if (!itemTypeFilterConfig) {
+    return filterConfig;
+  }
+  if (filterConfig === undefined) {
+    return { ItemTypeFilter: itemTypeFilterConfig };
+  }
+  if (!isRecord(filterConfig)) {
+    throw new Error('Recommend scene FilterConfig must be a JSON object when --item-type-result is set.');
+  }
+  return {
+    ...filterConfig,
+    ItemTypeFilter: itemTypeFilterConfig
+  };
 }
 
 export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
@@ -1323,6 +1351,8 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
   const userEventScenes = options.userEventScenes;
+  const itemTypeFilterConfig = buildRecommendSceneItemTypeFilterConfig(options);
+  const filterConfig = mergeRecommendSceneFilterConfig(await loadJsonInput(options.filterConfig), itemTypeFilterConfig);
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
@@ -1338,7 +1368,7 @@ export async function runRecommendSceneCreateCommand(options: RecommendSceneCrea
       ClickEventTypes: await loadOptionalStringArray(options.clickEventTypes),
       PositiveEventTypes: await loadOptionalStringArray(options.positiveEventTypes),
       NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes),
-      FilterConfig: await loadJsonInput(options.filterConfig),
+      FilterConfig: filterConfig,
       DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data or required scene fields for recommend scene create.');
@@ -1401,6 +1431,7 @@ function extractRecommendSceneV2(response: unknown): Record<string, any> {
 
 async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
   const configPatch = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildRecommendSceneItemTypeFilterConfig(options);
   const flagConfigPatch = compactObject({
     MaxResults: options.count,
     FilterRuleId: options.filterRuleId,
@@ -1417,7 +1448,7 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
   });
   const userEventScenes = await loadOptionalStringArray(options.userEventScenes);
-  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0;
+  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0 || itemTypeFilterConfig !== undefined;
   const hasTopLevelPatch =
     options.type !== undefined ||
     options.name !== undefined ||
@@ -1450,11 +1481,14 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     throw new Error('GetRecommendSceneV2 did not return a full Config. Cannot build a full PublishRecommendSceneV2 payload.');
   }
 
-  const mergedConfig = {
+  const mergedConfig: Record<string, unknown> = {
     ...currentConfig,
     ...(configPatch as Record<string, unknown> | undefined),
     ...flagConfigPatch
   };
+  if (itemTypeFilterConfig) {
+    mergedConfig.FilterConfig = mergeRecommendSceneFilterConfig(mergedConfig.FilterConfig, itemTypeFilterConfig);
+  }
   validateRecommendSceneConfig(mergedConfig);
 
   return compactObject({
@@ -2314,10 +2348,10 @@ SEARCH SCENE ENUMS
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
-        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--item-type-result variant|parent] [--item-type-field item_type] [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result variant|parent] [--item-type-field item_type] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
         'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
         'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
@@ -4122,6 +4156,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
           recommendModel: optionalString(values['recommend-model']),
           optimizationTarget: optionalString(values['optimization-target']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
@@ -4156,6 +4192,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
           config: optionalString(values.config),
           count: parseOptionalInt(optionalString(values.count)),
@@ -4532,6 +4570,8 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'max-attempts': { type: 'string' },
       'environment-id': { type: 'string' },
       phase: { type: 'string' },
+      'item-type-result': { type: 'string' },
+      'item-type-field': { type: 'string' },
       'skip-search': { type: 'boolean' },
       'skip-chat': { type: 'boolean' },
       types: { type: 'string' },
