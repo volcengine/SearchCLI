@@ -38,6 +38,7 @@ export async function prepareBindingFieldConfig(
   const fieldDescMap = extractFieldDescMap(existingConfig);
 
   const allowed = new Set(flattenFieldPaths(options.fields));
+  const fieldTypes = buildFieldTypeMap(options.fields);
   const needsInference = true;
 
   const promptInference =
@@ -52,10 +53,10 @@ export async function prepareBindingFieldConfig(
       : undefined;
 
   const notUse = new Set((promptInference?.notUseFields ?? []).filter(path => allowed.has(path)));
-  const inferredIndexFields = filterPromptFields(promptInference?.indexFields, allowed, notUse);
-  const inferredFilterFields = filterPromptFields(promptInference?.filterFields, allowed, notUse);
-  const inferredItemTypeFields = filterPromptFields(promptInference?.attrFields?.ImageItemType, allowed, notUse);
-  const inferredSuggestFields = filterPromptFields(promptInference?.suggestFields, allowed, notUse);
+  const inferredIndexFields = filterPromptFields(promptInference?.indexFields, allowed, notUse, fieldTypes, isIndexFieldType);
+  const inferredFilterFields = filterPromptFields(promptInference?.filterFields, allowed, notUse, fieldTypes, isFilterFieldType);
+  const inferredItemTypeFields = filterPromptFields(promptInference?.attrFields?.ImageItemType, allowed, notUse, fieldTypes, isFilterFieldType);
+  const inferredSuggestFields = filterPromptFields(promptInference?.suggestFields, allowed, notUse, fieldTypes, isSuggestFieldType);
   const inferredImageIndexFields = inferImageIndexFields({
     datasetType: options.datasetType,
     fields: options.fields,
@@ -78,6 +79,7 @@ export async function prepareBindingFieldConfig(
   const resolved = applyDatasetTypeRules({
     datasetType: options.datasetType,
     allowed,
+    fieldTypes,
     primaryKeyField: options.primaryKeyField,
     indexFields: inferredIndexFields,
     filterFields: inferredFilterFields,
@@ -159,9 +161,21 @@ function flattenFieldPaths(fields: PromptInferenceField[], prefix = ''): string[
   return results;
 }
 
-function filterPromptFields(values: string[] | undefined, allowed: Set<string>, notUse: Set<string>): string[] {
+function filterPromptFields(
+  values: string[] | undefined,
+  allowed: Set<string>,
+  notUse: Set<string>,
+  fieldTypes: Map<string, string>,
+  isSupportedType: (fieldType: string) => boolean
+): string[] {
   if (!values) return [];
-  return [...new Set(values.map(value => value.trim()).filter(value => allowed.has(value) && !notUse.has(value)))];
+  return [
+    ...new Set(
+      values
+        .map(value => value.trim())
+        .filter(value => allowed.has(value) && !notUse.has(value) && isSupportedType(fieldTypes.get(value) ?? ''))
+    )
+  ];
 }
 
 function inferImageIndexFields(options: {
@@ -237,6 +251,22 @@ function flattenFieldDefinitions(
   return results;
 }
 
+function buildFieldTypeMap(fields: PromptInferenceField[]): Map<string, string> {
+  return new Map(flattenFieldDefinitions(fields).map(field => [field.path, field.inferredType]));
+}
+
+function isIndexFieldType(fieldType: string): boolean {
+  return fieldType === 'string' || fieldType === 'array<string>';
+}
+
+function isSuggestFieldType(fieldType: string): boolean {
+  return fieldType === 'string' || fieldType === 'array<string>';
+}
+
+function isFilterFieldType(fieldType: string): boolean {
+  return ['string', 'int32', 'int64', 'float', 'boolean'].includes(fieldType);
+}
+
 function scoreImageFieldCandidate(
   fieldPath: string,
   inferredType: string,
@@ -296,6 +326,7 @@ function scoreVideoFieldCandidate(
 function applyDatasetTypeRules(options: {
   datasetType: 'item' | 'video';
   allowed: Set<string>;
+  fieldTypes: Map<string, string>;
   primaryKeyField?: string;
   indexFields: string[];
   filterFields: string[];
@@ -310,9 +341,9 @@ function applyDatasetTypeRules(options: {
   imageIndexFields: string[];
   videoIndexFields: string[];
 } {
-  let indexFields = options.indexFields.filter(value => options.allowed.has(value));
-  let filterFields = options.filterFields.filter(value => options.allowed.has(value));
-  let suggestFields = options.suggestFields.filter(value => options.allowed.has(value));
+  let indexFields = options.indexFields.filter(value => options.allowed.has(value) && isTopLevelTextField(value, options.fieldTypes));
+  let filterFields = options.filterFields.filter(value => options.allowed.has(value) && isTopLevelScalarFilterField(value, options.fieldTypes));
+  let suggestFields = options.suggestFields.filter(value => options.allowed.has(value) && isTopLevelTextField(value, options.fieldTypes));
   let imageIndexFields = options.imageIndexFields.filter(value => options.allowed.has(value));
   let videoIndexFields = options.videoIndexFields.filter(value => options.allowed.has(value));
 
@@ -329,15 +360,15 @@ function applyDatasetTypeRules(options: {
       videoIndexFields.push('video_url');
     }
     for (const required of [options.primaryKeyField, 'content_type', 'parent_content_id', 'sequence_index']) {
-      if (required && options.allowed.has(required) && !filterFields.includes(required)) {
+      if (required && options.allowed.has(required) && isTopLevelScalarFilterField(required, options.fieldTypes) && !filterFields.includes(required)) {
         filterFields.push(required);
       }
     }
   }
   if (options.datasetType === 'item') {
-    for (const itemTypeField of options.itemTypeFields) {
-      if (options.allowed.has(itemTypeField) && !filterFields.includes(itemTypeField)) {
-        filterFields.push(itemTypeField);
+    for (const required of [options.primaryKeyField, ...options.itemTypeFields]) {
+      if (required && options.allowed.has(required) && isTopLevelScalarFilterField(required, options.fieldTypes) && !filterFields.includes(required)) {
+        filterFields.push(required);
       }
     }
   }
@@ -351,6 +382,14 @@ function applyDatasetTypeRules(options: {
   };
 }
 
+function isTopLevelScalarFilterField(fieldPath: string, fieldTypes: Map<string, string>): boolean {
+  return !fieldPath.includes('.') && isFilterFieldType(fieldTypes.get(fieldPath) ?? '');
+}
+
+function isTopLevelTextField(fieldPath: string, fieldTypes: Map<string, string>): boolean {
+  return !fieldPath.includes('.') && isIndexFieldType(fieldTypes.get(fieldPath) ?? '');
+}
+
 function normalizePromptFieldType(value: unknown): string {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value.trim().toLowerCase();
@@ -362,20 +401,24 @@ function normalizePromptFieldType(value: unknown): string {
     case 1:
       return 'string';
     case 2:
-      return 'float';
+      return 'int32';
     case 3:
       return 'int64';
     case 4:
-      return 'boolean';
+      return 'float';
     case 5:
-      return 'object';
+      return 'boolean';
     case 6:
       return 'array<string>';
     case 7:
-      return 'array<float>';
+      return 'array<int32>';
     case 8:
       return 'array<int64>';
     case 9:
+      return 'array<float>';
+    case 10:
+      return 'object';
+    case 11:
       return 'array<object>';
     default:
       return 'string';

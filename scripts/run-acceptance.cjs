@@ -94,6 +94,8 @@ async function runCoreSuite() {
   await runTest('search-tune-run-help', testSearchTuneRunHelp);
   await runTest('app-list-help', testAppListHelp);
   await runTest('dataset-list-help', testDatasetListHelp);
+  await runTest('item-profile', testItemProfile);
+  await runTest('item-plan', testItemPlan);
   await runTest('data-delete-mock', testDataDeleteMock);
   await runTest('project-create-deploy', testProjectCreateDeploy);
   await runTest('config-summary-help', testConfigSummaryHelp);
@@ -354,7 +356,7 @@ async function testValidateSkillsSpacePath() {
 }
 
 async function testDatasetListHelp() {
-  const { stdout } = await runCli(['dataset', 'list', '--help']);
+  const { stdout } = await runCli(['dataset', '--help']);
   assert.match(stdout, /--type/);
   assert.match(stdout, /--full/);
   assert.match(stdout, /dataset list \[--type <type>\] \[--name <text>\] \[--application-id <id>\] \[--full\]/i);
@@ -1300,8 +1302,8 @@ async function testSearchTuneApplyDryRun() {
 }
 
 async function testConfigSummaryHelp() {
-  const datasetGet = await runCli(['dataset', 'get', '--help']);
-  assert.match(datasetGet.stdout, /--full/);
+  const datasetHelp = await runCli(['dataset', '--help']);
+  assert.match(datasetHelp.stdout, /dataset get --id <dataset-id> \[--full\]/);
 
   const appDatasetConfigGet = await runCli(['app', 'dataset-config', 'get', '--help']);
   assert.match(appDatasetConfigGet.stdout, /--full/);
@@ -1313,7 +1315,70 @@ async function testConfigSummaryHelp() {
   return `${command.prefix} dataset get --help && ${command.prefix} app dataset-config get --help && ${command.prefix} app --help`;
 }
 
+async function testItemProfile() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-profile-'));
+  const samplePath = path.join(workspace, 'items.json');
+  fs.writeFileSync(
+    samplePath,
+    JSON.stringify(
+      [
+        { doc_id: 'item-1', title: 'Blue notebook', category: 'stationery', content: 'Soft cover notebook' },
+        { doc_id: 'item-2', title: 'Green notebook', category: 'stationery', content: 'Hard cover notebook' }
+      ],
+      null,
+      2
+    )
+  );
+
+  const { stdout } = await runCli(['item', 'profile', '--file', samplePath, '--json']);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.inferred.primaryKeyField, 'doc_id');
+  assert.equal(payload.inferred.titleField, 'title');
+  return `${command.prefix} item profile --file ${samplePath} --json`;
+}
+
+async function testItemPlan() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-plan-'));
+  const samplePath = path.join(workspace, 'items.json');
+  const outputDir = path.join(workspace, 'plans');
+  fs.writeFileSync(
+    samplePath,
+    JSON.stringify(
+      [
+        { doc_id: 'item-1', title: 'Blue notebook', category: 'stationery', content: 'Soft cover notebook' },
+        { doc_id: 'item-2', title: 'Green notebook', category: 'stationery', content: 'Hard cover notebook' }
+      ],
+      null,
+      2
+    )
+  );
+
+  const { stdout } = await runCli([
+    'item',
+    'plan',
+    '--file',
+    samplePath,
+    '--goal',
+    'Build stationery search',
+    '--output-dir',
+    outputDir,
+    '--json'
+  ]);
+  const payload = JSON.parse(stdout);
+  const files = payload.plan.files;
+  for (const required of ['schema', 'fieldConfig', 'onlineConfig', 'validation']) {
+    assert.ok(files[required], `missing ${required}`);
+    assert.ok(fs.existsSync(path.join(payload.planDir, files[required])), `file not found for ${required}`);
+  }
+  assert.ok(fs.existsSync(payload.planPath), 'missing plan.json');
+  return `${command.prefix} item plan --file ${samplePath} --goal "Build stationery search" --output-dir ${outputDir} --json`;
+}
+
 async function testHighRiskGuards() {
+  const itemApplyHelp = await runCli(['item', 'apply', '--help']);
+  assert.match(itemApplyHelp.stdout, /--confirm-review/);
+  assert.match(itemApplyHelp.stdout, /--confirm-recommend-entry-binding/);
+
   const recommendHelp = await runCli(['recommend', '--help']);
   assert.match(recommendHelp.stdout, /--confirm-entry-binding/);
 
@@ -1321,7 +1386,7 @@ async function testHighRiskGuards() {
   const chatSkillPayload = JSON.parse(chatSkill.stdout);
   assert.match(JSON.stringify(chatSkillPayload.workflow), /not treat the output as NDJSON/i);
 
-  return `${command.prefix} recommend --help && ${command.prefix} skill show --name vs-chat --json`;
+  return `${command.prefix} item apply --help && ${command.prefix} recommend --help && ${command.prefix} skill show --name vs-chat --json`;
 }
 
 async function testAuthImportEnv() {

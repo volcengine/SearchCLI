@@ -1435,14 +1435,18 @@ function buildFieldConfigArtifact(
   const fieldDescMap = buildFieldDescMap(profile.fields, profile.inferred, promptInference?.fieldMeanings);
   const availableFields = new Set(flattenFieldPathsFromProfile(profile.fields));
   const itemTypeField = pickItemTypeField(promptInference?.attrFields, availableFields);
+  const primaryKeyField =
+    profile.inferred.primaryKeyField && availableFields.has(profile.inferred.primaryKeyField)
+      ? profile.inferred.primaryKeyField
+      : undefined;
   const titleField =
     profile.inferred.titleField && availableFields.has(profile.inferred.titleField)
       ? profile.inferred.titleField
       : undefined;
   const imageIndexFields = profile.inferred.imageFields.filter(field => availableFields.has(field));
   const itemDefaultFieldConfig =
-    datasetType === 'item' && itemTypeField
-      ? { FilterFields: [itemTypeField] }
+    datasetType === 'item'
+      ? { FilterFields: [primaryKeyField, itemTypeField].filter((field): field is string => Boolean(field)) }
       : {};
   const videoDefaultFieldConfig =
     datasetType === 'video'

@@ -81,6 +81,8 @@ export default class ItemVerify extends Command {
     const { flags } = await this.parse(ItemVerify);
     await runItemVerifyCommand({
       baseUrl: flags['base-url'],
+      runtimeBaseUrl: flags['runtime-base-url'],
+      runtimeService: flags['runtime-service'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
       region: flags.region,

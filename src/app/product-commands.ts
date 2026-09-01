@@ -2933,6 +2933,134 @@ EXAMPLES
   console.log(withOpenApiReferenceHint(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
 }
 
+function printItemCommandHelp(action: string): void {
+  const helpByAction: Record<string, string> = {
+    plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
+
+USAGE
+  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app [output flags]
+
+DESCRIPTION
+  Use this command to generate the plan artifacts an agent or operator will review before provisioning.
+  For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
+  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow.
+
+KEY FLAGS
+  --file               Source JSON array, JSONL, or CSV file.
+  --type               Dataset type: item or video. Pass it explicitly for video data.
+  --goal               Business goal carried into generated reports and payload descriptions.
+  --output-dir         Custom directory for plan artifacts.
+  --dataset-name       Override the generated dataset name.
+  --application-name   Override the generated application name.
+  --skip-app           Generate a dataset-only plan without app creation artifacts.
+
+EXAMPLES
+  vs item plan --file ./items.json --output-dir ./.viking/item-plan
+  vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
+  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app`,
+    apply: `Compatibility wrapper around item provision / verify.
+
+USAGE
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase verify [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase all --confirm-review [workflow flags]
+
+DESCRIPTION
+  Defaults to \`phase=provision\` unless \`--run-trials\` or \`--phase all\` is passed. Use
+  \`--confirm-review\` for a real apply after schema and bind-time field config review. Use
+  \`--skip-app\` to stop at dataset provisioning when you need to preserve the dataset-only boundary.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --phase                           Execution phase: provision, verify, or all.
+  --confirm-review                  Required for a real apply path.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Skip app creation and app-level setup.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --run-trials                      Legacy alias for \`--phase all\`.
+  --confirm-recommend-entry-binding Confirm the recommend scene target page/module before bootstrap.
+  --recommend-bhv-scene-types       Comma-separated behavior scene types for recommend bootstrap.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase verify
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase all --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    provision: `Provision item onboarding resources up to dataset binding and activation start.
+
+USAGE
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --interactive-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --dry-run [workflow flags]
+
+DESCRIPTION
+  Stage-one provisioning command. It creates or reuses the dataset and, unless \`--skip-app\` is passed,
+  continues through app creation and dataset binding. It does not wait for runtime readiness or run
+  search/chat verification.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --confirm-review                  Required for real provisioning after review is complete.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Stop after dataset provisioning and skip app-level binding.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --interactive-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --dry-run
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    verify: `Wait until provisioned item data becomes searchable, then run runtime verification.
+
+USAGE
+  vs item verify --plan-dir ./.viking/item-plans/<plan> [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --search-query "wireless headphones" [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --skip-chat [workflow flags]
+
+DESCRIPTION
+  Use this after provisioning to wait for indexing and run search/chat smoke checks. You can override
+  the generated search query or chat message, skip individual runtime checks, or bootstrap recommend
+  verification when the required recommend flags are present.
+
+KEY FLAGS
+  --plan-dir             Directory containing plan.json and provision artifacts.
+  --wait-indexed         Wait for dataset/app searchability before runtime checks.
+  --search-query         Override the generated search smoke query.
+  --chat-message         Override the generated chat smoke message.
+  --skip-search          Skip runtime search smoke.
+  --skip-chat            Skip runtime chat smoke.
+  --dry-run              Print planned verify actions without calling Viking APIs.
+
+EXAMPLES
+  vs item verify --plan-dir ./.viking/item-plans/demo
+  vs item verify --plan-dir ./.viking/item-plans/demo --search-query "wireless headphones"
+  vs item verify --plan-dir ./.viking/item-plans/demo --skip-chat`,
+    review: `Render the current schema and bind-time field-config summary for a plan.
+
+USAGE
+  vs item review --plan-dir ./.viking/item-plans/<plan> [output flags]
+  vs item review --plan-dir ./.viking/item-plans/<plan> --reviewer alice --review-notes "Reviewed with PM" [output flags]
+
+DESCRIPTION
+  Use this to inspect the current review state and write \`review-confirmation.json\` from the plan's
+  current artifacts. This is a review record command; it does not provision or verify runtime behavior.
+
+KEY FLAGS
+  --plan-dir      Directory containing plan.json and review-confirmation.json.
+  --reviewer      Reviewer name to record.
+  --review-notes  Optional notes to persist in review-confirmation.json.
+
+EXAMPLES
+  vs item review --plan-dir ./.viking/item-plans/demo
+  vs item review --plan-dir ./.viking/item-plans/demo --reviewer alice --review-notes "Reviewed with PM"`,
+  };
+
+  console.log(helpByAction[action] ?? `Unknown item subcommand: ${action}`);
+}
+
 function printSearchCommandHelp(action: string, subAction?: string): void {
   const helpByAction: Record<string, string> = {
     run: `Run a search request against an application scene.

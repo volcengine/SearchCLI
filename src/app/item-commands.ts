@@ -23,7 +23,7 @@ import { type ItemTypeResultMode } from '../core/item-type-filter';
 import { printOutput } from '../core/output-format';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
-import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
+import { resolveServiceConfig, withRuntimeServiceConfig, type ServiceConfigInput } from '../core/service-config';
 
 export interface ItemProfileCommandOptions {
   file: string;
@@ -198,6 +198,8 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   if (phase === 'verify') {
     await runItemVerifyCommand({
       baseUrl: options.baseUrl,
+      runtimeBaseUrl: options.runtimeBaseUrl,
+      runtimeService: options.runtimeService,
       accessKeyId: options.accessKeyId,
       secretKey: options.secretKey,
       region: options.region,
@@ -243,6 +245,8 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   }
   const verifyResult = await executeItemVerify({
     baseUrl: options.baseUrl,
+    runtimeBaseUrl: options.runtimeBaseUrl,
+    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     region: options.region,
@@ -328,16 +332,20 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
     throw new Error(buildValidationBlockMessage(plan));
   }
 
-  const config = resolveServiceConfig({
+  const configInput = {
     baseUrl: options.baseUrl,
+    runtimeBaseUrl: options.runtimeBaseUrl,
+    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
     region: options.region,
     timeoutMs: options.timeoutMs
-  });
+  };
+  const config = resolveServiceConfig(configInput);
+  const runtimeConfig = withRuntimeServiceConfig(config, configInput);
   const openapi = new VikingOpenApiClient(config);
-  const runtime = new VikingRuntimeApiClient(config);
+  const runtime = new VikingRuntimeApiClient(runtimeConfig);
 
   const fieldConfig = datasetFieldConfig;
   const bindingFieldConfig = fieldConfigForReview;
@@ -355,6 +363,7 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
   assertManualReviewConfirmation(reviewConfirmation, plan.files.reviewConfirmation);
   assertReviewedBindingFieldConfig(
     reviewConfirmation,
+    bindingFieldConfig,
     plan.files.fieldConfig,
     plan.files.reviewConfirmation
   );
@@ -586,6 +595,7 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
   assertManualReviewConfirmation(reviewConfirmation, plan.files.reviewConfirmation);
   assertReviewedBindingFieldConfig(
     reviewConfirmation,
+    bindingFieldConfig,
     plan.files.fieldConfig,
     plan.files.reviewConfirmation
   );
@@ -615,16 +625,20 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
   const recommendSceneUpdateArtifact = await loadPlanArtifact<Record<string, unknown>>(planDir, plan.files.recommendSceneUpdate);
   const expectedRecordCount = provisionArtifact?.expectedRecordCount ?? normalizedItems.length;
 
-  const config = resolveServiceConfig({
+  const configInput = {
     baseUrl: options.baseUrl,
+    runtimeBaseUrl: options.runtimeBaseUrl,
+    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
     region: options.region,
     timeoutMs: options.timeoutMs
-  });
+  };
+  const config = resolveServiceConfig(configInput);
+  const runtimeConfig = withRuntimeServiceConfig(config, configInput);
   const openapi = new VikingOpenApiClient(config);
-  const runtime = new VikingRuntimeApiClient(config);
+  const runtime = new VikingRuntimeApiClient(runtimeConfig);
   const steps: StepResult[] = [];
 
   const indexObservation =
@@ -1415,6 +1429,7 @@ function assertManualReviewConfirmation(
 
 function assertReviewedBindingFieldConfig(
   reviewConfirmation: ItemReviewConfirmationFile,
+  fieldConfig: Record<string, unknown>,
   fieldConfigPath: string,
   confirmationPath: string
 ): void {
@@ -1422,6 +1437,14 @@ function assertReviewedBindingFieldConfig(
     throw new Error(
       `Manual review in ${confirmationPath} does not include a reviewed field-config summary for ${fieldConfigPath}. ` +
         'Re-run item review or update review-confirmation.json before binding the dataset to the application.'
+    );
+  }
+  const currentSnapshot = buildFieldConfigReviewSnapshot(fieldConfig);
+  const reviewedSnapshot = normalizeFieldConfigReviewSnapshot(reviewConfirmation.fieldConfigReview);
+  if (!fieldConfigReviewSnapshotsEqual(reviewedSnapshot, currentSnapshot)) {
+    throw new Error(
+      `Manual review in ${confirmationPath} is stale for ${fieldConfigPath}. ` +
+        'Re-run item review or use --interactive-review so the reviewed bind-time field groups match the current plan.'
     );
   }
 }
@@ -1439,6 +1462,35 @@ function buildFieldConfigReviewSnapshot(fieldConfig: Record<string, unknown>): N
     imageIndexFields,
     videoIndexFields
   };
+}
+
+function normalizeFieldConfigReviewSnapshot(
+  snapshot: NonNullable<ItemReviewConfirmationFile['fieldConfigReview']>
+): NonNullable<ItemReviewConfirmationFile['fieldConfigReview']> {
+  return {
+    indexFields: normalizeStringArray(snapshot.indexFields),
+    filterFields: normalizeStringArray(snapshot.filterFields),
+    suggestFields: normalizeStringArray(snapshot.suggestFields),
+    imageIndexFields: normalizeStringArray(snapshot.imageIndexFields),
+    videoIndexFields: normalizeStringArray(snapshot.videoIndexFields)
+  };
+}
+
+function fieldConfigReviewSnapshotsEqual(
+  left: NonNullable<ItemReviewConfirmationFile['fieldConfigReview']>,
+  right: NonNullable<ItemReviewConfirmationFile['fieldConfigReview']>
+): boolean {
+  return (
+    stringArraysEqual(left.indexFields, right.indexFields) &&
+    stringArraysEqual(left.filterFields, right.filterFields) &&
+    stringArraysEqual(left.suggestFields, right.suggestFields) &&
+    stringArraysEqual(left.imageIndexFields, right.imageIndexFields) &&
+    stringArraysEqual(left.videoIndexFields, right.videoIndexFields)
+  );
+}
+
+function stringArraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function renderFieldConfigReviewSummary(
