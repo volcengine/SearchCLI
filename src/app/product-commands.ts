@@ -59,6 +59,14 @@ import {
 } from './connector-commands';
 import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
 import { runProjectCreateCommand, runProjectDeployCommand } from './project-commands';
+import {
+  runItemApplyCommand,
+  runItemPlanCommand,
+  runItemProfileCommand,
+  runItemProvisionCommand,
+  runItemReviewCommand,
+  runItemVerifyCommand
+} from './item-commands';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -2044,6 +2052,13 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
+    case 'item':
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runItemCli(argv);
+      return true;
     case 'connector':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -2111,6 +2126,7 @@ export function printProductDomainsHelp(): void {
     'vs dataset schema check',
     'vs dataset subscription create|get|list|close',
     'vs data write|import|delete',
+    'vs item profile|plan|review|provision|verify|apply',
     'vs connector init|run|status|stop|inspect',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
@@ -2181,6 +2197,28 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+    item: `${renderUsageBlock(
+      [
+        'vs item profile --file ./items.json [--type <item|video>] [output flags]',
+        'vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]',
+        'vs item review --plan-dir <dir> [--reviewer <name>] [--review-notes <text>] [output flags]',
+        'vs item provision --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]',
+        'vs item verify --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]',
+        'vs item apply --plan-dir <dir> [--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]'
+      ]
+    )}
+
+DESCRIPTION
+  Understand arbitrary structured item data, generate a reviewable onboarding plan, and apply it to
+  create / ingest / activate a Viking item-search app. Use \`--dry-run\` first when reviewing a plan.
+
+COMMON FLAGS
+  profile/plan:
+    --type <item|video> --item-type-result <variant|parent> --format --jq --output
+  review:
+    --format --jq --output
+  apply:
+    --base-url --ak --sk --region --timeout-ms --project-name --format --jq --output`,
     connector: `${renderUsageBlock(
       [
         'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
@@ -3583,6 +3621,119 @@ async function runDataCli(argv: string[]): Promise<void> {
   }
 }
 
+async function runItemCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('item');
+    return;
+  }
+  const values = parseStandaloneOptions(argv.slice(1));
+
+  switch (action) {
+    case 'profile':
+      await runItemProfileCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video'
+      });
+      return;
+    case 'plan':
+      await runItemPlanCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video',
+        itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+        goal: optionalString(values.goal),
+        outputDir: optionalString(values['output-dir']),
+        datasetName: optionalString(values['dataset-name']),
+        applicationName: optionalString(values['application-name']),
+        projectName: optionalString(values['project-name']),
+        skipApp: optionalBoolean(values['skip-app'])
+      });
+      return;
+    case 'review':
+      await runItemReviewCommand({
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        reviewer: optionalString(values.reviewer),
+        notes: optionalString(values['review-notes'])
+      });
+      return;
+    case 'provision':
+      await runItemProvisionCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        skipApp: optionalBoolean(values['skip-app']),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        force: optionalBoolean(values.force),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    case 'verify':
+      await runItemVerifyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        waitIndexed: optionalBoolean(values['wait-indexed']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        skipSearch: optionalBoolean(values['skip-search']),
+        skipChat: optionalBoolean(values['skip-chat']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    case 'apply':
+      await runItemApplyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        phase: optionalString(values.phase) as 'provision' | 'verify' | 'all' | undefined,
+        waitReady: optionalBoolean(values['wait-ready']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        runTrials: optionalBoolean(values['run-trials']),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        force: optionalBoolean(values.force),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    default:
+      throw new Error(`Unknown item subcommand: ${action}`);
+  }
+}
+
 async function runConnectorCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if (hasHelpFlag(argv.slice(1))) {
@@ -4391,6 +4542,7 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'recommend-bhv-scene-types': { type: 'string' },
       'recommend-user-id': { type: 'string' },
       'recommend-parent-id': { type: 'string' },
+      'recommend-parent-ids': { type: 'string' },
       'user-event-scenes': { type: 'string' },
       'bhv-scene-types': { type: 'string' },
       'click-event-types': { type: 'string' },
