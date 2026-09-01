@@ -165,6 +165,10 @@ async function runLiveSuite() {
     return;
   }
   await runTest('v2-onboarding-live', testV2OnboardingLivePlaceholder);
+  await runTest('live-search-default-scene', testLiveSearchDefaultScene);
+  await runTest('live-search-non-default-scene', testLiveSearchNonDefaultScene);
+  await runTest('live-recommend-default-scene', testLiveRecommendDefaultScene);
+  await runTest('live-recommend-non-default-scene', testLiveRecommendNonDefaultScene);
 }
 
 function loadV2OnboardingOrchestrator() {
@@ -217,6 +221,10 @@ async function runTest(name, fn) {
     const detail = await fn();
     tests.push({ name, suite: currentSuite, status: 'passed', detail });
   } catch (error) {
+    if (error instanceof SkippedTest) {
+      tests.push({ name, status: 'skipped', detail: error.message });
+      return;
+    }
     tests.push({
       name,
       suite: currentSuite,
@@ -228,6 +236,17 @@ async function runTest(name, fn) {
 
 async function runSkipped(name, reason) {
   tests.push({ name, suite: currentSuite, status: 'skipped', detail: reason });
+}
+
+class SkippedTest extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'SkippedTest';
+  }
+}
+
+function skipTest(reason) {
+  throw new SkippedTest(reason);
 }
 
 async function testRootHelp() {
@@ -2815,6 +2834,134 @@ async function testDataWriteMock() {
 
 async function testV2OnboardingLivePlaceholder() {
   return 'Live V2 onboarding suite is a placeholder. Replace with a real signed E2E call when ready.';
+}
+
+async function testLiveSearchDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.itemDatasetId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID and SEARCHCLI_TEST_ITEM_DATASET_ID.');
+  }
+
+  const { stdout } = await runCli(
+    [
+      'search',
+      'run',
+      '--application-id',
+      context.applicationId,
+      '--dataset-id',
+      context.itemDatasetId,
+      '--query',
+      context.query,
+      '--page-size',
+      '3',
+      '--project-name',
+      context.projectName,
+      '--json'
+    ],
+    { env: context.env }
+  );
+  assertRuntimeResponse(stdout, 'search_results');
+  return `${command.prefix} search run --application-id ${context.applicationId} --dataset-id ${context.itemDatasetId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveSearchNonDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.itemDatasetId || !context.searchSceneId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_ITEM_DATASET_ID, and SEARCHCLI_TEST_SEARCH_SCENE_ID.');
+  }
+
+  const { stdout } = await runCli(
+    [
+      'search',
+      'run',
+      '--application-id',
+      context.applicationId,
+      '--scene-id',
+      context.searchSceneId,
+      '--dataset-id',
+      context.itemDatasetId,
+      '--query',
+      context.query,
+      '--page-size',
+      '3',
+      '--project-name',
+      context.projectName,
+      '--json'
+    ],
+    { env: context.env }
+  );
+  assertRuntimeResponse(stdout, 'search_results');
+  return `${command.prefix} search run --application-id ${context.applicationId} --scene-id ${context.searchSceneId} --dataset-id ${context.itemDatasetId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveRecommendDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.recommendDefaultSceneId || !context.userId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_RECOMMEND_DEFAULT_SCENE_ID, and SEARCHCLI_TEST_USER_ID.');
+  }
+
+  const { stdout } = await runCli(buildRecommendRunArgs(context, context.recommendDefaultSceneId), { env: context.env });
+  assertRuntimeResponse(stdout, 'rec_results');
+  return `${command.prefix} recommend run --application-id ${context.applicationId} --scene-id ${context.recommendDefaultSceneId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveRecommendNonDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.recommendNonDefaultSceneId || !context.userId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_RECOMMEND_NON_DEFAULT_SCENE_ID, and SEARCHCLI_TEST_USER_ID.');
+  }
+
+  const { stdout } = await runCli(buildRecommendRunArgs(context, context.recommendNonDefaultSceneId), { env: context.env });
+  assertRuntimeResponse(stdout, 'rec_results');
+  return `${command.prefix} recommend run --application-id ${context.applicationId} --scene-id ${context.recommendNonDefaultSceneId} --project-name ${context.projectName} --json`;
+}
+
+function getLiveTestContext() {
+  return {
+    applicationId: process.env.SEARCHCLI_TEST_APPLICATION_ID,
+    itemDatasetId: process.env.SEARCHCLI_TEST_ITEM_DATASET_ID,
+    searchSceneId: process.env.SEARCHCLI_TEST_SEARCH_SCENE_ID,
+    recommendDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_DEFAULT_SCENE_ID,
+    recommendNonDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_NON_DEFAULT_SCENE_ID,
+    userId: process.env.SEARCHCLI_TEST_USER_ID,
+    parentIds: process.env.SEARCHCLI_TEST_PARENT_IDS,
+    query: process.env.SEARCHCLI_TEST_QUERY ?? 'GAZELLE 秦舒培同款经典运动板鞋',
+    projectName: process.env.SEARCHCLI_TEST_PROJECT_NAME ?? 'searchcli-test',
+    env: Object.fromEntries(
+      Object.entries({
+        VIKING_AK: process.env.VIKING_AK,
+        VIKING_SK: process.env.VIKING_SK
+      }).filter(([, value]) => value !== undefined)
+    )
+  };
+}
+
+function buildRecommendRunArgs(context, sceneId) {
+  const args = [
+    'recommend',
+    'run',
+    '--application-id',
+    context.applicationId,
+    '--scene-id',
+    sceneId,
+    '--user-id',
+    context.userId,
+    '--page-size',
+    '3',
+    '--project-name',
+    context.projectName,
+    '--json'
+  ];
+  if (context.parentIds) {
+    args.push('--parent-ids', context.parentIds);
+  }
+  return args;
+}
+
+function assertRuntimeResponse(stdout, resultKey) {
+  const payload = JSON.parse(stdout);
+  assert.ok(payload.request_id, 'missing request_id');
+  assert.ok(payload.result && Array.isArray(payload.result[resultKey]), `missing result.${resultKey}`);
 }
 
 function writeReport() {
