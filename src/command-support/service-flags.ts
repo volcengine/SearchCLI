@@ -48,12 +48,6 @@ const connectionFlags = {
   'data-plane-base-url': Flags.string({
     description: 'Runtime data-plane base URL (e.g. aisearch.cn-beijing.volces.com). Defaults to VIKING_DATA_PLANE_BASE_URL.'
   }),
-  'runtime-base-url': Flags.string({
-    description: 'Runtime API base URL for data/search/recommend calls. Defaults to --base-url.'
-  }),
-  'runtime-service': Flags.string({
-    description: 'Runtime signing service name. Defaults to the control-plane service.'
-  }),
   'project-name': Flags.string({
     description: 'Viking project name. Defaults to VIKING_PROJECT_NAME or default.'
   }),

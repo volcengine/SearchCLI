@@ -23,7 +23,7 @@ import { type ItemTypeResultMode } from '../core/item-type-filter';
 import { printOutput } from '../core/output-format';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
-import { resolveServiceConfig, withRuntimeServiceConfig, type ServiceConfigInput } from '../core/service-config';
+import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
 
 export interface ItemProfileCommandOptions {
   file: string;
@@ -198,8 +198,6 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   if (phase === 'verify') {
     await runItemVerifyCommand({
       baseUrl: options.baseUrl,
-      runtimeBaseUrl: options.runtimeBaseUrl,
-      runtimeService: options.runtimeService,
       accessKeyId: options.accessKeyId,
       secretKey: options.secretKey,
       region: options.region,
@@ -245,8 +243,6 @@ export async function runItemApplyCommand(options: ItemApplyCommandOptions): Pro
   }
   const verifyResult = await executeItemVerify({
     baseUrl: options.baseUrl,
-    runtimeBaseUrl: options.runtimeBaseUrl,
-    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     region: options.region,
@@ -334,8 +330,6 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
 
   const configInput = {
     baseUrl: options.baseUrl,
-    runtimeBaseUrl: options.runtimeBaseUrl,
-    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -343,9 +337,8 @@ async function executeItemProvision(options: ItemProvisionCommandOptions): Promi
     timeoutMs: options.timeoutMs
   };
   const config = resolveServiceConfig(configInput);
-  const runtimeConfig = withRuntimeServiceConfig(config, configInput);
   const openapi = new VikingOpenApiClient(config);
-  const runtime = new VikingRuntimeApiClient(runtimeConfig);
+  const runtime = new VikingRuntimeApiClient(config);
 
   const fieldConfig = datasetFieldConfig;
   const bindingFieldConfig = fieldConfigForReview;
@@ -627,8 +620,6 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
 
   const configInput = {
     baseUrl: options.baseUrl,
-    runtimeBaseUrl: options.runtimeBaseUrl,
-    runtimeService: options.runtimeService,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
@@ -636,9 +627,8 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
     timeoutMs: options.timeoutMs
   };
   const config = resolveServiceConfig(configInput);
-  const runtimeConfig = withRuntimeServiceConfig(config, configInput);
   const openapi = new VikingOpenApiClient(config);
-  const runtime = new VikingRuntimeApiClient(runtimeConfig);
+  const runtime = new VikingRuntimeApiClient(config);
   const steps: StepResult[] = [];
 
   const indexObservation =
