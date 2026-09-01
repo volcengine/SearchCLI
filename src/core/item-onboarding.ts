@@ -416,7 +416,7 @@ export async function buildItemPlan(options: ItemPlanOptions): Promise<ItemPlanR
   const itemTypeField = pickItemTypeField(promptInference.attrFields, new Set(flattenFieldPathsFromProfile(profile.fields)));
   const searchSceneCreate = buildSearchSceneCreateArtifact(defaults);
   const searchSceneUpdate = buildSearchSceneUpdateArtifact(defaults, itemTypeField, itemTypeResult);
-  const recommendSceneCreate = buildRecommendSceneCreateArtifact(profile, defaults);
+  const recommendSceneCreate = buildRecommendSceneCreateArtifact(defaults, itemTypeField, itemTypeResult);
   const recommendSceneUpdate = buildRecommendSceneUpdateArtifact(defaults, itemTypeField, itemTypeResult);
   const schemaCheck = {
     Type: datasetType === 'video' ? 3 : 1,
@@ -1666,17 +1666,16 @@ function buildReviewChecklist(profile: ItemProfileResult): string[] {
   ];
 }
 
-function buildRecommendSceneCreateArtifact(
-  _profile: ItemProfileResult,
-  defaults: ItemPlanFile['defaults']
-): Record<string, unknown> {
+function buildRecommendSceneCreateArtifact(defaults: ItemPlanFile['defaults'], itemTypeField: string | undefined, itemTypeResult: ItemTypeResultMode): Record<string, unknown> {
+  const itemTypeFilterConfig = buildItemTypeFilterConfig(itemTypeField, itemTypeResult);
   return {
     Type: defaults.recommend.sceneType,
     Name: defaults.recommend.sceneName,
     Description: defaults.recommend.sceneDescription,
     RecommendModel: 0,
     RecommendOptimizationTarget: 0,
-    BhvSceneTypes: defaults.recommend.bhvSceneTypes
+    BhvSceneTypes: defaults.recommend.bhvSceneTypes,
+    FilterConfig: itemTypeFilterConfig ? { ItemTypeFilter: itemTypeFilterConfig } : undefined
   };
 }
 

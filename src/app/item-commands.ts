@@ -858,7 +858,8 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
       ItemDatasetID: datasetId,
       RecommendModel: recommendSceneCreateArtifact.RecommendModel,
       RecommendOptimizationTarget: recommendSceneCreateArtifact.RecommendOptimizationTarget,
-      BhvSceneTypes: recommendBhvSceneTypes
+      BhvSceneTypes: recommendBhvSceneTypes,
+      FilterConfig: isRecord(recommendSceneCreateArtifact.FilterConfig) ? recommendSceneCreateArtifact.FilterConfig : undefined
     });
     const recommendSceneCreateResponse = await openapi.post('/api/v1/CreateRecommendScene', recommendCreatePayload);
     recommendSceneId = extractStringField(recommendSceneCreateResponse, ['SceneID', 'SceneId']);
