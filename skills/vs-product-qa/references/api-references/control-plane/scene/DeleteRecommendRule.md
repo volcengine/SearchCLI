@@ -32,6 +32,14 @@ message EmptyResp {}
 
 This API has no explicit business response fields.
 
+## Field Semantics and Validation Notes
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `AppID` | non-empty | The target recommend rule must belong to this application. |
+| `RuleID` | non-empty | The target recommend rule must exist and be visible in the project. |
+| `ProjectName` | non-empty | Project scope for the target rule. |
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

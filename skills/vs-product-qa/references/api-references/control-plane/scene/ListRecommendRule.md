@@ -88,6 +88,23 @@ message RecommendRule {
 | `Items[].Used` | bool | See service validation | Used. |
 | `Items[].Config` | Struct | See service validation | Config. |
 
+## Field Semantics and Validation Notes
+
+### Rule Type Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Types[]` | `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `userInterest`, `itemCf`, `forceItem`, `boostBuryCond`, `coldStart`, `shuffle`, `recReason` | Empty means all rule types. Legacy rule API uses camelCase values for several rule types. |
+| `Items[].Type` | `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `userInterest`, `itemCf`, `forceItem`, `boostBuryCond`, `coldStart`, `shuffle`, `recReason` | Do not normalize these response values to snake_case when using this API. |
+
+Reference constraints:
+
+- `DatasetID` filters by the rule's dataset scope. For rules that bind both behavior and item datasets, this is the behavior dataset ID.
+- `InvertItemDatasetID` filters by the inverted item dataset and is only meaningful for inverted/recall rule queries.
+- `ItemDatasetID` filters by the item dataset scope.
+
+`ListRecommendRule` may omit or trim `Items[].Config`; use `GetRecommendRule` for full rule config.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

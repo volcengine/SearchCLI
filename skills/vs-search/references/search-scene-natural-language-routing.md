@@ -9,6 +9,7 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 - scene config is `Config: SearchSceneConfigV2`.
 - dataset-level search settings live under `Config.PerDatasetConfigs[]`, keyed by `DatasetId`.
 - `search scene update` publishes via `PublishSearchSceneV2`; pass a partial V2 `Config` because absent child config fields are not overwritten.
+- Use this file only to identify the config area. Before deciding concrete string enum values, range limits, defaulting behavior, or required sibling fields, consult `../../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`.
 
 ## Intent Routing
 
@@ -25,7 +26,9 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 | recall count, recall upper bound, returned items upper bound | Run `search scene update` and modify `Config.PerDatasetConfigs[].MaxRecallNum` |
 | filter item scope, restrict search scope, search only within some items | Run `search scene update` and modify `Config.PerDatasetConfigs[].FilterConfig.Config`; optionally set `Config.PerDatasetConfigs[].FilterConfig.Name` |
 | protected recall channel, guaranteed recall source, auxiliary recall pool | Run `search scene update` and modify `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[]` |
-| personalized recall, personalization on/off, user-interest recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig` |
+| strong personalization, strong personalized recall, 强个性化, 强个性化干预 | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; set `Enable=true` and `Mode="strong"`; preserve existing `UserInterest[]` unless the user asks to change it |
+| weak personalization, weak personalized recall, 弱个性化, 弱个性化干预 | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; set `Enable=true` and `Mode="weak"`; preserve existing `UserInterest[]` unless the user asks to change it |
+| personalized recall, personalization on/off, user-interest recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; for concrete mode values and validation details, consult the `PublishSearchSceneV2` API reference before writing the payload |
 | hotness participates in ranking, rank with hotness | Run `search scene update` and modify `Config.PerDatasetConfigs[].EnableRerankWithHot` |
 | enable rerank, disable rerank | Run `search scene update` and modify `Config.PerDatasetConfigs[].RerankConfig.Enable` |
 | rerank topK, rerank count, rerank only top N | Run `search scene update` and modify `Config.PerDatasetConfigs[].RerankConfig.RerankTopK` |
@@ -96,7 +99,7 @@ Path B - user provides an existing `DictId`:
 Use this file as a routing layer only. For command execution:
 
 1. identify the target action here,
-2. consult `vs-product-qa` and `vs search scene update --help`,
+2. consult `vs-product-qa`, `vs search scene update --help`, and `../../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md` for enum-like strings and validation constraints,
 3. run the concrete command workflow,
 4. read the scene back after mutation.
 

@@ -231,6 +231,42 @@ message ReasonTemplateRule {
 
 This API has no explicit business response fields.
 
+## Field Semantics and Validation Notes
+
+### Enum and String Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Type` | `for_you`, `related`, `shopping_cart` | Recommend scene type. For a scene already in `published` status, changing `Type` is denied. |
+| `Config.ColdStartConfig.ItemConditionType` | `import_time`, `custom_filter` | `import_time` uses `ImportTimeWindowHours`; `custom_filter` requires `ItemFilter`. |
+| `Config.Shuffle.Rules[].WindowType` | `SLIDE`, `TOP` | Empty value is normalized to `SLIDE` by service behavior. |
+| `Config.Shuffle.Rules[].ShuffleType` | `dimension`, `expression` | Empty value is accepted for legacy dimension-shuffle behavior; expression shuffle requires `ShuffleExpr`. |
+| `Config.MergeConfigs[].Strategy` | `user_profile_first`, `multimodal_first`, `hot_item_first`, `item_similarity_first`, `custom` | Supported strategies depend on scene type. `for_you` does not support `item_similarity_first`; `shopping_cart` supports `item_similarity_first` and `custom`. |
+| `Config.MergeConfigs[].Weights` keys | `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start` | Used only when `Strategy="custom"`; `item_similarity` is not valid for `for_you`. |
+| `Config.ReasonTemplate.Templates[].RecallChannel` | `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start` | Enabled templates require a non-empty `Template`. |
+
+### Numeric and Field Constraints
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `Config.Count` | `<= 400` | Maximum single recommend result count. |
+| `Config.Impression.TimeWindowSeconds` / `Config.Impression.ExposureCfg.TimeWindowSeconds` | `> 0` | Time window in seconds. |
+| `Config.Impression.MaxSize` / `Config.Impression.ExposureCfg.MaxSize` | `0..30000` | Maximum deduplication item count. |
+| `Config.BoostBuryCondConfig.Rules[].Boost` | `[-1, 1]` | Positive values boost; negative values bury. |
+| `Config.ColdStartConfig.ImportTimeWindowHours` | `>= 0`; `> 0` when `ItemConditionType="import_time"` | Time window in hours for new-item detection. |
+| `Config.ColdStartConfig.ExposureThreshold` | `>= 0` | New-item exit threshold. |
+| `Config.ColdStartConfig.MaxInjectCount` | `>= 0` | Maximum cold-start items injected per request. |
+| `Config.Shuffle.Rules[].WindowSize` | `> 0` and `>= MaxSize` or `RecallMax` | `MaxSize` takes precedence; `RecallMax` is legacy compatibility. |
+| `Config.Shuffle.Rules[].MaxSize` / `RecallMax` | at least one effective value `> 0` | Required for each shuffle rule. |
+| `Config.Shuffle.Rules[].Name` / `FieldName` | non-empty | `FieldName` must use exact item dataset schema casing. |
+| `Config.MergeConfigs[].Weights` values | each value `>= 0`; total sum `> 0` | Applies when `Strategy="custom"`. |
+
+Behavior event constraints:
+
+- `BhvSceneTypes[]` is required and every value must exist in the bound UserEvent dataset's `event_scene` enum values.
+- `ItemDatasetID` must refer to an item dataset bound to the application.
+- Filter and rule configs that reference item fields must use exact item dataset schema field names and respect filterability requirements.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

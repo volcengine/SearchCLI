@@ -10,7 +10,8 @@ const os = require('node:os');
 const FLAVOR_DEFINITIONS = {
   items: {
     fileName: 'items.jsonl',
-    datasetType: 'item',
+    datasetType: 'multi_modal',
+    theme: 'e_commerce',
     industry: 'ecommerce',
     industryValue: 'e_commerce',
     datasetName: 'acc-items-pipeline',
@@ -18,7 +19,8 @@ const FLAVOR_DEFINITIONS = {
   },
   videos: {
     fileName: 'videos.jsonl',
-    datasetType: 'video',
+    datasetType: 'multi_modal',
+    theme: 'long_video',
     industry: 'video',
     industryValue: 'video',
     datasetName: 'acc-videos-pipeline',
@@ -70,6 +72,7 @@ async function runV2OnboardingPipeline({ runCli, startV2MockServer, fixturesDir,
       AddInferDatasetSchemaTaskV2: ({ body }) => {
         assert.equal(body.TosKey, expectedTosKey);
         assert.equal(body.Type, def.datasetType);
+        assert.equal(body.Theme, def.theme);
         return {
           ResponseMetadata: { RequestId: `req-infer-task-${flavor}` },
           Result: { TaskID: expectedTaskId }
@@ -86,7 +89,7 @@ async function runV2OnboardingPipeline({ runCli, startV2MockServer, fixturesDir,
         }
         return {
           ResponseMetadata: { RequestId: `req-infer-poll-${flavor}-${inferPolls}` },
-          Result: { Status: 'success', ...inferResultFixture }
+          Result: { Status: 'succeeded', ...inferResultFixture }
         };
       },
       CreateDatasetV2: ({ body }) => {
@@ -147,6 +150,7 @@ async function runV2OnboardingPipeline({ runCli, startV2MockServer, fixturesDir,
         'dataset', 'ingest',
         '--file', path.join(fixturesDir, expectedFileName),
         '--type', def.datasetType,
+        '--theme', def.theme,
         '--industry', def.industryValue,
         '--language', 'zh',
         '--schema-poll-interval-ms', '50',

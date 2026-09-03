@@ -11,7 +11,12 @@ import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-stat
 import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
 import { resolvePurchasePageUrl, type EnvironmentId } from '../core/environment';
-import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import {
+  hasHelpFlag,
+  isDomainHelpRequest,
+  renderUsageBlock,
+  withOpenApiReferenceHint
+} from '../core/help-utils';
 import { isProjectFeatureEnabled } from '../core/feature-flags';
 import { ApiRequestError, postJson } from '../core/http';
 import { VikingOpenApiClient } from '../core/openapi-client';
@@ -549,6 +554,19 @@ export interface PurchaseOrderWaitOptions extends ProjectScopedOptions {
 
 export interface PurchaseLinkOptions {
   environmentId?: string;
+}
+
+export interface PurchaseOrderPriceOptions extends ProjectScopedOptions {
+  scene?: string;
+  configurationCode?: string;
+  instanceNo?: string;
+  purchaseMonths?: number;
+  endTime?: number;
+}
+
+export interface PurchaseOrderCreateOptions extends PurchaseOrderPriceOptions {
+  autoRenew?: boolean;
+  clientToken?: string;
 }
 
 export async function runAppCreateCommand(options: AppCreateOptions): Promise<void> {
@@ -1685,6 +1703,99 @@ async function getBillingOrder(options: PurchaseOrderStatusOptions): Promise<unk
   return callOpenApi('/api/v1/GetBillingOrder', payload, options);
 }
 
+const VIKING_AISEARCH_PRODUCT_CODE = 'REC-SaaS-LLM-SEARCH';
+const BILLING_ORDER_CUSTOM_PARAM_SOURCE = 'ai_search_console';
+const MAX_BILLING_CLIENT_TOKEN_LENGTH = 60;
+
+const BILLING_ORDER_SCENE_CODES: Record<string, number> = {
+  purchase: 1,
+  renew: 2,
+  modify: 3
+};
+
+export async function runPurchaseOrderPriceCommand(options: PurchaseOrderPriceOptions): Promise<void> {
+  const payload = withBillingProductCode(
+    (await loadJsonInput(options.data)) ?? buildBillingOrderPayload(options, false)
+  );
+  await printResult(await callOpenApi('CalculateBillingOrderPrice', payload, options));
+}
+
+export async function runPurchaseOrderCreateCommand(options: PurchaseOrderCreateOptions): Promise<void> {
+  const payload = withBillingProductCode(
+    (await loadJsonInput(options.data)) ?? buildBillingOrderPayload(options, true)
+  );
+  if (isRecord(payload) && !hasNonEmptyString(payload.ClientToken)) {
+    payload.ClientToken = resolveBillingClientToken(options.clientToken);
+  }
+  const response = await callOpenApi('CreateBillingOrderV2', payload, options);
+  await printResult(response);
+  const orderNo = extractOpenApiResult(response)?.OrderNO;
+  if (typeof orderNo === 'string' && orderNo.length > 0) {
+    process.stderr.write(
+      `[purchase:order-create] EPS order created (OrderNO=${orderNo}). Complete payment in the Volcano Engine FastPay cashier, then run \`vs purchase order wait\` to poll service activation.\n`
+    );
+  }
+}
+
+function buildBillingOrderPayload(options: PurchaseOrderCreateOptions, forCreate: boolean): Record<string, unknown> {
+  const sceneInput = (options.scene ?? '').trim();
+  const scene = BILLING_ORDER_SCENE_CODES[sceneInput.toLowerCase()];
+  if (scene === undefined) {
+    throw new Error('Missing or invalid --scene. Use purchase, renew, or modify.');
+  }
+  const configurationCode = options.configurationCode?.trim();
+  if (!configurationCode) {
+    throw new Error('Missing required flag: --configuration-code (e.g. ai_search_standard_monthly).');
+  }
+  const instanceNo = options.instanceNo?.trim();
+  const { purchaseMonths, endTime } = options;
+  if (purchaseMonths !== undefined && endTime !== undefined) {
+    throw new Error('--purchase-months and --end-time are mutually exclusive.');
+  }
+  if (purchaseMonths !== undefined && purchaseMonths <= 0) {
+    throw new Error('--purchase-months must be a positive integer.');
+  }
+  if (endTime !== undefined && endTime <= 0) {
+    throw new Error('--end-time must be a positive Unix timestamp in seconds.');
+  }
+  if (scene === BILLING_ORDER_SCENE_CODES.purchase && instanceNo) {
+    throw new Error('--instance-no must not be set when --scene=purchase.');
+  }
+  if (scene !== BILLING_ORDER_SCENE_CODES.purchase && !instanceNo) {
+    throw new Error(`--instance-no is required when --scene=${sceneInput}.`);
+  }
+  if (scene === BILLING_ORDER_SCENE_CODES.modify && purchaseMonths === undefined && endTime === undefined) {
+    throw new Error('--scene=modify requires --purchase-months or --end-time.');
+  }
+  return compactObject({
+    ProductCode: resolveBillingProductCode(),
+    ConfigurationCode: configurationCode,
+    Scene: scene,
+    InstanceNO: instanceNo,
+    PurchaseMonths: purchaseMonths,
+    EndTime: endTime,
+    AutoRenew: forCreate ? options.autoRenew : undefined,
+    ClientToken: forCreate ? resolveBillingClientToken(options.clientToken) : undefined,
+    CustomParams: forCreate ? { source: BILLING_ORDER_CUSTOM_PARAM_SOURCE } : undefined
+  });
+}
+
+function withBillingProductCode(payload: unknown): unknown {
+  return isRecord(payload) ? { ...payload, ProductCode: resolveBillingProductCode() } : payload;
+}
+
+function resolveBillingProductCode(): string {
+  return process.env.VIKING_AISEARCH_PRODUCT_CODE?.trim() || VIKING_AISEARCH_PRODUCT_CODE;
+}
+
+function resolveBillingClientToken(value?: string): string {
+  const token = (value ?? '').trim();
+  if (token.length > MAX_BILLING_CLIENT_TOKEN_LENGTH) {
+    throw new Error(`Invalid --client-token: must be at most ${MAX_BILLING_CLIENT_TOKEN_LENGTH} characters.`);
+  }
+  return token || randomUUID();
+}
+
 function isBillingOrderNotFoundError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /\b404\b/.test(message) || /ResourceNotFound|NotFound|not found/i.test(message);
@@ -1925,10 +2036,10 @@ export function printProductDomainsHelp(): void {
     'vs recommend run|scene create|list|get|update|delete',
     'vs chat run',
     ...(isProjectFeatureEnabled() ? ['vs project create|deploy'] : []),
-    'vs purchase link|order status|wait'
+    'vs purchase link|order price|create|status|wait'
   ];
 
-  console.log(['PRODUCT COMMANDS', renderUsageBlock(publicLines)].join('\n'));
+  console.log(withOpenApiReferenceHint(['PRODUCT COMMANDS', renderUsageBlock(publicLines)].join('\n')));
 }
 
 function printDomainHelp(domain: string): void {
@@ -2126,21 +2237,29 @@ COMMON FLAGS
     purchase: `${renderUsageBlock(
       [
         'vs purchase link [--environment-id <environment-id>]',
+        'vs purchase order price --scene <purchase|renew|modify> --configuration-code <code> [--instance-no <no>] [--purchase-months <n> | --end-time <seconds>] [service flags]',
+        'vs purchase order create --scene <purchase|renew|modify> --configuration-code <code> [--instance-no <no>] [--purchase-months <n> | --end-time <seconds>] [--auto-renew] [--client-token <token>] [service flags]',
         'vs purchase order status [service flags]',
         'vs purchase order wait [--max-attempts <n>] [--poll-interval-ms <ms>] [service flags]'
       ]
     )}
 
 DESCRIPTION
-  Print the onboarding purchase page link, then check whether the onboarding purchase order is visible.
-  Use wait after the user explicitly says the purchase has completed.
+  Quote and create billing orders through the console OpenAPI, then check whether the onboarding purchase order is visible.
+  order price calls CalculateBillingOrderPrice for a quote without creating an order.
+  order create calls CreateBillingOrderV2 and returns the EPS OrderNO used to complete FastPay payment.
+  Use wait after the user completes payment. Configuration codes: ai_search_free_trial,
+  ai_search_first_month_trial, ai_search_standard_monthly, ai_search_bespoke_premium, ai_search_post_paid.
+  ProductCode is managed internally. Set VIKING_AISEARCH_PRODUCT_CODE only for local billing tests;
+  otherwise REC-SaaS-LLM-SEARCH is used.
 
 COMMON FLAGS
   link: --environment-id
-  order: --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  order price/create: --scene --configuration-code --instance-no --purchase-months --end-time --client-token --auto-renew --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output
+  order status/wait: --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
   };
 
-  console.log(helpByDomain[domain] ?? `Unknown domain: ${domain}`);
+  console.log(withOpenApiReferenceHint(helpByDomain[domain] ?? `Unknown domain: ${domain}`));
 }
 
 function printDatasetCommandHelp(action: string): void {
@@ -2177,10 +2296,9 @@ KEY FLAGS
   --dry-run                 Validate the payload server-side without persisting the dataset.
 
 EXAMPLES
-  vs dataset create --name demo-items --type item --schema @schema.json
-  vs dataset create --name demo-items --type item --schema @schema.json --industry e_commerce --language zh --theme catalog
+  vs dataset create --name demo-goods --type multi_modal --theme e_commerce --schema @schema.json
+  vs dataset create --name demo-goods --type multi_modal --theme e_commerce --schema @schema.json --industry e_commerce --language zh
   vs dataset create --data @dataset-create.json
-  vs item plan --file ./items.json --type item --goal "Build item search" --skip-app
   vs dataset create --data ./.viking/item-plans/<plan>/dataset-create.json`,
     get: `Get one Viking dataset.
 
@@ -2250,11 +2368,11 @@ KEY FLAGS
 
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --language zh
-  vs dataset ingest --file ./items.jsonl --type item --industry e_commerce --dry-run
-  vs dataset ingest --file ./products.jsonl --type multi_modal --theme e_commerce --abnormal-image-policy skip --industry e_commerce --language zh
+  vs dataset ingest --file ./items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --language zh
+  vs dataset ingest --file ./items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --dry-run
+  vs dataset ingest --file ./events.jsonl --type user_event --dataset-name demo-behavior
   vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
-  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type item --dataset-name demo-items`,
+  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type multi_modal --theme e_commerce --dataset-name demo-items`,
     'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
 
 USAGE
@@ -2280,7 +2398,7 @@ USAGE
 
 DESCRIPTION
   Submits the uploaded TOS key for schema inference and returns a TaskID. Poll the task with
-  \`dataset infer-result\` until Status is Success.
+  \`dataset infer-result\` until Status is succeeded.
 
 KEY FLAGS
   --tos-key        FileKey returned by \`dataset import-url\`. Required unless --data already provides TosKey.
@@ -2289,12 +2407,12 @@ KEY FLAGS
   --industry       Optional industry hint (e_commerce|material|video|news|social_platform|other).
                    Aliases like \`ecommerce\` are accepted and normalized to the snake_case wire value.
   --language       Optional language hint (zh|en|ko|ja|hi).
-  --theme          Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video). Required when --type=multi_modal.
+  --theme          Theme/domain hint (general|e_commerce|content|long_video). Required when --type=multi_modal. Forwards to AddInferDatasetSchemaTaskV2.Theme.
   --project-name   Viking project name when the API requires project scoping.
 
 EXAMPLES
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type item --industry e_commerce --language zh`,
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal --theme e_commerce
+  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --language zh`,
     'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
 
 USAGE
@@ -2302,8 +2420,8 @@ USAGE
   vs dataset infer-result --data @infer-result.json [service flags]
 
 DESCRIPTION
-  Returns the current Status (pending|processing|success|failed|canceled) along with Schema / FieldDescMap /
-  DataFieldConfig when Status is success. This is a single-shot call; \`dataset ingest\` performs
+  Returns the current Status (pending|processing|succeeded|failed|canceled) along with Schema / FieldDescMap /
+  DataFieldConfig when Status is succeeded. This is a single-shot call; \`dataset ingest\` performs
   the polling internally.
 
   To render a human-readable schema confirmation block (fields table, field roles, warnings),
@@ -2368,7 +2486,7 @@ EXAMPLES
   vs dataset subscription close --task-id task_xxx`
   };
 
-  console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
+  console.log(withOpenApiReferenceHint(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`));
 }
 
 function printDictCommandHelp(action: string): void {
@@ -2489,7 +2607,7 @@ EXAMPLES
   vs dict write-terms --dict-id dict_xxx --entries @entries.json`
   };
 
-  console.log(helpByAction[action] ?? `Unknown dict subcommand: ${action}`);
+  console.log(withOpenApiReferenceHint(helpByAction[action] ?? `Unknown dict subcommand: ${action}`));
 }
 
 function printAppCommandHelp(action: string, subAction?: string): void {
@@ -2660,7 +2778,7 @@ EXAMPLES
   };
 
   const key = `${action}:${subAction ?? ''}`;
-  console.log(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
+  console.log(withOpenApiReferenceHint(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
 }
 
 function printSearchCommandHelp(action: string, subAction?: string): void {
@@ -2987,7 +3105,7 @@ EXAMPLES
   vs search tune compare --application-id 123 --dataset-id 456 --scene-ids scene_a,scene_b --queries ./queries.jsonl`
   };
 
-  console.log(helpByAction[`${action}:${subAction ?? ''}`] ?? helpByAction[action] ?? `Unknown search subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
+  console.log(withOpenApiReferenceHint(helpByAction[`${action}:${subAction ?? ''}`] ?? helpByAction[action] ?? `Unknown search subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
 }
 
 async function runAppCli(argv: string[]): Promise<void> {
@@ -3293,6 +3411,11 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         datasetName: optionalString(values['dataset-name']),
         industry: optionalString(values.industry),
         language: optionalString(values.language),
+        theme: optionalString(values.theme),
+        abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
+        abnormalVideoPolicy: optionalString(values['abnormal-video-policy']),
+        videoAutoDelete: optionalBoolean(values['video-auto-delete']),
+        postPaidType: optionalString(values['post-paid-type']),
         schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
         schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
         dryRun: optionalBoolean(values['dry-run']),
@@ -3959,9 +4082,32 @@ async function runPurchaseCli(argv: string[]): Promise<void> {
     throw new Error(`Unknown purchase subcommand: ${action}`);
   }
 
+  rejectUnsupportedPurchaseOrderFlags(argv.slice(2));
   const values = parseStandaloneOptions(argv.slice(2));
   const projectOptions = toProjectScopedOptions(values);
   switch (subAction) {
+    case 'price':
+      await runPurchaseOrderPriceCommand({
+        ...projectOptions,
+        scene: optionalString(values.scene),
+        configurationCode: optionalString(values['configuration-code']),
+        instanceNo: optionalString(values['instance-no']),
+        purchaseMonths: parseOptionalInt(optionalString(values['purchase-months'])),
+        endTime: parseOptionalInt(optionalString(values['end-time']))
+      });
+      return;
+    case 'create':
+      await runPurchaseOrderCreateCommand({
+        ...projectOptions,
+        scene: optionalString(values.scene),
+        configurationCode: optionalString(values['configuration-code']),
+        instanceNo: optionalString(values['instance-no']),
+        purchaseMonths: parseOptionalInt(optionalString(values['purchase-months'])),
+        endTime: parseOptionalInt(optionalString(values['end-time'])),
+        autoRenew: optionalBoolean(values['auto-renew']),
+        clientToken: optionalString(values['client-token'])
+      });
+      return;
     case 'status':
       await runPurchaseOrderStatusCommand(projectOptions);
       return;
@@ -3974,6 +4120,12 @@ async function runPurchaseCli(argv: string[]): Promise<void> {
       return;
     default:
       throw new Error(`Unknown purchase order subcommand: ${subAction}`);
+  }
+}
+
+function rejectUnsupportedPurchaseOrderFlags(argv: string[]): void {
+  if (argv.some(value => value === '--product-code' || value.startsWith('--product-code='))) {
+    throw new Error('--product-code is not supported. ProductCode is managed internally.');
   }
 }
 
@@ -4052,6 +4204,12 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'online-config': { type: 'string' },
       'dataset-id': { type: 'string' },
       'client-token': { type: 'string' },
+      'configuration-code': { type: 'string' },
+      'instance-no': { type: 'string' },
+      'purchase-months': { type: 'string' },
+      'end-time': { type: 'string' },
+      scene: { type: 'string' },
+      'auto-renew': { type: 'boolean' },
       'need-create-dataset': { type: 'boolean' },
       'create-dataset-config': { type: 'string' },
       'data-source-config': { type: 'string' },

@@ -81,7 +81,7 @@ message AugmentedFieldV2 {
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `Status` | string | See service validation | Status. Enum: `pending` / `processing` / `success` / `failed` / `canceled`. |
+| `Status` | string | See service validation | Status. Enum: `pending` / `processing` / `succeeded` / `failed` / `canceled`. |
 | `Schema[]` | array<DatasetSchemaFieldV2> | No | Schema. |
 | `DataFieldConfig` | DataFieldConfigV2 | See service validation | Data field config. |
 | `Error` | string | See service validation | Error. |
@@ -91,7 +91,7 @@ message AugmentedFieldV2 {
 | `FieldDescMap` | map<string, string> | See service validation | Field desc map (top-level). |
 | `Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Type` | string | See service validation | Type. |
-| `Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`, `title`, `description`). |
+| `Schema[].BizAttr` | string | See service validation | Biz attr. snake_case; for `multi_modal` datasets use `multi_modal_*` values (e.g. `multi_modal_id`, `multi_modal_title`, `multi_modal_image_url`, `multi_modal_video_url`), for `user_event` use `user_event_*` values (e.g. `user_event_event_type`, `user_event_item_pk`, `user_event_user_pk`). |
 | `Schema[].IsPrimaryKey` | bool | See service validation | Is primary key. |
 | `Schema[].Required` | bool | See service validation | Required. |
 | `Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |

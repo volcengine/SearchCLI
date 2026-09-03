@@ -7,10 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REQUIRED_HEADINGS = ['## When to Use', '## Preconditions', '## Commands', '## Workflow', '## Constraints'];
+const REQUIRED_HEADINGS = ['## When to Use', '## Version Check', '## Preconditions', '## Commands', '## Workflow', '## Constraints'];
 const ALLOWED_CATEGORIES = new Set(['shared', 'app', 'data', 'search', 'recommend', 'chat', 'openapi', 'workflow']);
 const ALLOWED_APPLIES_TO = new Set(['codex', 'agents', 'external-agent']);
 const CLI_REQUIREMENT_PATTERN = /^>=\d+\.\d+\.\d+$/;
+const SKILL_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -46,6 +47,7 @@ for (const dirName of skillDirs) {
   }
 
   const name = frontmatter.name?.trim();
+  const version = frontmatter.version?.trim();
   const description = frontmatter.description?.trim();
   const category = frontmatter.category?.trim();
   const appliesTo = parseCsvList(frontmatter.applies_to);
@@ -56,6 +58,11 @@ for (const dirName of skillDirs) {
   if (!name) {
     errors.push(`[${dirName}] frontmatter missing name`);
     continue;
+  }
+  if (!version) {
+    errors.push(`[${dirName}] frontmatter missing version`);
+  } else if (!SKILL_VERSION_PATTERN.test(version)) {
+    errors.push(`[${dirName}] version must be a semantic version such as 1.0.0`);
   }
   if (!description) {
     errors.push(`[${dirName}] frontmatter missing description`);

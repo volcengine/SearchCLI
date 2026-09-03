@@ -1,17 +1,18 @@
 {
-  "Name": "acc-items",
-  "Type": "item",
+  "Name": "acc-goods",
+  "Type": "multi_modal",
+  "Theme": "e_commerce",
   "Description": "Acceptance fixture dataset for V2 onboarding",
   "Industry": "e_commerce",
   "Language": "zh",
   "Schema": [
-    { "FieldName": "item_id", "FieldType": "string", "BizAttr": "query_pk", "IsPrimaryKey": true },
-    { "FieldName": "title", "FieldType": "string", "BizAttr": "title" },
-    { "FieldName": "description", "FieldType": "string", "BizAttr": "description" },
-    { "FieldName": "brand", "FieldType": "string", "BizAttr": "brand" },
+    { "FieldName": "item_id", "FieldType": "string", "BizAttr": "multi_modal_id", "IsPrimaryKey": true },
+    { "FieldName": "title", "FieldType": "string", "BizAttr": "multi_modal_title" },
+    { "FieldName": "description", "FieldType": "string", "BizAttr": "multi_modal_content" },
+    { "FieldName": "brand", "FieldType": "string", "BizAttr": "multi_modal_brand" },
     { "FieldName": "tags", "FieldType": "array<string>" },
     { "FieldName": "price", "FieldType": "float" },
-    { "FieldName": "image_url", "FieldType": "string", "BizAttr": "image_pk" }
+    { "FieldName": "image_url", "FieldType": "string", "BizAttr": "multi_modal_image_url" }
   ],
   "FieldDescMap": {
     "item_id": "Primary key of the item",

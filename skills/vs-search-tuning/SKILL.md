@@ -1,5 +1,6 @@
 ---
 name: vs-search-tuning
+version: 1.0.0
 description: "Use when a user asks an agent to evaluate or tune text search similarity for an existing Viking AI Search application and dataset."
 category: search
 applies_to: codex, agents, external-agent
@@ -15,6 +16,10 @@ commands: llm login, llm import-env, llm status, search tune llm-check, search t
 Use this skill when the user wants an external agent to evaluate and tune text search similarity for an existing AI Search application and dataset.
 
 This first version is for similarity tuning. It defaults to text-query/text-item judging, fixes `mode=UserDefined`, and tunes the user-defined recall strategy, recall weights, keyword match ratio, and max retrieved count. It can optionally use text+image LLM judging when visual relevance matters; image fields are taken only from `GetAppDataConfig.ImageIndexFields`. It does not tune rerank, personalization, hotness, boost/bury, sort rules, serving controls, or business operating rules.
+
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-search-tuning`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
 
 ## Preconditions
 

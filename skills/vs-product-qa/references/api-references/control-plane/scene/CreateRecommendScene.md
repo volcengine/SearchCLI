@@ -74,6 +74,27 @@ enum RecommendOptimizationTargetEnum {
 | --- | --- | --- | --- |
 | `SceneID` | string | See service validation | Scene ID. |
 
+## Field Semantics and Validation Notes
+
+### Enum and String Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Type` | `for_you`, `related`, `shopping_cart` | Recommend scene type: home feed, related/detail-page, or shopping-cart recommendation. |
+| `RecommendModel` | `Default`, `LongSequence` | Proto enum values. Service/domain string equivalents are `default` and `long_sequence`. |
+| `RecommendOptimizationTarget` | `RecommendOptimizationTargetNone`, `Ctr` | Proto enum values. Long-sequence scenes require a non-empty optimization target; service/domain string equivalent for `Ctr` is `ctr`. |
+
+### Behavior Event Constraints
+
+- `BhvSceneTypes[]` is required and every value must exist in the bound UserEvent dataset's `event_scene` enum values.
+- For `RecommendModel=LongSequence`, `ClickEventTypes[]` is required.
+- `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` values come from the bound UserEvent dataset's `event_type` enum values.
+
+### Reference Constraints
+
+- `ItemDatasetID` must refer to an item dataset bound to the application.
+- `FilterConfig.ItemTypeFilter.Filter` fields must use exact item dataset schema field names and must be filterable.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { parseArgs } from 'node:util';
-import { isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import { isDomainHelpRequest, renderUsageBlock, withOpenApiReferenceHint } from '../core/help-utils';
 import { printOutput } from '../core/output-format';
 import {
   createRepoSkillScaffold,
@@ -18,6 +18,7 @@ import {
   toRepoSkillListItem,
   validateRepoSkills
 } from '../skills/repo-skills';
+import { checkSkillVersions, formatSkillVersionWarning } from '../skills/skill-version-check';
 
 export async function runSkillDomainFromArgv(argv: string[]): Promise<boolean> {
   if (isDomainHelpRequest(argv)) {
@@ -38,6 +39,9 @@ export async function runSkillDomainFromArgv(argv: string[]): Promise<boolean> {
       return true;
     case 'show':
       await runSkillShowCommand(requiredString(values.name, '--name'), optionalString(values.root));
+      return true;
+    case 'check':
+      await runSkillCheckCommand(optionalString(values.name), optionalString(values.root));
       return true;
     case 'search':
       await runSkillSearchCommand(
@@ -81,6 +85,7 @@ export function printSkillHelp(): void {
     '  vs skill list',
     '  vs skill list --category search',
     '  vs skill show --name vs-shared',
+    '  vs skill check --name vs-shared',
     '  vs skill search --query "search debug"',
     '  vs skill install all',
     '  vs skill install vs-shared vs-search --dest /tmp/viking-skills',
@@ -88,11 +93,12 @@ export function printSkillHelp(): void {
     '  vs skill validate'
   ];
 
-  console.log(`${renderUsageBlock(
+  console.log(withOpenApiReferenceHint(`${renderUsageBlock(
     [
       'vs skill list',
       'vs skill list [--category <name>]',
       'vs skill show --name <skill-name>',
+      'vs skill check [--name <skill-name>]',
       'vs skill search --query <text> [--category <name>] [--max-results <n>]',
       'vs skill install <skill-name...|all> [--target global|codex|agents|trae|trae-cn] [--dest <dir>] [--force]',
       'vs skill init <skill-name> [--root <dir>] [--category <name>] [--keywords <csv>] [--commands <csv>] [--force]',
@@ -107,7 +113,7 @@ EXAMPLES
 ${examples.join('\n')}
 
 COMMON FLAGS
-  --format --json --table --yaml --pretty --ndjson --csv --jq --output`);
+  --format --json --table --yaml --pretty --ndjson --csv --jq --output`));
 }
 
 export async function runSkillListCommand(
@@ -133,9 +139,38 @@ export async function runSkillShowCommand(name: string, root?: string): Promise<
     throw new Error(`Unknown repo skill: ${name}`);
   }
 
+  const versionCheck = (await checkSkillVersions([skill]))[0];
+  const warning = formatSkillVersionWarning(versionCheck);
+  if (warning) process.stderr.write(`${warning}\n`);
+
   await printOutput({
     ...skill,
+    versionCheck,
     sourceCatalog: getRepoSkillsRoot(root)
+  });
+}
+
+export async function runSkillCheckCommand(name?: string, root?: string): Promise<void> {
+  const skills = listRepoSkills(root);
+  const selectedSkills = name
+    ? skills.filter(skill => skill.name.toLowerCase() === name.trim().toLowerCase())
+    : skills;
+  if (name && selectedSkills.length === 0) {
+    throw new Error(`Unknown repo skill: ${name}`);
+  }
+
+  const checks = await checkSkillVersions(selectedSkills);
+  for (const check of checks) {
+    const warning = formatSkillVersionWarning(check);
+    if (warning) process.stderr.write(`${warning}\n`);
+  }
+
+  await printOutput({
+    root: getRepoSkillsRoot(root),
+    checkedAt: new Date().toISOString(),
+    count: checks.length,
+    updateAvailable: checks.filter(check => check.status === 'update-available').length,
+    checks
   });
 }
 

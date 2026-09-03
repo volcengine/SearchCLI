@@ -79,6 +79,7 @@ async function runCoreSuite() {
   await runTest('project-feature-flag', testProjectFeatureFlag);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
+  await runTest('skill-version-check', testSkillVersionCheck);
   await runTest('validate-skills-space-path', testValidateSkillsSpacePath);
   await runTest('search-tune-help', testSearchTuneHelp);
   await runTest('search-run-requires-scene-help', testSearchRunRequiresSceneHelp);
@@ -116,18 +117,19 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
   await runTest('v2-dataset-infer-schema-mock', testDatasetInferSchemaMock);
   await runTest('v2-dataset-infer-schema-rejects-document', testDatasetInferSchemaRejectsDocument);
-  await runTest('v2-dataset-infer-schema-rejects-multi-modal', testDatasetInferSchemaRejectsMultiModal);
-  await runTest('v2-dataset-create-rejects-multi-modal', testDatasetCreateRejectsMultiModal);
+  await runTest('v2-dataset-infer-schema-rejects-item', testDatasetInferSchemaRejectsItem);
+  await runTest('v2-dataset-create-rejects-item', testDatasetCreateRejectsItem);
   await runTest('v2-dataset-infer-result-mock', testDatasetInferResultMock);
-  await runTest('v2-dataset-infer-result-render-schema-mixed', testDatasetInferResultRenderSchemaMixed);
-  await runTest('v2-dataset-infer-result-render-schema-degenerate', testDatasetInferResultRenderSchemaDegenerate);
-  await runTest('v2-dataset-infer-result-render-schema-no-data-config', testDatasetInferResultRenderSchemaNoDataConfig);
-  await runTest('v2-dataset-infer-result-render-schema-stability', testDatasetInferResultRenderSchemaStability);
+  await runTest('v2-dataset-validate-schema-mixed', testDatasetValidateSchemaMixed);
+  await runTest('v2-dataset-validate-schema-degenerate', testDatasetValidateSchemaDegenerate);
+  await runTest('v2-dataset-validate-schema-no-data-config', testDatasetValidateSchemaNoDataConfig);
+  await runTest('v2-dataset-validate-schema-stability', testDatasetValidateSchemaStability);
   await runTest('v2-dataset-create-mock', testDatasetCreateMock);
   await runTest('v2-app-create-mock', testAppCreateMock);
   await runTest('v2-app-attach-dataset-mock', testAppAttachDatasetMock);
   await runTest('v2-search-scene-actions-mock', testSearchSceneV2ActionsMock);
   await runTest('data-source-subscription-actions-mock', testDataSourceSubscriptionActionsMock);
+  await runTest('purchase-order-actions-mock', testPurchaseOrderActionsMock);
   await runTest('v2-data-write-mock', testDataWriteMock);
 
   const orchestrator = loadV2OnboardingOrchestrator();
@@ -227,6 +229,8 @@ async function runSkipped(name, reason) {
 async function testRootHelp() {
   const { stdout } = await runCli(['--help']);
   assert.match(stdout, /SearchCLI/);
+  assert.match(stdout, /Detailed parameter constraints and request\/response contracts/);
+  assert.match(stdout, /vs skill show --name vs-product-qa/);
   assert.match(stdout, /\bitem\b/);
   assert.doesNotMatch(stdout, /\bproject\b/);
   assert.match(stdout, /\bllm\b/);
@@ -251,6 +255,7 @@ async function testSkillList() {
   assert.deepEqual(names, [
     'vs-alias-mapping',
     'vs-chat',
+    'vs-crawler',
     'vs-item-onboarding',
     'vs-product-qa',
     'vs-project',
@@ -269,8 +274,60 @@ async function testSkillShow() {
   const { stdout } = await runCli(['skill', 'show', '--name', 'vs-item-onboarding', '--json']);
   const payload = JSON.parse(stdout);
   assert.equal(payload.name, 'vs-item-onboarding');
-  assert.match(payload.description, /item-level onboarding/i);
+  assert.match(payload.description, /onboarding workflow for creating datasets/i);
   return `${command.prefix} skill show --name vs-item-onboarding --json`;
+}
+
+async function testSkillVersionCheck() {
+  let requestCount = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/skills/vs-search/SKILL.md') {
+      requestCount += 1;
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('---\nname: vs-search\nversion: 1.1.0\n---\n');
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  try {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : undefined;
+    assert.ok(port);
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-skill-version-cache-'));
+    const env = {
+      VIKING_SKILL_VERSION_BASE_URL: `http://127.0.0.1:${port}/skills`,
+      VIKING_HOME: cacheDir
+    };
+    const { stdout, stderr } = await runCli(['skill', 'check', '--name', 'vs-search', '--json'], {
+      env
+    });
+    const secondRun = await runCli(['skill', 'check', '--name', 'vs-search', '--json'], {
+      env
+    });
+    try {
+      const payload = JSON.parse(stdout);
+      const secondPayload = JSON.parse(secondRun.stdout);
+      assert.equal(payload.updateAvailable, 1);
+      assert.equal(payload.checks[0].localVersion, '1.0.0');
+      assert.equal(payload.checks[0].onlineVersion, '1.1.0');
+      assert.equal(payload.checks[0].status, 'update-available');
+      assert.equal(secondPayload.checks[0].status, 'update-available');
+      assert.equal(requestCount, 1);
+      assert.ok(fs.existsSync(path.join(cacheDir, 'online_version_cache.json')));
+      assert.match(stderr, /Update available for vs-search/);
+      return `${command.prefix} skill check --name vs-search --json (24h cache)`;
+    } finally {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 }
 
 async function testValidateSkillsSpacePath() {
@@ -1513,6 +1570,7 @@ async function testDatasetImportUrlHelp() {
   assert.match(stdout, /Request a presigned upload URL for V2 dataset onboarding/);
   assert.match(stdout, /--file-name/);
   assert.match(stdout, /GetPresignedImportUrlV2/);
+  assert.match(stdout, /Detailed parameter constraints and request\/response contracts/);
   return `${command.prefix} dataset import-url --help`;
 }
 
@@ -1567,7 +1625,8 @@ async function testDatasetCreateDryRun() {
     assert.equal(state.requests[0].kind, 'control-plane');
     assert.equal(state.requests[0].action, 'CreateDatasetV2');
     assert.equal(state.requests[0].body.DryRun, true);
-    assert.equal(state.requests[0].body.Type, 'item');
+    assert.equal(state.requests[0].body.Type, 'multi_modal');
+    assert.equal(state.requests[0].body.Theme, 'e_commerce');
     assert.equal(state.requests[0].body.Industry, 'e_commerce');
     assert.match(stdout, /req-create-dry-run/);
     return `${command.prefix} dataset create --data @${tempPath}`;
@@ -1717,7 +1776,9 @@ async function testDatasetIngestDryRun() {
         '--file',
         fixture,
         '--type',
-        'item',
+        'multi_modal',
+        '--theme',
+        'e_commerce',
         '--industry',
         'e_commerce',
         '--language',
@@ -1740,7 +1801,8 @@ async function testDatasetIngestDryRun() {
     assert.equal(uploadCallCount, 1, 'expected exactly one upload PUT');
     const createCall = state.requests.find(req => req.action === 'CreateDatasetV2');
     assert.equal(createCall.body.DryRun, true);
-    assert.equal(createCall.body.Type, 'item');
+    assert.equal(createCall.body.Type, 'multi_modal');
+    assert.equal(createCall.body.Theme, 'e_commerce');
     assert.match(stdout, /dry_run/i);
     return `${command.prefix} dataset ingest --file items.jsonl --dry-run`;
   } finally {
@@ -1807,7 +1869,9 @@ async function testDatasetInferSchemaMock() {
         '--tos-key',
         'onboarding/items.jsonl',
         '--type',
-        'item',
+        'multi_modal',
+        '--theme',
+        'e_commerce',
         '--industry',
         'ecommerce',
         '--language',
@@ -1822,11 +1886,12 @@ async function testDatasetInferSchemaMock() {
     const call = state.requests[0];
     assert.equal(call.action, 'AddInferDatasetSchemaTaskV2');
     assert.equal(call.body.TosKey, 'onboarding/items.jsonl');
-    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Type, 'multi_modal');
+    assert.equal(call.body.Theme, 'e_commerce');
     assert.equal(call.body.Industry, 'e_commerce');
     assert.equal(call.body.Language, 'zh');
     assert.match(stdout, /task_xyz/);
-    return `${command.prefix} dataset infer-schema --tos-key ... --type item`;
+    return `${command.prefix} dataset infer-schema --tos-key ... --type multi_modal`;
   } finally {
     await server.close();
   }
@@ -1858,14 +1923,14 @@ async function testDatasetInferSchemaRejectsDocument() {
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      pattern: /(not allowed here|Invalid dataset Type).*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
   return `${command.prefix} dataset infer-schema --type document (rejected)`;
 }
 
-async function testDatasetInferSchemaRejectsMultiModal() {
+async function testDatasetInferSchemaRejectsItem() {
   await expectCliRejection(
     [
       'dataset',
@@ -1873,34 +1938,34 @@ async function testDatasetInferSchemaRejectsMultiModal() {
       '--tos-key',
       'onboarding/items.jsonl',
       '--type',
-      'multi_modal',
+      'item',
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event/i,
+      pattern: /(not allowed here|Invalid dataset Type).*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
-  return `${command.prefix} dataset infer-schema --type multi_modal (rejected)`;
+  return `${command.prefix} dataset infer-schema --type item (rejected)`;
 }
 
-async function testDatasetCreateRejectsMultiModal() {
+async function testDatasetCreateRejectsItem() {
   await expectCliRejection(
     [
       'dataset',
       'create',
       '--name',
-      'demo-mm',
+      'demo-items',
       '--type',
-      'multi_modal',
+      'item',
       ...v2ServiceFlags('http://127.0.0.1:1')
     ],
     {
-      pattern: /(not allowed here|Invalid dataset Type).*item.*video.*user_event.*document/i,
+      pattern: /(not allowed here|Invalid dataset Type).*user_event.*multi_modal/i,
       env: envWithVikingBaseUrlsReset('http://127.0.0.1:1')
     }
   );
-  return `${command.prefix} dataset create --type multi_modal (rejected)`;
+  return `${command.prefix} dataset create --type item (rejected)`;
 }
 
 async function testDatasetInferResultMock() {
@@ -1935,7 +2000,7 @@ async function testDatasetInferResultMock() {
     assert.equal(call.action, 'GetInferDatasetSchemaResultV2');
     assert.equal(call.body.TaskID, 'task_xyz');
     assert.equal(call.body.ProjectName, 'acc-project');
-    assert.match(stdout, /Success/);
+    assert.match(stdout, /succeeded/);
     assert.match(stdout, /item_id/);
     return `${command.prefix} dataset infer-result --task-id task_xyz`;
   } finally {
@@ -1943,12 +2008,12 @@ async function testDatasetInferResultMock() {
   }
 }
 
-async function testDatasetInferResultRenderSchemaMixed() {
+async function testDatasetValidateSchemaMixed() {
   const mixedResult = {
-    Status: 'success',
+    Status: 'succeeded',
     Schema: [
-      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'query_pk', IsPrimaryKey: true, Required: true },
-      { Name: 'title', Type: 'string', BizAttr: 'title', Required: false },
+      { FieldName: 'item_id', FieldType: 'string', BizAttr: 'multi_modal_id', IsPrimaryKey: true, Required: true },
+      { Name: 'title', Type: 'string', BizAttr: 'multi_modal_title', Required: false },
       { Name: 'tags', FieldType: 'array<string>' },
       { FieldName: 'price', Type: 'float' }
     ],
@@ -1964,12 +2029,12 @@ async function testDatasetInferResultRenderSchemaMixed() {
       FilterFieldsMap: { price: { Type: 'float' } }
     }
   };
-  return runInferResultRenderSchema(mixedResult, ({ stdout }) => {
+  return runValidateSchema(mixedResult, ({ stdout }) => {
     assert.match(stdout, /vs-schema-confirm: BEGIN/);
     assert.match(stdout, /Field count: 4/);
-    assert.match(stdout, /Primary key: item_id \(BizAttr=query_pk\)/);
+    assert.match(stdout, /Primary key: item_id \(BizAttr=multi_modal_id\)/);
     assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
-    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+query_pk\s+\|\s+yes\s+\|\s+Primary key/);
+    assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+multi_modal_id\s+\|\s+yes\s+\|\s+Primary key/);
     assert.match(stdout, /tags\s+\|\s+`array<string>`\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
     assert.match(stdout, /price\s+\|\s+`float`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
     assert.match(stdout, /FieldDescMap is missing entries for: price/);
@@ -1977,15 +2042,15 @@ async function testDatasetInferResultRenderSchemaMixed() {
   });
 }
 
-async function testDatasetInferResultRenderSchemaDegenerate() {
+async function testDatasetValidateSchemaDegenerate() {
   const degenerate = {
-    Status: 'success',
+    Status: 'succeeded',
     Schema: [
       { FieldName: 'doc_id', FieldType: 'string' },
       { FieldName: 'body', FieldType: 'string' }
     ]
   };
-  return runInferResultRenderSchema(degenerate, ({ stdout }) => {
+  return runValidateSchema(degenerate, ({ stdout }) => {
     assert.match(stdout, /vs-schema-confirm: BEGIN/);
     assert.match(stdout, /Field count: 2/);
     assert.match(stdout, /Primary key: \(none\)/);
@@ -1996,21 +2061,21 @@ async function testDatasetInferResultRenderSchemaDegenerate() {
   });
 }
 
-async function testDatasetInferResultRenderSchemaNoDataConfig() {
+async function testDatasetValidateSchemaNoDataConfig() {
   const noDataConfig = {
-    Status: 'success',
+    Status: 'succeeded',
     Schema: [
-      { FieldName: 'video_id', FieldType: 'string', BizAttr: 'video_content_id', IsPrimaryKey: true },
-      { FieldName: 'cover', FieldType: 'string', BizAttr: 'image_pk' }
+      { FieldName: 'product_id', FieldType: 'string', BizAttr: 'multi_modal_id', IsPrimaryKey: true },
+      { FieldName: 'cover', FieldType: 'string', BizAttr: 'multi_modal_image_url' }
     ],
     FieldDescMap: {
-      video_id: 'Primary key',
+      product_id: 'Primary key',
       cover: 'Cover image'
     }
   };
-  return runInferResultRenderSchema(noDataConfig, ({ stdout }) => {
+  return runValidateSchema(noDataConfig, ({ stdout }) => {
     assert.match(stdout, /Field count: 2/);
-    assert.match(stdout, /Primary key: video_id \(BizAttr=video_content_id\)/);
+    assert.match(stdout, /Primary key: product_id \(BizAttr=multi_modal_id\)/);
     assert.match(stdout, /IndexFields:\s+\(none\)/);
     assert.match(stdout, /FilterFields:\s+\(none\)/);
     assert.match(stdout, /SuggestFields:\s+\(none\)/);
@@ -2018,71 +2083,45 @@ async function testDatasetInferResultRenderSchemaNoDataConfig() {
   });
 }
 
-async function testDatasetInferResultRenderSchemaStability() {
+async function testDatasetValidateSchemaStability() {
   const fixture = JSON.parse(
     fs.readFileSync(path.join(root, 'scripts', 'fixtures', 'v2-onboarding', 'infer-result.json'), 'utf8')
   );
-  const state = {
-    requests: [],
-    responses: {
-      GetInferDatasetSchemaResultV2: () => ({
-        ResponseMetadata: { RequestId: 'req-infer-result-stability' },
-        Result: fixture
-      })
-    }
-  };
-  const server = await startV2MockServer(state);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-validate-schema-stability-'));
+  const inputPath = path.join(tempDir, 'infer-result.json');
+  fs.writeFileSync(inputPath, JSON.stringify(fixture));
   try {
     const outputs = [];
     for (let i = 0; i < 5; i += 1) {
       const { stdout } = await runCli(
-        [
-          'dataset', 'infer-result',
-          '--task-id', 'task_stability',
-          '--render-schema',
-          ...v2ServiceFlags(server.baseUrl)
-        ],
-        { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+        ['dataset', 'validate-schema', '--input', inputPath, '--dataset-type', 'multi_modal']
       );
       outputs.push(stdout);
     }
     for (let i = 1; i < outputs.length; i += 1) {
-      assert.equal(outputs[i], outputs[0], `render-schema output drifted across runs (run ${i + 1})`);
+      assert.equal(outputs[i], outputs[0], `validate-schema output drifted across runs (run ${i + 1})`);
     }
     assert.match(outputs[0], /vs-schema-confirm: BEGIN/);
-    assert.match(outputs[0], /Primary key: item_id \(BizAttr=query_pk\)/);
+    assert.match(outputs[0], /Primary key: item_id \(BizAttr=multi_modal_id\)/);
     assert.match(outputs[0], /Field count: 7/);
-    return `${command.prefix} dataset infer-result --render-schema (5x stability)`;
+    return `${command.prefix} dataset validate-schema (5x stability)`;
   } finally {
-    await server.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-async function runInferResultRenderSchema(result, assertions) {
-  const state = {
-    requests: [],
-    responses: {
-      GetInferDatasetSchemaResultV2: () => ({
-        ResponseMetadata: { RequestId: 'req-infer-result-render' },
-        Result: result
-      })
-    }
-  };
-  const server = await startV2MockServer(state);
+async function runValidateSchema(result, assertions) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-validate-schema-'));
+  const inputPath = path.join(tempDir, 'infer-result.json');
+  fs.writeFileSync(inputPath, JSON.stringify(result));
   try {
     const { stdout } = await runCli(
-      [
-        'dataset', 'infer-result',
-        '--task-id', 'task_render',
-        '--render-schema',
-        ...v2ServiceFlags(server.baseUrl)
-      ],
-      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+      ['dataset', 'validate-schema', '--input', inputPath, '--dataset-type', 'multi_modal']
     );
     assertions({ stdout });
-    return `${command.prefix} dataset infer-result --render-schema`;
+    return `${command.prefix} dataset validate-schema`;
   } finally {
-    await server.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -2106,9 +2145,10 @@ async function testDatasetCreateMock() {
     assert.equal(state.requests.length, 1);
     const call = state.requests[0];
     assert.equal(call.action, 'CreateDatasetV2');
-    assert.equal(call.body.Type, 'item');
+    assert.equal(call.body.Type, 'multi_modal');
+    assert.equal(call.body.Theme, 'e_commerce');
     assert.equal(call.body.Industry, 'e_commerce');
-    assert.equal(call.body.Name, 'acc-items');
+    assert.equal(call.body.Name, 'acc-goods');
     assert.ok(Array.isArray(call.body.Schema));
     assert.ok(call.body.Schema.some(field => field.FieldName === 'item_id' || field.Name === 'item_id'));
     assert.match(stdout, /ds_mock_123/);
@@ -2349,7 +2389,7 @@ async function testDataSourceSubscriptionActionsMock() {
       }),
       CloseDataSourceSubscription: () => ({
         ResponseMetadata: { RequestId: 'req-sub-close' },
-        Result: { TaskId: 'sub-task-1', Status: 'finish', Message: 'closed' }
+        Result: { TaskId: 'sub-task-1', Status: 'finished', Message: 'closed' }
       })
     }
   };
@@ -2423,6 +2463,188 @@ async function testDataSourceSubscriptionActionsMock() {
     assert.equal(state.requests[3].body.TaskId, 'sub-task-1');
 
     return `${command.prefix} dataset subscription create/get/list/close use DataSourceSubscription actions`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testPurchaseOrderActionsMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CalculateBillingOrderPrice: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-billing-price' },
+        Result: {
+          OriginalAmount: 100,
+          DiscountAmount: 0,
+          PayableAmount: 100,
+          CouponAmount: 0,
+          Currency: body.ProductCode === 'REC-SaaS-LLM-SEARCH' ? 'CNY' : 'USD'
+        }
+      }),
+      CreateBillingOrderV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-billing-create' },
+        Result: {
+          ProductCode: body.ProductCode,
+          ConfigurationCode: body.ConfigurationCode,
+          OrderNO: 'Order2626000019101484578',
+          InstanceNO: body.InstanceNO ?? ''
+        }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const flags = v2ServiceFlags(server.baseUrl);
+    const env = { env: envWithVikingBaseUrlsReset(server.baseUrl) };
+
+    const priceRun = await runCli(
+      ['purchase', 'order', 'price', '--scene', 'purchase', '--configuration-code', 'ai_search_standard_monthly', '--purchase-months', '1', ...flags],
+      env
+    );
+    const pricePayload = JSON.parse(priceRun.stdout);
+    assert.equal(pricePayload.Result.PayableAmount, 100);
+    assert.equal(pricePayload.Result.Currency, 'CNY');
+
+    const createRun = await runCli(
+      [
+        'purchase',
+        'order',
+        'create',
+        '--scene',
+        'purchase',
+        '--configuration-code',
+        'ai_search_standard_monthly',
+        '--purchase-months',
+        '1',
+        '--auto-renew',
+        '--client-token',
+        'token-order-1',
+        ...flags
+      ],
+      env
+    );
+    const createPayload = JSON.parse(createRun.stdout);
+    assert.equal(createPayload.Result.OrderNO, 'Order2626000019101484578');
+    assert.match(String(createRun.stderr ?? ''), /FastPay/);
+
+    await runCli(
+      ['purchase', 'order', 'create', '--scene', 'purchase', '--configuration-code', 'ai_search_free_trial', ...flags],
+      env
+    );
+
+    await runCli(
+      [
+        'purchase',
+        'order',
+        'create',
+        '--scene',
+        'renew',
+        '--configuration-code',
+        'ai_search_standard_monthly',
+        '--instance-no',
+        'AISearch-StgTest7516751327360979226',
+        '--purchase-months',
+        '3',
+        ...flags
+      ],
+      env
+    );
+
+    await runCli(
+      [
+        'purchase',
+        'order',
+        'price',
+        '--data',
+        '{"ProductCode":"untrusted-product-code","ConfigurationCode":"ai_search_standard_monthly","Scene":1}',
+        ...flags
+      ],
+      env
+    );
+    await runCli(
+      [
+        'purchase',
+        'order',
+        'price',
+        '--data',
+        '{"ProductCode":"untrusted-product-code","ConfigurationCode":"ai_search_standard_monthly","Scene":1}',
+        ...flags
+      ],
+      {
+        env: {
+          ...env.env,
+          VIKING_AISEARCH_PRODUCT_CODE: 'local-billing-product'
+        }
+      }
+    );
+
+    assert.deepEqual(
+      state.requests.map(call => call.action),
+      [
+        'CalculateBillingOrderPrice',
+        'CreateBillingOrderV2',
+        'CreateBillingOrderV2',
+        'CreateBillingOrderV2',
+        'CalculateBillingOrderPrice',
+        'CalculateBillingOrderPrice'
+      ]
+    );
+
+    const [priceBody, createBody, autoTokenBody, renewBody, overriddenProductCodeBody, environmentProductCodeBody] = state.requests.map(call => call.body);
+
+    assert.equal(priceBody.Scene, 1);
+    assert.equal(priceBody.ConfigurationCode, 'ai_search_standard_monthly');
+    assert.equal(priceBody.PurchaseMonths, 1);
+    assert.equal(priceBody.ProductCode, 'REC-SaaS-LLM-SEARCH');
+    assert.equal(priceBody.ClientToken, undefined);
+    assert.equal(priceBody.AutoRenew, undefined);
+    assert.equal(priceBody.CustomParams, undefined);
+    assert.equal(priceBody.InstanceNO, undefined);
+
+    assert.equal(createBody.Scene, 1);
+    assert.equal(createBody.ClientToken, 'token-order-1');
+    assert.equal(createBody.AutoRenew, true);
+    assert.equal(createBody.CustomParams.source, 'ai_search_console');
+    assert.equal(createBody.InstanceNO, undefined);
+    assert.equal(createBody.ProductCode, 'REC-SaaS-LLM-SEARCH');
+
+    assert.equal(typeof autoTokenBody.ClientToken, 'string');
+    assert.ok(autoTokenBody.ClientToken.length > 0 && autoTokenBody.ClientToken.length <= 60);
+    assert.notEqual(autoTokenBody.ClientToken, 'token-order-1');
+    assert.equal(autoTokenBody.AutoRenew, undefined);
+    assert.equal(autoTokenBody.ConfigurationCode, 'ai_search_free_trial');
+
+    assert.equal(renewBody.Scene, 2);
+    assert.equal(renewBody.InstanceNO, 'AISearch-StgTest7516751327360979226');
+    assert.equal(renewBody.PurchaseMonths, 3);
+
+    assert.equal(overriddenProductCodeBody.ProductCode, 'REC-SaaS-LLM-SEARCH');
+    assert.equal(environmentProductCodeBody.ProductCode, 'local-billing-product');
+
+    const rejectionEnv = envWithVikingBaseUrlsReset(server.baseUrl);
+    await expectCliRejection(
+      ['purchase', 'order', 'create', '--scene', 'purchase', '--configuration-code', 'ai_search_standard_monthly', '--instance-no', 'AISearch-X', ...flags],
+      { pattern: /instance-no must not be set when --scene=purchase/i, env: rejectionEnv }
+    );
+    await expectCliRejection(
+      ['purchase', 'order', 'create', '--scene', 'renew', '--configuration-code', 'ai_search_standard_monthly', '--purchase-months', '3', ...flags],
+      { pattern: /--instance-no is required when --scene=renew/i, env: rejectionEnv }
+    );
+    await expectCliRejection(
+      ['purchase', 'order', 'price', '--scene', 'modify', '--configuration-code', 'ai_search_standard_monthly', '--instance-no', 'AISearch-X', ...flags],
+      { pattern: /--scene=modify requires --purchase-months or --end-time/i, env: rejectionEnv }
+    );
+    await expectCliRejection(
+      ['purchase', 'order', 'price', '--scene', 'bogus', '--configuration-code', 'x', ...flags],
+      { pattern: /Missing or invalid --scene/i, env: rejectionEnv }
+    );
+    await expectCliRejection(
+      ['purchase', 'order', 'price', '--scene', 'purchase', '--configuration-code', 'ai_search_standard_monthly', '--product-code', 'ignored', ...flags],
+      { pattern: /--product-code is not supported/i, env: rejectionEnv }
+    );
+
+    return `${command.prefix} purchase order price/create use CalculateBillingOrderPrice/CreateBillingOrderV2`;
   } finally {
     await server.close();
   }

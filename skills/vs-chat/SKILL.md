@@ -1,5 +1,6 @@
 ---
 name: vs-chat
+version: 1.0.0
 description: "Conversational search runtime: send messages, keep sessions consistent, and verify retrieval behavior and responses."
 category: chat
 applies_to: codex, agents, external-agent
@@ -13,6 +14,10 @@ commands: chat run, app status, app diagnose
 ## When to Use
 
 Use this skill for conversational search requests, session continuity, multi-turn checks, retrieval verification, and response inspection.
+
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-chat`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
 
 ## Preconditions
 

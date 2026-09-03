@@ -86,7 +86,7 @@ message EnumerateMetaV2{
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `Name` | string | See service validation | Name. |
-| `Type` | string | See service validation | Type. |
+| `Type` | string | See service validation | Type. Only `multi_modal` (多模态数据集) and `user_event` (行为数据集) are supported for CLI-driven creation. |
 | `Description` | string | See service validation | Description. |
 | `Schema[]` | array<DatasetSchemaFieldV2> | No | Schema. |
 | `FieldDescMap` | map<string, string> | See service validation | Field desc map. |
@@ -100,7 +100,7 @@ message EnumerateMetaV2{
 | `Tags[]` | array<Tag> | No | Tags. |
 | `Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Type` | string | See service validation | Type. |
-| `Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Schema[].BizAttr` | string | See service validation | Biz attr. snake_case; for `multi_modal` datasets use `multi_modal_*` values (e.g. `multi_modal_id`, `multi_modal_title`, `multi_modal_image_url`, `multi_modal_video_url`), for `user_event` use `user_event_*` values (e.g. `user_event_event_type`, `user_event_item_pk`, `user_event_user_pk`). |
 | `Schema[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Schema[].Required` | bool | See service validation | Required. |
 | `Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
@@ -112,7 +112,7 @@ message EnumerateMetaV2{
 | `Tags[].Value` | string | See service validation | Value. |
 | `Schema[].Fields[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Schema[].Fields[].Type` | string | See service validation | Type. |
-| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Schema[].Fields[].BizAttr` | string | See service validation | Biz attr. snake_case; for `multi_modal` datasets use `multi_modal_*` values (e.g. `multi_modal_id`, `multi_modal_title`, `multi_modal_image_url`, `multi_modal_video_url`), for `user_event` use `user_event_*` values (e.g. `user_event_event_type`, `user_event_item_pk`, `user_event_user_pk`). |
 | `Schema[].Fields[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Schema[].Fields[].Required` | bool | See service validation | Required. |
 | `Schema[].Fields[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |
@@ -129,7 +129,7 @@ message EnumerateMetaV2{
 | `Dataset` | DatasetV2 | See service validation | Dataset. |
 | `Dataset.Id` | string | See service validation | Id. |
 | `Dataset.Name` | string | See service validation | Name. |
-| `Dataset.Status` | string | See service validation | Status. |
+| `Dataset.Status` | string | See service validation | Status. Enum values are snake_case (e.g. `initializing`). |
 | `Dataset.Type` | string | See service validation | Type. |
 | `Dataset.Schema[]` | array<DatasetSchemaFieldV2> | No | Schema. |
 | `Dataset.FieldDescMap` | map<string, string> | See service validation | Field desc map. |
@@ -146,7 +146,7 @@ message EnumerateMetaV2{
 | `Dataset.Tags[]` | array<Tag> | No | Tags. |
 | `Dataset.Schema[].Fields[]` | array<DatasetSchemaFieldV2> | No | Fields. |
 | `Dataset.Schema[].Type` | string | See service validation | Type. |
-| `Dataset.Schema[].BizAttr` | string | See service validation | Biz attr. Enum values are snake_case (e.g. `query_pk`, `image_pk`, `doc_id`, `multi_modal_id`, `video_content_id`). |
+| `Dataset.Schema[].BizAttr` | string | See service validation | Biz attr. snake_case; for `multi_modal` datasets use `multi_modal_*` values (e.g. `multi_modal_id`, `multi_modal_title`, `multi_modal_image_url`, `multi_modal_video_url`), for `user_event` use `user_event_*` values (e.g. `user_event_event_type`, `user_event_item_pk`, `user_event_user_pk`). |
 | `Dataset.Schema[].IsPrimaryKey` | bool | See service validation | Is pk. |
 | `Dataset.Schema[].Required` | bool | See service validation | Required. |
 | `Dataset.Schema[].EnumerateMeta[]` | array<EnumerateMetaV2> | No | Enumerate meta. |

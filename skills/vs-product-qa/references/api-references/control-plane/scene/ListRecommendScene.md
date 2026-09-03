@@ -275,6 +275,26 @@ message ReasonTemplateRule {
 | `Items[].Config.MergeConfigs[]` | array<MergeConfig> | No | Merge configs. |
 | `Items[].Config.ReasonTemplate` | ReasonTemplateConfig | See service validation | Reason template. |
 
+## Field Semantics and Validation Notes
+
+### Enum and String Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Types[]` | `for_you`, `related`, `shopping_cart` | Empty means all recommend scene types. |
+| `Items[].Type` | `for_you`, `related`, `shopping_cart` | Recommend scene type. |
+| `Items[].Status` | `unpublished`, `configuring`, `activating`, `published` | Recommend scene lifecycle status. |
+| `Items[].RecommendModel` | `Default`, `LongSequence` | Proto enum values. Service/domain string equivalents are `default` and `long_sequence`. |
+| `Items[].RecommendOptimizationTarget` | `RecommendOptimizationTargetNone`, `Ctr` | Proto enum values. Service/domain string equivalent for `Ctr` is `ctr`. |
+| `Items[].SceneConfigPhase` | `SceneConfigPhaseNone`, `SamplePrepare`, `PrepareTrain`, `Training`, `Serving` | Domain string equivalents are empty string, `sample_prepare`, `prepare_train`, `training`, and `serving`. |
+
+Behavior event constraints:
+
+- `Items[].BhvSceneTypes[]` values come from the bound UserEvent dataset's `event_scene` enum values.
+- `Items[].ClickEventTypes[]`, `Items[].PositiveEventTypes[]`, and `Items[].NegativeEventTypes[]` values come from the bound UserEvent dataset's `event_type` enum values.
+
+`ListRecommendScene` may omit or trim `Items[].Config`; use `GetRecommendScene` for complete `RecommendSceneConfig` and its detailed field constraints.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

@@ -45,7 +45,7 @@ message IndexStatusInfo {
 | `ItemId` | string | No | Item id. |
 | `MaxResults` | int64 | No | Max results. |
 | `NextToken` | string | No | Pagination token. |
-| `IndexStatusList[]` | array<string> | No | Index status list. Fixed status values are snake_case: `success` / `processing`. Error codes remain PascalCase. |
+| `IndexStatusList[]` | array<string> | No | Index status list. Fixed status values are snake_case: `succeeded` / `processing`. Error codes remain PascalCase. |
 | `SortBy` | string | See service validation | Sort by. |
 | `SortOrder` | string | See service validation | Sort order. Enum: `asc` / `desc` (snake_case). |
 | `ProjectName` | string | See service validation | Project name. |
@@ -60,7 +60,7 @@ message IndexStatusInfo {
 | `IndexStatusInfoList[].ItemId` | string | See service validation | Item id. |
 | `IndexStatusInfoList[].IndexTypes[]` | array<string> | No | Index types. |
 | `IndexStatusInfoList[].IndexProcessEndTimestamp` | string | See service validation | Index process end timestamp. |
-| `IndexStatusInfoList[].StatusCodes[]` | array<string> | No | Status codes. Fixed status values are snake_case: `success` / `processing`. Error codes remain PascalCase. |
+| `IndexStatusInfoList[].StatusCodes[]` | array<string> | No | Status codes. Fixed status values are snake_case: `succeeded` / `processing`. Error codes remain PascalCase. |
 
 ## Error Codes
 

@@ -6,6 +6,10 @@ export type HelpLine = {
   text: string;
 };
 
+const OPENAPI_REFERENCE_HINT = `OPENAPI REFERENCE
+  Detailed parameter constraints and request/response contracts: see the matching API Reference in vs-product-qa.
+  vs skill show --name vs-product-qa`;
+
 export function hasHelpFlag(argv: string[]): boolean {
   return argv.includes('--help') || argv.includes('-h');
 }
@@ -35,4 +39,8 @@ export function renderUsageBlock(
   }
 
   return lines.join('\n');
+}
+
+export function withOpenApiReferenceHint(help: string): string {
+  return `${help}\n\n${OPENAPI_REFERENCE_HINT}`;
 }

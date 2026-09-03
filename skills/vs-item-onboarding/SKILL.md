@@ -1,5 +1,6 @@
 ---
 name: vs-item-onboarding
+version: 1.0.0
 description: "onboarding workflow for creating datasets and applications in Viking AI Search. Supports one-time import from local files (JSON, JSONL, CSV) and MySQL databases, plus scheduled incremental sync for append-only JSONL files and MySQL. All sources are first exported to a bootstrap JSONL file; backend-driven schema inference handles detection, and optional background sync keeps the dataset up to date as new data arrives."
 category: workflow
 applies_to: codex, agents, external-agent
@@ -23,7 +24,7 @@ Match the language of the **user's most recent message** in every line of prose 
 Do **not** translate the following — keep them verbatim so the contract stays machine-checkable:
 
 - The verbatim CLI block between `<!-- vs-schema-confirm: BEGIN -->` and `<!-- vs-schema-confirm: END -->` (English section labels `**Metadata**` / `**Fields (N)**` / `**Field Roles**` / `**Warnings (N)**` and English warning text come straight from the CLI).
-- CLI command names, flag names, JSON keys, enum values, field names, primary-key BizAttr identifiers (`MultiModalId`), dataset IDs / app IDs / TaskIDs, and console URLs.
+- CLI command names, flag names, JSON keys, enum values, field names, primary-key BizAttr identifiers (`multi_modal_id`), dataset IDs / app IDs / TaskIDs, and console URLs.
 - The single literal token the user must reply to confirm — write it as `` `yes` `` in any language so the contract for advancing to step 8 is unambiguous (you may add a parenthetical native-language hint, e.g. `回复 \`yes\`（即"确认"）继续`).
 
 If you are unsure which language the user used (e.g. only emoji or only an attachment), default to the language of the very first user turn in the conversation. When the user switches languages mid-flow, switch with them on the next message.
@@ -52,6 +53,10 @@ Do not use this skill when:
 
 **Forbidden in this skill:** passing any `--type` other than `multi_modal` or `user_event` to dataset onboarding commands.
 
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-item-onboarding`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+
 ## Preconditions
 
 - `vs` CLI ≥ 0.2.0 installed, authentication is complete (`vs auth status` and `vs doctor` succeed).
@@ -66,7 +71,7 @@ Do not use this skill when:
 | Upload URL | `vs dataset import-url --file-name <basename>` | Request a presigned PUT URL plus `FileKey` |
 | PUT upload | `curl -X PUT --data-binary @<path> "<FileUrl>"` | Upload the local file to TOS (no auth header needed) |
 | Submit inference | `vs dataset infer-schema --tos-key <FileKey> --type <multi_modal\|user_event> [--theme <general\|e_commerce\|content\|long_video>] --language <zh\|en\|ko\|ja\|hi> [--name ...]` | Kick off backend schema inference; returns `TaskID`. `--theme` is **required for `multi_modal` only** (default `general`); omit it for `user_event`. The CLI accepts theme aliases such as `ecommerce` / `e-commerce` → `e_commerce`, `long-video` / `longvideo` → `long_video`, `common` / `default` → `general`. |
-| Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=Success`; returns `Schema` + `DataFieldConfig` (the entire inference artifact). For `multi_modal`, includes `ImageIndexFields` / `VideoIndexFields` / `ChatFields`. |
+| Poll inference | `vs dataset infer-result --task-id <TaskID>` | Poll until `Status=succeeded`; returns `Schema` + `DataFieldConfig` (the entire inference artifact). For `multi_modal`, includes `ImageIndexFields` / `VideoIndexFields` / `ChatFields`. |
 | Validate schema | `vs dataset validate-schema --input <path/to/infer-result.json> --dataset-type <multi_modal\|user_event>` | Render the deterministic schema-confirm block (metadata / fields / roles / warnings). Use `--dataset-type` to toggle validation rules. Save the output as the source-of-truth for schema confirmation. |
 | Create dataset | `vs dataset create --data @dataset-create.json [--post-paid-type <standard\|premium>] [--dry-run]` | Persist (or dry-run) the inferred schema. **Do not** flip `IsPK` — backend derives PK from `BizAttr`. For `multi_modal`, the payload must include `Theme` and optionally `ProcessConfig`; for `user_event`, omit both. Pass `--post-paid-type` only for post-paid billing instances (`standard`/`premium`); omit it for non-post-paid (`none`) instances. |
 | Write data | `vs data write --dataset-id <DatasetId> --fields @items.jsonl` | Push the actual records into the dataset. `--fields` accepts a JSON array **or** a JSONL file (one record per line); the bootstrap `items.jsonl` can be passed directly — no need to convert with `jq -s`. |
@@ -139,7 +144,7 @@ Run strictly in order. Each step depends on output from the previous one; an inf
 3. **Get upload URL** — `vs dataset import-url --file-name <basename>`. Capture `Result.FileUrl` and `Result.FileKey`. Keep `FileKey` for step 5.
 4. **PUT upload** — upload the raw item file to `FileUrl` (e.g. `curl -X PUT --data-binary "@<local-path>" "<FileUrl>"`). Expect HTTP 200 with empty body. Do not add an `Authorization` header — `FileUrl` is already presigned.
 5. **Submit inference task** — `vs dataset infer-schema --tos-key <FileKey> --type <multi_modal|user_event> --theme <general|e_commerce|content|long_video> --language <lang> --name <dataset-name>`. For `user_event`, omit `--theme`. For `multi_modal`, `--theme` is required (default `general`). Theme values accept alias normalization: `ecommerce`/`e-commerce` → `e_commerce`, `long-video`/`longvideo` → `long_video`, `common`/`default` → `general`. Capture `Result.TaskId`.
-6. **Poll inference result + persist locally** — `vs dataset infer-result --task-id <TaskId>` until `Result.Status === "Success"` (poll roughly every 5s, max ~3 minutes). Then write `Result` verbatim to a **workspace-relative** artifact file so the rest of the workflow can read from it.
+6. **Poll inference result + persist locally** — `vs dataset infer-result --task-id <TaskId>` until `Result.Status === "succeeded"` (poll roughly every 5s, max ~3 minutes). Then write `Result` verbatim to a **workspace-relative** artifact file so the rest of the workflow can read from it.
 
    **Plan directory rules (important)**:
 
@@ -306,7 +311,7 @@ Run strictly in order. Each step depends on output from the previous one; an inf
        {
          "Name": "event_type",
          "Type": "string",
-         "BizAttr": "UserEventEventType",
+         "BizAttr": "user_event_event_type",
          "Required": true,
          "EnumerateMeta": [
            { "EnumerateValue": "<raw-exposure-value>", "Name": "曝光", "EnumerateBizAttr": "exposure", "Required": true },
@@ -400,7 +405,7 @@ Do not pass numeric codes to any V2 API. The CLI keeps a one-way alias map and a
 
 ## Backend-driven Primary Key
 
-In V2, the agent does **not** set the primary key. The backend computes `IsPK` from `BizAttr` (truthy when `BizAttr ∈ {MultiModalId}`) regardless of the `IsPK` value on the wire. Schema inference already assigns the right `BizAttr`, so:
+In V2, the agent does **not** set the primary key. The backend computes `IsPK` from `BizAttr` (truthy when `BizAttr ∈ {multi_modal_id}`) regardless of the `IsPK` value on the wire. Schema inference already assigns the right `BizAttr`, so:
 
 - Forward the inferred `Schema` to `CreateDatasetV2` verbatim. `IsPK` can stay `false` everywhere.
 - Never strip / rewrite `BizAttr`. Doing so will cause the backend's `pkCount==1` check to fail.
@@ -445,17 +450,17 @@ In V2, the agent does **not** set the primary key. The backend computes `IsPK` f
 17. **Do not invent a one-shot source import into an existing dataset.** If the user wants `existing_dataset + once`, explain the current CLI split and let them choose between creating a new dataset from exported JSONL or enabling connector-based sync.
 18. **Never block waiting for readiness.** After printing the hand-off block, end your turn immediately. Do NOT run `vs app wait-ready`, `vs dataset wait-ready`, or any polling loop. Readiness is an asynchronous backend process; tell the user to check the console links themselves.
 19. **Theme is mandatory for `multi_modal`.** For `multi_modal` datasets, you MUST pass `--theme` (one of `general|e_commerce|content|long_video`) to both `dataset infer-schema` and `dataset create`. If the user has no preference, default to `general`. For `user_event`, omit `--theme`.
-20. **Multi-modal BizAttrs are backend-assigned; do not hand-edit them.** Schema inference automatically assigns the correct `MultiModal*` BizAttr codes (e.g. `MultiModalId`=80, `MultiModalImageUrl`=83, `MultiModalVideoUrl`=84, `MultiModalCategory`=85, `MultiModalPrice`=88). Do not add, remove, or remap these BizAttrs manually. If inference returns Warnings about missing required BizAttrs for the chosen Theme, fix the source data (add the missing column) rather than patching BizAttr by hand.
+20. **Multi-modal BizAttrs are backend-assigned; do not hand-edit them.** Schema inference automatically assigns the correct `multi_modal_*` BizAttr values (e.g. `multi_modal_id`, `multi_modal_image_url`, `multi_modal_video_url`, `multi_modal_category`, `multi_modal_price`). Do not add, remove, or remap these BizAttrs manually. If inference returns Warnings about missing required BizAttrs for the chosen Theme, fix the source data (add the missing column) rather than patching BizAttr by hand.
 21. **Preserve multi-modal DataFieldConfig sub-fields.** When attaching the dataset to an application, the `DataConfig` in `attach.json` MUST include `ImageIndexFields`, `VideoIndexFields`, and `ChatFields` exactly as returned by inference (they may be empty arrays, but must not be dropped). These fields drive image search, video search, and multimodal chat respectively; stripping them silently disables those capabilities.
 22. **Do not call GetSchemaTemplate from the CLI.** The frontend (DonaldTrump) calls `GetSchemaTemplate(TemplateCode=theme)` to get per-theme BizAttrConstraint lists; the CLI does not wrap this API. For CLI-driven onboarding, trust the backend's schema inference to assign required fields correctly; the Schema Confirmation Warnings block will surface any missing required fields, which the agent should relay to the user. Do not add a CLI call to fetch or validate templates.
 
 ## Recovery Hints
 
-- `infer-result` returns `Status=Failed` → read the `Error` / `ErrorCode` fields, fix the input file (encoding, JSONL formatting, header row), re-upload via step 3.
-- `dataset create` rejects with `InvalidParameter.PrimaryKeyCount` → check the persisted artifact: at least one field must carry a PK-class `BizAttr` (`MultiModalId`). If none does, inference effectively failed; re-run with a cleaner input that includes a stable identifier column.
+- `infer-result` returns `Status=failed` → read the `Error` / `ErrorCode` fields, fix the input file (encoding, JSONL formatting, header row), re-upload via step 3.
+- `dataset create` rejects with `InvalidParameter.PrimaryKeyCount` → check the persisted artifact: at least one field must carry a PK-class `BizAttr` (`multi_modal_id`). If none does, inference effectively failed; re-run with a cleaner input that includes a stable identifier column.
 - `dataset create` rejects with `InvalidParameter.Theme` or `InvalidParameter.UnsupportedTheme` → the `--theme` value is invalid; use one of `general|e_commerce|content|long_video`.
 - `dataset create` rejects with `InvalidParameter.Request` → most common causes: (a) field `Type` sent as a number instead of a string, (b) `BizAttr` accidentally stripped during local editing, (c) `Theme` was missing or empty. Fix locally and dry-run again; no need to re-run inference.
-- `dataset create` rejects with multi-modal BizAttr errors (e.g. missing required `MultiModalImageUrl` for `e_commerce` theme) → the inferred schema is missing a required field for the chosen theme. Add the missing column to the source data and re-run from step 3 (re-upload + re-infer); do NOT patch BizAttr by hand.
+- `dataset create` rejects with multi-modal BizAttr errors (e.g. missing required `multi_modal_image_url` for `e_commerce` theme) → the inferred schema is missing a required field for the chosen theme. Add the missing column to the source data and re-run from step 3 (re-upload + re-infer); do NOT patch BizAttr by hand.
 - `attach-dataset` errors after a successful create → run `vs app diagnose --application-id <AppId>` to inspect the runtime state before retrying. If the error is `OperationDenied.ImageAndVideoDatasetNotSupport` (code 340023), the application already has a dataset of a conflicting modality (image-text vs video cannot be bound together); create a separate application instead.
 - `attach-dataset` errors with `OperationDenied.VideoDatasetFieldsInsufficient` (code 340025) → a multi-modal video dataset requires descriptive text/array<string> fields beyond numeric fields; add title/content/description columns to the source data.
 - `data write` returns a HTTP error → confirm the dataset is in the `Ready` state via `vs app status --application-id <AppId>` (if attached), or `vs dataset get --id <DatasetId> --full` for unattached writes.

@@ -1,13 +1,7 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-const PK_BIZ_ATTRS = new Set([
-  'multi_modal_id',
-  'query_pk',
-  'video_content_id',
-  'image_pk',
-  'doc_id'
-]);
+const PK_BIZ_ATTRS = new Set(['multi_modal_id']);
 
 const ROLE_KEYS = [
   ['IndexFields', 'index'],
@@ -154,7 +148,7 @@ function collectWarnings(input: {
   }
   if (input.datasetType !== 'user_event' && input.fields.length > 0 && !input.primaryKey) {
     warnings.push(
-      'No field carries a primary-key BizAttr (e.g. multi_modal_id / query_pk / doc_id). Backend cannot derive a PK; check the source data.'
+      'No field carries a primary-key BizAttr (`multi_modal_id`). Backend cannot derive a PK; check the source data.'
     );
   }
   const missingDesc = input.fields.filter(field => field.description === '').map(field => field.name);

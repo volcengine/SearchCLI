@@ -32,6 +32,14 @@ message EmptyResp {}
 
 This API has no explicit business response fields.
 
+## Field Semantics and Validation Notes
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `AppID` | non-empty | The target recommend scene must belong to this application. |
+| `ProjectName` | non-empty | Project scope for the target scene. |
+| `SceneID` | non-empty | The target recommend scene must exist and be visible in the project. |
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

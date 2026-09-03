@@ -398,7 +398,7 @@ async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptio
     await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())));
   }
   if (!inferResult) throw new Error(`Timed out waiting for schema inference task ${taskId}.`);
-  steps.push({ step: 'poll_infer_result', ok: true, detail: 'status=success' });
+  steps.push({ step: 'poll_infer_result', ok: true, detail: 'status=succeeded' });
 
   const processConfig = (options.abnormalImagePolicy !== undefined || options.abnormalVideoPolicy !== undefined || options.videoAutoDelete !== undefined)
     ? compactObject({
@@ -479,7 +479,7 @@ function readStatus(value: unknown): 'processing' | 'success' | 'failed' {
   }
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'success' || normalized.endsWith('_success')) return 'success';
+    if (normalized === 'succeeded' || normalized.endsWith('_succeeded')) return 'success';
     if (normalized === 'failed' || normalized.endsWith('_failed')) return 'failed';
   }
   return 'processing';

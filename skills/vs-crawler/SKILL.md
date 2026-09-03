@@ -1,5 +1,6 @@
 ---
 name: vs-crawler
+version: 1.0.0
 description: "Crawl websites (news, blogs, papers, GitHub, product docs, RSS feeds) into a fixed-schema JSONL file, then create a dataset and a searchable application in Viking AI Search. Supports one-time crawl and scheduled recurring crawl with automatic incremental sync."
 category: workflow
 applies_to: codex, agents, external-agent
@@ -82,6 +83,10 @@ All crawled records MUST conform to this schema. Every record is a flat JSON obj
 | `doi` | string | paper | Digital Object Identifier, e.g. `"10.1234/abcde"`. |
 
 Values must be flat scalars (string / number / boolean). No nested objects, no arrays. If a data point does not map to any standard key, omit it rather than inventing a new key.
+
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-crawler`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
 
 ## Preconditions
 

@@ -1,11 +1,12 @@
 ---
 name: vs-product-qa
+version: 1.0.0
 description: "Answer Viking AI Search product questions, CLI usage questions, API/auth questions, configuration questions, and troubleshooting questions by grounding every claim in either the installed `vs` CLI's own output or official Volcengine documentation. Never fabricate."
 category: shared
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
 keywords: viking ai search, product question, product concept, concept, how to, usage, api, authentication, ak sk, configuration, error, troubleshooting, docs, official docs, help, faq, data count, effective data, valid data, data volume, item-data-count
-commands: doctor, auth status, llm status, skill list, skill search, skill show
+commands: doctor, auth status, llm status, skill check, skill list, skill search, skill show
 ---
 
 # vs-product-qa
@@ -28,6 +29,10 @@ Do not use this skill for workflow execution. Delegate instead:
 - search tuning suggestions or execution -> `vs-search-tuning`
 
 If another skill is active and the user asks a product question outside that skill's scripted scope, answer with `vs-product-qa`, then return to the original workflow after the answer is complete.
+
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-product-qa`. This metadata preflight is exempt from the normal product-command verification rule. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
 
 ## Preconditions
 

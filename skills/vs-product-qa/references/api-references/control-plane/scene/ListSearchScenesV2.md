@@ -312,6 +312,32 @@ message NumberRange {
 | `Scenes[].DraftConfig.OverviewConfig` | OverviewConfig | See service validation | Overview config. |
 | `Scenes[].DraftConfig.PerDatasetConfigs[]` | array<PerDatasetConfig> | No | Per dataset configs. |
 
+## Field Semantics and Validation Notes
+
+This API returns `SearchSceneConfigV2` for each scene, optionally narrowed by the request filters below. Returned `Config` and `DraftConfig` fields use the same enum-like string values and field-reference constraints as the publish API. For the complete config payload contract, see [PublishSearchSceneV2](./PublishSearchSceneV2.md#field-semantics-and-validation-notes).
+
+### Request Filter Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Statuses[]` | `unpublished`, `published` | Empty means all scene statuses. |
+| `ConfigLabels[]` | `config`, `draft_config` | Empty means all config labels. `draft_config` is a console draft capability and may not be exposed in all OpenAPI environments. |
+| `ConfigKeys[]` | `WantToSearchConfig`, `QueryCompletionConfig`, `OverviewConfig`, `TextSearchConfig`, `ImageSearchConfig`, `MaxRecallNum`, `FilterConfig`, `AuxiliaryPoolsConfig`, `PersonalizedRecallConfig`, `EnableRerankWithHot`, `RerankConfig`, `BoostBuryCondConfig`, `SortRulesConfig`, `ShuffleConfig`, `ServingControlConfig`, `CorrectionConfig`, `SynonymConfig`, `FacetConfig`, `RelevanceCutoffConfig` | Empty means all config keys under the selected config labels. |
+| `DatasetIds[]` | exact dataset IDs | Empty means all datasets. Only dataset-level config keys are filtered by dataset ID. |
+
+### Common Response String Values
+
+- `Scenes[].Status`: `unpublished`, `published`
+- `OverviewConfig.Mode`: `ondemand`, `always`
+- `TextSearchConfig.Mode`: `balanced`, `semantic_priority`, `keyword_priority`, `user_defined`
+- `TextSearchConfig.UserDefinedRecallMode`: `keyword_semantic`, `keyword_only`, `semantic_only`
+- `ImageSearchConfig.InstructionType`: `preset_image`, `preset_item`, `custom`
+- `PersonalizedRecallConfig.Mode`: `strong`, `weak`
+- `RerankConfig.RerankModel`: `gte-rerank`, `doubao-rerank`
+- `CorrectionConfig.Mode`: `auto`, `suggestion_only`
+- `CorrectionConfig.MatchMode`: `exact`, `partial`
+- `RelevanceCutoffConfig.Rules[].Mode`: `static`, `relative`
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

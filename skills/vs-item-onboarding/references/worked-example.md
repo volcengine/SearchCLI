@@ -1,6 +1,6 @@
 # Worked Example (verified end-to-end)
 
-Input: `/path/to/goods.jsonl` (10 apparel items, `product_id` string, `name`/`category`/`brand`/`color`/`size`/`material`/`style` strings or string arrays, `price`/`originalPrice`/`rating` floats, `stock`/`sales` ints, `image_url`/`description` strings). Backend inference correctly assigns `BizAttr: "MultiModalId"` to `product_id`, `BizAttr: "MultiModalTitle"` to `name`, `BizAttr: "MultiModalImageUrl"` to `image_url`, etc.
+Input: `/path/to/goods.jsonl` (10 apparel items, `product_id` string, `name`/`category`/`brand`/`color`/`size`/`material`/`style` strings or string arrays, `price`/`originalPrice`/`rating` floats, `stock`/`sales` ints, `image_url`/`description` strings). Backend inference correctly assigns `BizAttr: "multi_modal_id"` to `product_id`, `BizAttr: "multi_modal_title"` to `name`, `BizAttr: "multi_modal_image_url"` to `image_url`, etc.
 
 ```bash
 WORK=./.viking/item-plans/goods_demo
@@ -19,7 +19,7 @@ vs dataset infer-schema --tos-key "$FILE_KEY" --type multi_modal \
   > $WORK/02_infer_schema.json
 TASK_ID=$(jq -r '.Result.TaskId' $WORK/02_infer_schema.json)
 
-# 4. Poll + persist (repeat until Status=Success)
+# 4. Poll + persist (repeat until Status=succeeded)
 vs dataset infer-result --task-id "$TASK_ID" > $WORK/03_infer_result.json
 jq '.Result' $WORK/03_infer_result.json > $WORK/infer-result.json  # ← persistent source of truth
 

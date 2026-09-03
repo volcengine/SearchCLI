@@ -70,6 +70,7 @@
   "oclif": {
     "bin": "vs",
     "commands": "./dist/commands",
+    "helpClass": "./dist/core/openapi-help",
     "topicSeparator": " "
   },
   "pkg": {

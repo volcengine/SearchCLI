@@ -76,7 +76,7 @@ message ApplicationV2 {
 | `Application` | ApplicationV2 | See service validation | Application. |
 | `Application.Id` | string | See service validation | Id. |
 | `Application.Name` | string | See service validation | Name. |
-| `Application.Status` | string | See service validation | Status. Enum: `init` / `not_ready` / `ready` / `deleting` / `deleted` (snake_case). |
+| `Application.Status` | string | See service validation | Status. Enum (external values): `not_ready` / `ready` / `deleting` / `deleted` (snake_case). |
 | `Application.Language` | string | See service validation | Language. |
 | `Application.Description` | string | See service validation | Description. |
 | `Application.Icon` | IconV2 | See service validation | Icon. |

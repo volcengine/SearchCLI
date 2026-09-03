@@ -310,7 +310,7 @@ message NumberRange {
 | `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
 | `Config.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
 | `Config.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte_rerank` / `doubao_rerank` (snake_case). |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte-rerank` / `doubao-rerank`. |
 | `Config.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
 | `Config.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
 | `Config.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
@@ -319,6 +319,76 @@ message NumberRange {
 | `Config.PerDatasetConfigs[].SynonymConfig` | SynonymConfigV2 | See service validation | Synonym config. |
 | `Config.PerDatasetConfigs[].FacetConfig` | FacetConfig | See service validation | Facet config. |
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig` | RelevanceCutoffConfig | See service validation | Relevance cutoff config. |
+
+## Field Semantics and Validation Notes
+
+`PublishSearchSceneV2` applies incremental update semantics: omitted or `null` child config blocks do not overwrite the existing online scene config. When updating one nested config area, include the target `DatasetId` and preserve sibling fields inside that same config block unless the change intentionally clears them.
+
+### String Enum Values
+
+These fields are encoded as strings. Do not send numeric enum codes.
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Status` | `unpublished`, `published` | Response field. |
+| `Config.OverviewConfig.Mode` | `ondemand`, `always` | Overview trigger mode. |
+| `Config.PerDatasetConfigs[].TextSearchConfig.Mode` | `balanced`, `semantic_priority`, `keyword_priority`, `user_defined` | Retrieval mode. Empty input is normalized by service behavior to the default balanced mode. |
+| `Config.PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode` | `keyword_semantic`, `keyword_only`, `semantic_only` | Only meaningful when `TextSearchConfig.Mode="user_defined"`. |
+| `Config.PerDatasetConfigs[].ImageSearchConfig.InstructionType` | `preset_image`, `preset_item`, `custom` | `preset_image` means image-similarity retrieval; `preset_item` means item-similarity retrieval; `custom` requires a non-empty `ImageInstruction`. |
+| `Config.PerDatasetConfigs[].PersonalizedRecallConfig.Mode` | `strong`, `weak` | `strong` is strong personalized intervention; `weak` is weak personalized intervention. If the user asks for strong personalization, set both `Enable=true` and `Mode="strong"`. |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | `gte-rerank`, `doubao-rerank` | `doubao-rerank` enables multimodal rerank configuration. |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.ItemFeature` | `text`, `mixed`, `image` | Only effective with `RerankModel="doubao-rerank"`. |
+| `Config.PerDatasetConfigs[].SortRulesConfig.Rules[].Order` | `asc`, `desc` | Sort ascending or descending by the configured field. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowType` | `SLIDE`, `TOP` | Empty value is normalized to `SLIDE` by service behavior. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleType` | `dimension`, `expression` | Empty value is accepted for legacy dimension-shuffle behavior; expression shuffle requires `ShuffleExpr`. |
+| `Config.PerDatasetConfigs[].CorrectionConfig.Mode` | `auto`, `suggestion_only` | `auto` directly rewrites the query; `suggestion_only` returns suggestions only. |
+| `Config.PerDatasetConfigs[].CorrectionConfig.MatchMode` | `exact`, `partial` | Match mode for correction dictionary matching. |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].ScoreType` | `keyword`, `text_semantic`, `image_semantic`, `final` | Relevance score used for cutoff. |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Mode` | `static`, `relative` | `static` uses a fixed threshold; `relative` compares with the top score. |
+
+### Numeric and Length Constraints
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `Config.WantToSearchConfig.MinWordLength` | `> 0` | Must be no greater than `MaxWordLength`. |
+| `Config.WantToSearchConfig.MaxWordLength` | `> 0` | Must be no less than `MinWordLength`. |
+| `Config.WantToSearchConfig.WordNum` | `>= 0` | Default response value is usually `5`. |
+| `Config.QueryCompletionConfig.SugMaxRecallNum` | no independent hard validation in the scene patch layer | Non-positive stored values are normalized to the default value in readback. |
+| `Config.QueryCompletionConfig.SugMinNum` | no independent hard validation in the scene patch layer | Non-positive stored values are normalized to the default value in readback. |
+| `Config.PerDatasetConfigs[].TextSearchConfig.QueryKeywordMatchPercent` | `(0, 1]` when present | Do not configure when `Mode="user_defined"` and `UserDefinedRecallMode="semantic_only"`. |
+| `Config.PerDatasetConfigs[].TextSearchConfig.TextWeight` | `[0, 1]` | Only meaningful when `Mode="user_defined"` and `UserDefinedRecallMode="semantic_only"`. |
+| `Config.PerDatasetConfigs[].TextSearchConfig.DenseWeight` | `[0, 1]` | Only meaningful when `Mode="user_defined"` and `UserDefinedRecallMode` is `keyword_semantic` or `semantic_only`. |
+| `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Boost` | `[-1, 1]` | Positive values boost; negative values bury. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ID` | non-zero and unique within the rule list | Rule ID may be generated by service behavior when omitted through higher-level tooling, but persisted rules must have non-zero IDs. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].Name` | non-empty | Required for each shuffle rule. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].FieldName` | non-empty | Must also satisfy the field-reference constraints below. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowSize` | `> 0` and `>= MaxSize` or `RecallMax` | `MaxSize` takes precedence; `RecallMax` is legacy compatibility. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].MaxSize` / `RecallMax` | at least one effective value `> 0` | `RecallMax` is legacy compatibility. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr` | non-empty when `ShuffleType="expression"` | Expression shuffle is invalid without an expression body. |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.Instruction` | length `<= 1023` | User-editable Doubao rerank instruction. |
+| `Config.PerDatasetConfigs[].FacetConfig.Facets[].MaxFacetBuckets` | `1..50` when non-zero | Default is `10` for enumerable facet fields. |
+| `Config.PerDatasetConfigs[].FacetConfig.Facets[].NumberRanges[]` | at least one bound; do not set both `Lt` and `Lte`, or both `Gt` and `Gte`; lower bound must be less than upper bound | Applies to numeric facet ranges. |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Threshold` | finite and `>= 0`; additionally `<= 1` for `Mode="relative"` and for `Mode="static"` with `ScoreType` `text_semantic` or `image_semantic` | `static` thresholds for `keyword` and `final` use the corresponding score scale. |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Fallback.MinResultCount` | `> 0` when fallback is enabled | Applies only when `Fallback.Enable=true`. |
+
+### Field-Reference Constraints
+
+The following fields must use exact dataset schema field names and are case-sensitive:
+
+- `Config.PerDatasetConfigs[].PersonalizedRecallConfig.UserInterest[].InterestField`; when personalization is enabled, each referenced interest field must be filterable in the app dataset config.
+- `Config.PerDatasetConfigs[].SortRulesConfig.Rules[].Field`.
+- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].FieldName`.
+- `Config.PerDatasetConfigs[].FilterConfig.Config.field`.
+- `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[].Filter.field`.
+- Fields inside `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Config`.
+- `Config.PerDatasetConfigs[].FacetConfig.Facets[].Field`; facet fields must be filterable and supported for enum or numeric aggregation.
+
+Condition-tree DSL constraints:
+
+- `FilterConfig.Config` and `BoostBuryCondConfig.Rules[].Config` allow at most 2 logic layers.
+- `AuxiliaryPoolsConfig.Pools[].Filter` allows at most 2 logic layers and at most 5 leaf conditions.
+- `ServingControlConfig.ServingControls[].QueryCondition` allows at most 2 logic layers and at most 5 leaf conditions.
+- `ServingControlConfig.ServingControls[]` child config blocks use the same enum-like values and numeric constraints as their top-level counterparts.
 
 ## Response Parameters
 
@@ -367,7 +437,7 @@ message NumberRange {
 | `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
 | `Config.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
 | `Config.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte_rerank` / `doubao_rerank` (snake_case). |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte-rerank` / `doubao-rerank`. |
 | `Config.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
 | `Config.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
 | `Config.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
@@ -400,7 +470,7 @@ message NumberRange {
 | `DraftConfig.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
 | `DraftConfig.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
 | `DraftConfig.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `DraftConfig.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte_rerank` / `doubao_rerank` (snake_case). |
+| `DraftConfig.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte-rerank` / `doubao-rerank`. |
 | `DraftConfig.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
 | `DraftConfig.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
 | `DraftConfig.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |

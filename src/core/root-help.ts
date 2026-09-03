@@ -1,7 +1,11 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-import { renderHelpLines, type HelpLine } from "./help-utils";
+import {
+  renderHelpLines,
+  type HelpLine,
+  withOpenApiReferenceHint,
+} from "./help-utils";
 import { isProjectFeatureEnabled } from "./feature-flags";
 
 const CORE_COMMANDS: HelpLine[] = [
@@ -59,7 +63,7 @@ export function printRootHelp(): void {
     vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>`
     : "";
 
-  console.log(`SearchCLI
+  console.log(withOpenApiReferenceHint(`SearchCLI
 
 Interactive AI search CLI. Use dataset/app/search/chat for the primary product workflow.
 
@@ -106,5 +110,5 @@ ADVANCED
   ${advancedCommands}
 
 MORE HELP
-  ${moreHelpLines.join("\n  ")}`);
+  ${moreHelpLines.join("\n  ")}`));
 }

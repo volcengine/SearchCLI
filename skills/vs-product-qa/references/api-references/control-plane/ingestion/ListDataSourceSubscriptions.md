@@ -37,7 +37,7 @@ message DataSourceSubscriptionTaskInfo {
 | --- | --- | --- | --- |
 | `Tasks[]` | array<DataSourceSubscriptionTaskInfo> | No | Tasks. |
 | `Tasks[].TaskId` | string | See service validation | Task id. |
-| `Tasks[].Status` | string | See service validation | Status. |
+| `Tasks[].Status` | string | See service validation | Status. snake_case enum: `initialized` / `waiting_for_dataset` / `importing` / `finished` / `failed`. |
 | `Tasks[].ImportedCount` | int64 | See service validation | Imported count. |
 | `Tasks[].DatasetId` | string | See service validation | Dataset ID. |
 

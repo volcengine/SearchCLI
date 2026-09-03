@@ -326,7 +326,7 @@ message NumberRange {
 | `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
 | `Config.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
 | `Config.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte_rerank` / `doubao_rerank` (snake_case). |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte-rerank` / `doubao-rerank`. |
 | `Config.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
 | `Config.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
 | `Config.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
@@ -359,7 +359,7 @@ message NumberRange {
 | `DraftConfig.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
 | `DraftConfig.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
 | `DraftConfig.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `DraftConfig.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte_rerank` / `doubao_rerank` (snake_case). |
+| `DraftConfig.PerDatasetConfigs[].RerankConfig.RerankModel` | string | See service validation | Rerank model. Enum: `gte-rerank` / `doubao-rerank`. |
 | `DraftConfig.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
 | `DraftConfig.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
 | `DraftConfig.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
@@ -368,6 +368,31 @@ message NumberRange {
 | `DraftConfig.PerDatasetConfigs[].SynonymConfig` | SynonymConfigV2 | See service validation | Synonym config. |
 | `DraftConfig.PerDatasetConfigs[].FacetConfig` | FacetConfig | See service validation | Facet config. |
 | `DraftConfig.PerDatasetConfigs[].RelevanceCutoffConfig` | RelevanceCutoffConfig | See service validation | Relevance cutoff config. |
+
+## Field Semantics and Validation Notes
+
+This API returns `SearchSceneConfigV2`. The returned `Config` and `DraftConfig` fields use the same enum-like string values and field-reference constraints as the publish API. For the complete config payload contract, see [PublishSearchSceneV2](./PublishSearchSceneV2.md#field-semantics-and-validation-notes).
+
+### Request Filter Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `ConfigLabels[]` | `config`, `draft_config` | Empty means all config labels. `draft_config` is a console draft capability and may not be exposed in all OpenAPI environments. |
+| `ConfigKeys[]` | `WantToSearchConfig`, `QueryCompletionConfig`, `OverviewConfig`, `TextSearchConfig`, `ImageSearchConfig`, `MaxRecallNum`, `FilterConfig`, `AuxiliaryPoolsConfig`, `PersonalizedRecallConfig`, `EnableRerankWithHot`, `RerankConfig`, `BoostBuryCondConfig`, `SortRulesConfig`, `ShuffleConfig`, `ServingControlConfig`, `CorrectionConfig`, `SynonymConfig`, `FacetConfig`, `RelevanceCutoffConfig` | Empty means all config keys under the selected config labels. |
+| `DatasetIds[]` | exact dataset IDs | Empty means all datasets. Only dataset-level config keys are filtered by dataset ID. |
+
+### Common Response String Values
+
+- `Status`: `unpublished`, `published`
+- `OverviewConfig.Mode`: `ondemand`, `always`
+- `TextSearchConfig.Mode`: `balanced`, `semantic_priority`, `keyword_priority`, `user_defined`
+- `TextSearchConfig.UserDefinedRecallMode`: `keyword_semantic`, `keyword_only`, `semantic_only`
+- `ImageSearchConfig.InstructionType`: `preset_image`, `preset_item`, `custom`
+- `PersonalizedRecallConfig.Mode`: `strong`, `weak`
+- `RerankConfig.RerankModel`: `gte-rerank`, `doubao-rerank`
+- `CorrectionConfig.Mode`: `auto`, `suggestion_only`
+- `CorrectionConfig.MatchMode`: `exact`, `partial`
+- `RelevanceCutoffConfig.Rules[].Mode`: `static`, `relative`
 
 ## Error Codes
 

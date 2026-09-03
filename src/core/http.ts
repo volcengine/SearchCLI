@@ -83,9 +83,12 @@ async function sendSignedJson<T = unknown>(
     debugLog('HTTP Request Body', body);
   }
 
+  const headers = await buildHeaders(config, method, url, body, includeControlPlaneHeaders);
+  debugLog('HTTP Request Headers', redactHeadersForDebug(headers));
+
   const response = await fetch(url, {
     method,
-    headers: await buildHeaders(config, method, url, body, includeControlPlaneHeaders),
+    headers,
     body,
     signal: timeoutSignal
   });
@@ -257,6 +260,17 @@ function createBaseHeaders(): Record<string, string> {
     accept: 'application/json',
     'user-agent': 'Search-Cli'
   };
+}
+
+function redactHeadersForDebug(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [
+      name,
+      /^(authorization|proxy-authorization|cookie|set-cookie|.*(?:api[-_]?key|secret|token))$/i.test(name)
+        ? '[REDACTED]'
+        : value
+    ])
+  );
 }
 
 function parseMaybeJson(rawText: string): unknown {

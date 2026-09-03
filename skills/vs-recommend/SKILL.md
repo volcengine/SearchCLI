@@ -1,5 +1,6 @@
 ---
 name: vs-recommend
+version: 1.0.0
 description: "Recommend runtime and scene management: run recommendation requests, manage recommend scenes, and verify the basic recommendation path."
 category: recommend
 applies_to: codex, agents, external-agent
@@ -13,6 +14,10 @@ commands: recommend run, recommend scene create, recommend scene list, recommend
 ## When to Use
 
 Use this skill for recommendation runtime checks, recommend scene management, and first-pass verification of the recommendation path.
+
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-recommend`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
 
 ## Preconditions
 

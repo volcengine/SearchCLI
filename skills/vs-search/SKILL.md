@@ -1,5 +1,6 @@
 ---
 name: vs-search
+version: 1.0.0
 description: "Search runtime and scene management: verify queries, inspect scenes, debug app readiness, and diagnose recall or scene-config issues."
 category: search
 applies_to: codex, agents, external-agent
@@ -23,6 +24,10 @@ Use this skill for:
 
 If the user wants automated batch evaluation or similarity tuning across many queries and strategies, use `vs-search-tuning` instead.
 
+## Version Check
+
+Before starting this skill workflow, run `vs skill check --name vs-search`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+
 ## Preconditions
 
 - an `application-id` is available
@@ -38,7 +43,7 @@ Before changing anything, decide whether the user wants:
 - a temporary runtime verification
 - a readiness diagnosis for a failing app
 
-This skill stays at the search workflow level. Do not embed low-level API field mappings, payload design, or enum interpretation here. When a concrete command needs exact parameters, first consult `vs-product-qa`.
+This skill stays at the search workflow level. Do not embed low-level API field mappings, payload design, or enum interpretation here. When a concrete command needs exact parameters, first consult `vs-product-qa` and the matching API reference. For `search scene update`, the authoritative scene publish contract is `vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`.
 
 ## Commands
 
@@ -64,6 +69,7 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 ## References
 
 - `references/search-scene-natural-language-routing.md`: workflow-oriented mapping from natural-language search-scene requests to the first config area or workflow you should inspect
+- `../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`: authoritative SearchSceneV2 publish payload, enum-like string values, and validation notes for persistent scene updates
 
 ## Customer Environment Principle
 
@@ -76,6 +82,8 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 ## Constraints
 
 - Before executing any concrete `vs ...` command in this search workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
+- Before building a `search scene update` payload, consult `vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md` for the concrete SearchSceneV2 field semantics, enum-like string values, and validation constraints. The routing reference only identifies the config area; it is not sufficient for final payload values.
+- When the user request includes a mode/model qualifier such as `strong`, `weak`, `semantic priority`, `image similarity`, `multimodal`, `always`, or `suggestion_only`, do not treat enabling the feature as sufficient. Set the corresponding mode/model/config field explicitly and verify that exact value in the readback response.
 - **Field name case sensitivity**: All dataset field names (used in `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPools[].Filter.field`, etc.) are **case-sensitive**. Never infer or normalize field name casing from the user's natural-language description. Before writing any field name into a config, first look up the exact field name from the dataset schema or data-config via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy the field name exactly as it appears there (case-for-case). If the field name you have doesn't match any field in the schema, stop and ask the user to confirm which field they mean instead of guessing.
 - When an app is bound to exactly one dataset, the CLI can infer `dataset-id`
 - For fresh apps, treat readiness as the first hypothesis before blaming the query

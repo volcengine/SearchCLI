@@ -70,6 +70,29 @@ message RecommendRule {
 | `Used` | bool | See service validation | Used. |
 | `Config` | Struct | See service validation | Config. |
 
+## Field Semantics and Validation Notes
+
+### Rule Type Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Type` | `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `userInterest`, `itemCf`, `forceItem`, `boostBuryCond`, `coldStart`, `shuffle`, `recReason` | Legacy rule API uses camelCase values for several rule types. Do not convert them to snake_case in this API. |
+
+Common `Config` constraints by `Type`:
+
+- `filter`: recommendation item filter DSL; supports dynamic parameters such as `"{{Param}}"`; field names must match the item dataset schema and be filterable.
+- `search_filter`: search filter DSL; does not support dynamic parameters.
+- `impression`: `TimeWindowSeconds > 0`, `MaxSize` in `0..30000`; nested `ExposureCfg` follows the same limits.
+- `boostBuryCond`: `Rules[].Boost` must be in `[-1, 1]`; `Rules[].Config` condition DSL allows at most 2 logic layers.
+- `coldStart`: `ItemConditionType` is `import_time` or `custom_filter`; `ImportTimeWindowHours`, `ExposureThreshold`, and `MaxInjectCount` must be non-negative; `import_time` requires `ImportTimeWindowHours > 0`; `custom_filter` requires non-empty `ItemFilter`.
+- `shuffle`: `WindowType` is `SLIDE` or `TOP`; `ShuffleType` is `dimension` or `expression`; `WindowSize > 0`; one of `MaxSize` or `RecallMax` must be `> 0`; `WindowSize >= MaxSize/RecallMax`; expression shuffle requires non-empty `ShuffleExpr`.
+- `recReason`: enabled templates require valid `RecallChannel` and non-empty `Template`; valid channels are `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, and `cold_start`.
+
+Reference constraints:
+
+- `DatasetID` is the behavior dataset for degrade/recall-oriented rules and the target dataset for other rule families as described by service behavior.
+- `ItemDatasetID` is the item dataset scope for item-field rule validation.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |
