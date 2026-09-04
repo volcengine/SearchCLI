@@ -1,6 +1,5 @@
 ---
 name: vs-item-onboarding
-version: 1.0.0
 description: "onboarding workflow for creating datasets and applications in Viking AI Search. Supports one-time import from local files (JSON, JSONL, CSV) and MySQL databases, plus scheduled incremental sync for append-only JSONL files and MySQL. All sources are first exported to a bootstrap JSONL file; backend-driven schema inference handles detection, and optional background sync keeps the dataset up to date as new data arrives."
 category: workflow
 applies_to: codex, agents, external-agent
@@ -55,7 +54,7 @@ Do not use this skill when:
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-item-onboarding`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

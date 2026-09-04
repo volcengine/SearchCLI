@@ -34,7 +34,7 @@ const PRODUCT_COMMANDS: HelpLine[] = [
 ];
 
 const ADVANCED_COMMANDS: HelpLine[] = [
-  { text: "version            Print the current CLI version" },
+  { text: "version            Print or check the current CLI package version" },
 ];
 
 export function printRootHelp(): void {

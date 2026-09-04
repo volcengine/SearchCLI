@@ -1,12 +1,11 @@
 ---
 name: vs-product-qa
-version: 1.0.0
 description: "Answer Viking AI Search product questions, CLI usage questions, API/auth questions, configuration questions, and troubleshooting questions by grounding every claim in either the installed `vs` CLI's own output or official Volcengine documentation. Never fabricate."
 category: shared
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
 keywords: viking ai search, product question, product concept, concept, how to, usage, api, authentication, ak sk, configuration, error, troubleshooting, docs, official docs, help, faq, data count, effective data, valid data, data volume, item-data-count
-commands: doctor, auth status, llm status, skill check, skill list, skill search, skill show
+commands: doctor, auth status, llm status, skill list, skill search, skill show
 ---
 
 # vs-product-qa
@@ -32,7 +31,7 @@ If another skill is active and the user asks a product question outside that ski
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-product-qa`. This metadata preflight is exempt from the normal product-command verification rule. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 
@@ -58,7 +57,7 @@ Classify the question before choosing a source.
 | Local authentication / credential | `vs auth status` / `vs doctor` | "Why does `vs auth status` say invalid" |
 | Local CLI error / stack trace | the error's own recovery output | "I see `ERR_AUTH_REQUIRED`; what now" |
 | Product concept | official docs via the bundled documentation helper | "What is a scene in Viking AI Search" |
-| API contract / request-response shape / field semantics / enum / validation / error code | GitHub main API Reference, starting from the root README URL in the API Reference source section | "What does `RelevanceCutoffConfig` accept" |
+| API contract / request-response shape / field semantics / enum / validation / error code | bundled API Reference, starting from [references/api-references/README.md](references/api-references/README.md) | "What does `RelevanceCutoffConfig` accept" |
 | Application / dataset **effective (valid) data volume** | first resolve each bound dataset's `Type` (via `app get` / `app dataset-config list`). For **item/video** datasets, call `app item-data-count` per dataset and sum `ValidCnt` (`DataNum` is not the answer). For **document** datasets, do NOT call `app item-data-count` (it returns `InvalidParameter: DatasetType`) — use `app dataset-config list --full` (the `--full` flag is required; the default compact output omits `DocumentStats`) and read the document count from `Config[].Dataset.DocumentStats` (`DocumentNum` + `DocumentFromHomepageNum`), not `DataNum`. Always report the document count, including when it is `0`. For **user_event (behavior)** datasets only, exclude them entirely because they have no effective-data-volume metric at all — do not query a count and do not list them (this "omit even when 0" rule applies to user_event only, never to item/video/document, which are always reported even when their count is 0). | "How much effective data does application X have" |
 | Purchase / billing / pricing / quota | official docs via the bundled documentation helper | "How do I upgrade my plan" |
 | Console UI path / where to click | official docs via the bundled documentation helper | "Where do I configure boost/bury" |
@@ -80,17 +79,13 @@ Allowed CLI checks include:
 - `vs skill search <query>`
 - `vs skill show <name>`
 
-For command-related questions, use `vs <domain> --help` or `vs <cmd> --help` as the primary source for command existence, flags, examples, and currently installed behavior. Use the online API Reference router only when the user asks how a command maps to an API category or contract.
+For command-related questions, use `vs <domain> --help` or `vs <cmd> --help` as the primary source for command existence, flags, examples, and currently installed behavior. Use the bundled API Reference router only when the user asks how a command maps to an API category or contract.
 
 Before recommending any command or flag, verify that it exists through `vs skill list`, `vs <domain> --help`, or `vs <cmd> --help`.
 
 ### API Reference source
 
-API contracts are not answered from local installed snapshots. When the user asks about OpenAPI request/response shape, field semantics, enums, validation rules, or error codes, fetch the latest API Reference from GitHub main:
-
-```text
-https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md
-```
+When the user asks about OpenAPI request/response shape, field semantics, enums, validation rules, or error codes, read the bundled API Reference from [references/api-references/README.md](references/api-references/README.md).
 
 Read it progressively:
 
@@ -101,17 +96,13 @@ api-references/README.md
   -> one OpenAPI Markdown file, such as PublishSearchSceneV2.md
 ```
 
-Resolve every relative Markdown link in the API Reference tree against the GitHub raw URL of the current document, not against the local workspace. For example, `./control-plane/README.md` from the root README means:
-
-```text
-https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/control-plane/README.md
-```
+Resolve every relative Markdown link in the API Reference tree against the local directory that contains the current document. For example, `./control-plane/README.md` from the root README means [references/api-references/control-plane/README.md](references/api-references/control-plane/README.md).
 
 Rules:
 
-- CLI flags and command availability still come from the installed `vs --help`; the GitHub API Reference must not override observed CLI behavior.
-- API contract details come from GitHub main API Reference.
-- If GitHub fetching fails or the target API row is marked `missing`, say the online API Reference is unavailable or incomplete for that API. Do not fall back to old local snapshots and do not guess.
+- CLI flags and command availability still come from the installed `vs --help`; the bundled API Reference must not override observed CLI behavior.
+- API contract details come from the bundled API Reference.
+- If the target API row is marked `missing`, say the bundled API Reference is incomplete for that API. Do not guess.
 
 ### Documentation source
 
@@ -169,10 +160,10 @@ These may be used later only if they become publicly available and are actually 
 
 1. Classify the question using **Question Routing**.
 2. Pick the source:
-   - CLI usage -> run the relevant `vs ... --help`; use the online API Reference router only for command-to-API-category questions
+   - CLI usage -> run the relevant `vs ... --help`; use the bundled API Reference router only for command-to-API-category questions
    - local auth / environment -> use `vs auth status`, `vs doctor`, or `vs llm status`
    - local CLI error -> use the recovery output from this turn first; only run more CLI checks if needed
-   - API contract -> fetch GitHub main API Reference from the root README, then follow category and endpoint links
+   - API contract -> read the bundled API Reference from the root README, then follow category and endpoint links
    - product docs -> use the bundled documentation helper privately, with the hard `Universal AI Search` + `docs/85296` restriction
 3. Extract only the lines or sections needed to answer.
 4. Respond using the required output format.
@@ -216,8 +207,8 @@ Rules:
 3. **No fabricated URLs**: sub-page URLs must come from routing actually performed in this turn. Do not guess paths.
 4. **No CLI hallucination**: do not recommend commands or flags that do not exist.
 5. **CLI overrides docs**: when CLI help and documentation conflict, trust the installed CLI and say the docs may be stale.
-5a. **Command questions check installed CLI first**: when the user asks about a concrete command, its parameters, or flags, first confirm the installed CLI surface with `vs ... --help`. Use the online API Reference router only for command-to-API-category questions.
-5b. **API contract questions use GitHub main API Reference**: when the user asks about OpenAPI request/response, fields, enums, validation, or error codes, fetch the root API Reference README from GitHub main and follow links progressively to the target endpoint. Do not answer API contracts from local installed snapshots.
+5a. **Command questions check installed CLI first**: when the user asks about a concrete command, its parameters, or flags, first confirm the installed CLI surface with `vs ... --help`. Use the bundled API Reference router only for command-to-API-category questions.
+5b. **API contract questions use the bundled API Reference**: when the user asks about OpenAPI request/response, fields, enums, validation, or error codes, read the root API Reference README and follow links progressively to the target endpoint.
 6. **No silent execution**: do not run write commands such as `apply`, `update`, `create`, or `bind` on the user's behalf.
 7. **AK/SK notice required**: whenever credentials or `vs auth import-env` are involved, append the AK/SK security notice.
 8. **Honest unknowns**: if available sources cannot answer, say `unknown`, explain what source was checked, and suggest escalation.
@@ -274,4 +265,4 @@ Answer: "This is covered by `vs-user-onboarding` because it is a sign-up, purcha
 - AK/SK security notice: [references/aksk-notice.md](references/aksk-notice.md)
 - Delegation matrix: [references/delegation.md](references/delegation.md)
 - Bundled documentation helper: [references/volcengine-documentation/SKILL.md](references/volcengine-documentation/SKILL.md)
-- Online API Reference entry: `https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md`
+- Bundled API Reference entry: [references/api-references/README.md](references/api-references/README.md)

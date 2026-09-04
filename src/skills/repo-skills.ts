@@ -6,7 +6,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { EMBEDDED_REPO_SKILLS } from './embedded-repo-skills';
 import { VERSION } from '../version';
-import { isSemanticVersion } from './skill-version-check';
 
 const REQUIRED_HEADINGS = ['## When to Use', '## Version Check', '## Preconditions', '## Commands', '## Workflow', '## Constraints'] as const;
 export const REPO_SKILL_CATEGORIES = ['shared', 'app', 'data', 'search', 'recommend', 'chat', 'workflow'] as const;
@@ -91,6 +90,10 @@ const FALLBACK_COMMANDS = [
   'purchase order status',
   'purchase order wait',
   'recommend run',
+  'recommend rule delete',
+  'recommend rule get',
+  'recommend rule list',
+  'recommend rule upsert',
   'recommend scene create',
   'recommend scene delete',
   'recommend scene get',
@@ -102,7 +105,7 @@ const FALLBACK_COMMANDS = [
   'search scene get',
   'search scene list',
   'search scene update',
-  'skill check',
+  'version check',
   'skill install',
   'skill init',
   'skill list',
@@ -113,7 +116,6 @@ const FALLBACK_COMMANDS = [
 
 export interface RepoSkill {
   name: string;
-  version: string;
   title: string;
   description: string;
   category: RepoSkillCategory;
@@ -181,7 +183,6 @@ export interface RepoSkillCompatibility {
 
 export interface RepoSkillListItem {
   name: string;
-  version: string;
   title: string;
   description: string;
   category: RepoSkillCategory;
@@ -280,7 +281,6 @@ export function validateRepoSkills(root = getRepoSkillsRoot()): RepoSkillValidat
     }
 
     const name = frontmatter.name?.trim();
-      const version = frontmatter.version?.trim();
     const description = frontmatter.description?.trim();
     const category = frontmatter.category?.trim();
     const appliesTo = parseCsvList(frontmatter.applies_to);
@@ -293,11 +293,6 @@ export function validateRepoSkills(root = getRepoSkillsRoot()): RepoSkillValidat
       errors.push(`[${dirName}] frontmatter missing name`);
       continue;
     }
-      if (!version) {
-        errors.push(`[${dirName}] frontmatter missing version`);
-      } else if (!isSemanticVersion(version)) {
-        errors.push(`[${dirName}] version must be a semantic version such as 1.0.0`);
-      }
     if (!description) {
       errors.push(`[${dirName}] frontmatter missing description`);
     }
@@ -361,7 +356,6 @@ export function validateRepoSkills(root = getRepoSkillsRoot()): RepoSkillValidat
 
     skills.push({
       name,
-        version: version ?? '0.0.0',
       title,
       description: description ?? '',
       category: (category as RepoSkillCategory | undefined) ?? 'shared',
@@ -407,7 +401,6 @@ export function findRepoSkill(name?: string, root?: string): RepoSkill | undefin
 export function toRepoSkillListItem(skill: RepoSkill): RepoSkillListItem {
   return {
     name: skill.name,
-    version: skill.version,
     title: skill.title,
     description: skill.description,
     category: skill.category,
@@ -837,7 +830,6 @@ function renderRepoSkillTemplate(skill: {
 
   return `---
 name: ${skill.name}
-version: 1.0.0
 description: "${escapeFrontmatterValue(skill.description)}"
 category: ${skill.category}
 applies_to: ${skill.appliesTo.join(', ')}
@@ -854,7 +846,7 @@ TODO describe when external agents should use this skill.
 
 ## Version Check
 
-Before starting this skill workflow, run \`vs skill check --name ${skill.name}\`. If the result reports \`update-available\`, update SearchCLI before continuing. This check uses the 24-hour cache at \`~/.viking/online_version_cache.json\`; \`unknown\` and \`online-version-missing\` are non-blocking.
+Before starting this skill workflow, run \`vs version check --json\`. Continue only when the status is \`up-to-date\`. If the status is \`update-available\`, stop and tell the user to update the cloned \`vs\` repository, then run \`git pull --ff-only\`, \`bash ./scripts/install.sh\`, and \`bash ./scripts/install-skills.sh all --target auto --force\` (PowerShell: \`scripts/install.ps1\` and \`scripts/install-skills.ps1\`).
 
 ## Preconditions
 

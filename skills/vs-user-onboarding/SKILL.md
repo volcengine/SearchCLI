@@ -1,13 +1,12 @@
 ---
 name: vs-user-onboarding
-version: 1.0.0
 title: vs-user-onboarding
 description: "Guide a brand-new SearchCLI/vs user from first-time usage questions to sign-up, purchase of Viking AI Search, AK/SK setup, and a working authenticated CLI. Use when the user says they downloaded or installed SearchCLI/vs and asks how to use it, how to start, sign up, buy, or onboard."
 category: workflow
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.2.0"
 keywords: new user onboarding, sign up, register, purchase, buy, real-name verification, access key, ak sk, first run, first-time setup, get started, how to use, downloaded searchcli, installed searchcli, searchcli setup, vs setup, just installed vs, viking ai search
-commands: auth status, auth login, auth import-env, doctor, skill check, skill list, skill show, purchase link, purchase order price, purchase order create, purchase order status
+commands: auth status, auth login, auth import-env, doctor, skill list, skill show, purchase link, purchase order price, purchase order create, purchase order status
 ---
 
 # vs-user-onboarding
@@ -57,7 +56,7 @@ Recovery routing:
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-user-onboarding`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

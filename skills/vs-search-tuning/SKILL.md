@@ -1,6 +1,5 @@
 ---
 name: vs-search-tuning
-version: 1.0.0
 description: "Use when a user asks an agent to evaluate or tune text search similarity for an existing Viking AI Search application and dataset."
 category: search
 applies_to: codex, agents, external-agent
@@ -19,7 +18,7 @@ This first version is for similarity tuning. It defaults to text-query/text-item
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-search-tuning`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

@@ -79,7 +79,7 @@ async function runCoreSuite() {
   await runTest('project-feature-flag', testProjectFeatureFlag);
   await runTest('skill-list', testSkillList);
   await runTest('skill-show', testSkillShow);
-  await runTest('skill-version-check', testSkillVersionCheck);
+  await runTest('cli-version-check', testCliVersionCheck);
   await runTest('validate-skills-space-path', testValidateSkillsSpacePath);
   await runTest('search-tune-help', testSearchTuneHelp);
   await runTest('search-run-requires-scene-help', testSearchRunRequiresSceneHelp);
@@ -198,6 +198,7 @@ async function runCli(argv, options = {}) {
   const env = {
     ...process.env,
     VIKING_ENABLE_PROJECT: '0',
+    VIKING_CLI_VERSION_URL: 'http://127.0.0.1:1/latest',
     ...options.env
   };
 
@@ -278,13 +279,13 @@ async function testSkillShow() {
   return `${command.prefix} skill show --name vs-item-onboarding --json`;
 }
 
-async function testSkillVersionCheck() {
+async function testCliVersionCheck() {
   let requestCount = 0;
   const server = http.createServer((req, res) => {
-    if (req.url === '/skills/vs-search/SKILL.md') {
+    if (req.url === '/latest') {
       requestCount += 1;
-      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end('---\nname: vs-search\nversion: 1.1.0\n---\n');
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ version: '0.3.0' }));
       return;
     }
     res.writeHead(404);
@@ -295,37 +296,37 @@ async function testSkillVersionCheck() {
     server.listen(0, '127.0.0.1', resolve);
   });
 
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-cli-version-cache-'));
   try {
     const address = server.address();
     const port = typeof address === 'object' && address ? address.port : undefined;
     assert.ok(port);
-    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-skill-version-cache-'));
     const env = {
-      VIKING_SKILL_VERSION_BASE_URL: `http://127.0.0.1:${port}/skills`,
+      VIKING_CLI_VERSION_URL: `http://127.0.0.1:${port}/latest`,
       VIKING_HOME: cacheDir
     };
-    const { stdout, stderr } = await runCli(['skill', 'check', '--name', 'vs-search', '--json'], {
-      env
+    const firstRun = await runCli(['version', 'check', '--json'], { env });
+    const secondRun = await runCli(['version', 'check', '--json'], { env });
+    const firstPayload = JSON.parse(firstRun.stdout);
+    const secondPayload = JSON.parse(secondRun.stdout);
+
+    const localVersion = fs.readFileSync(path.join(root, 'src', 'version.ts'), 'utf8').match(/VERSION = '([^']+)'/)?.[1];
+    assert.ok(localVersion);
+    assert.equal(firstPayload.localVersion, localVersion);
+    assert.equal(firstPayload.onlineVersion, '0.3.0');
+    assert.equal(firstPayload.status, 'update-available');
+    assert.equal(firstPayload.cacheHit, false);
+    assert.equal(secondPayload.cacheHit, true);
+    assert.equal(requestCount, 1);
+    assert.ok(fs.existsSync(path.join(cacheDir, 'online_version_cache.json')));
+
+    await expectCliRejection(['skill', 'list', '--json'], {
+      env,
+      pattern: /SearchCLI version is out of date/
     });
-    const secondRun = await runCli(['skill', 'check', '--name', 'vs-search', '--json'], {
-      env
-    });
-    try {
-      const payload = JSON.parse(stdout);
-      const secondPayload = JSON.parse(secondRun.stdout);
-      assert.equal(payload.updateAvailable, 1);
-      assert.equal(payload.checks[0].localVersion, '1.0.0');
-      assert.equal(payload.checks[0].onlineVersion, '1.1.0');
-      assert.equal(payload.checks[0].status, 'update-available');
-      assert.equal(secondPayload.checks[0].status, 'update-available');
-      assert.equal(requestCount, 1);
-      assert.ok(fs.existsSync(path.join(cacheDir, 'online_version_cache.json')));
-      assert.match(stderr, /Update available for vs-search/);
-      return `${command.prefix} skill check --name vs-search --json (24h cache)`;
-    } finally {
-      fs.rmSync(cacheDir, { recursive: true, force: true });
-    }
+    return `${command.prefix} version check --json (24h cache + command preflight)`;
   } finally {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
     await new Promise(resolve => server.close(resolve));
   }
 }

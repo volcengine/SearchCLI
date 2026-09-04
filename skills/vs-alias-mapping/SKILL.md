@@ -1,6 +1,5 @@
 ---
 name: vs-alias-mapping
-version: 1.0.0
 title: vs-alias-mapping
 description: Provide system alias mapping for Search CLI. Invoke this skill when user mentions "Search CLI", "search_cli", or tries to execute search_cli commands.
 category: shared
@@ -17,7 +16,7 @@ Invoke this skill when the user refers to the CLI tool as "Search CLI" or "searc
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-alias-mapping`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 - The agent is about to execute a CLI command based on the user's "Search CLI" intent.

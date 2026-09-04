@@ -371,6 +371,33 @@ These fields are encoded as strings. Do not send numeric enum codes.
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Threshold` | finite and `>= 0`; additionally `<= 1` for `Mode="relative"` and for `Mode="static"` with `ScoreType` `text_semantic` or `image_semantic` | `static` thresholds for `keyword` and `final` use the corresponding score scale. |
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Fallback.MinResultCount` | `> 0` when fallback is enabled | Applies only when `Fallback.Enable=true`. |
 
+### Shuffle Expression Shape
+
+`Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr` is used only when `ShuffleType="expression"`. It is a single leaf expression object, not a recursive condition tree.
+
+Required shape:
+
+```json
+{
+  "field": "<dataset-field-name>",
+  "op": "must",
+  "conds": ["<value>"]
+}
+```
+
+Allowed stored `op` values are `must`, `must_not`, and `range`.
+
+| `ShuffleExpr.field` field type | Allowed stored `op` | Value shape | Frontend meaning |
+| --- | --- | --- | --- |
+| `string` | `must`, `must_not` | `conds: string[]` | Contains / does not contain the listed values. |
+| `int32`, `int64` | `must`, `must_not` | `conds: number[]` | Equals / not equals the listed numeric values. |
+| `int32`, `int64` | `range` | One or more numeric bounds from `gt`, `gte`, `lt`, `lte`; frontend interval input supplies one lower and one upper bound | Numeric comparison or interval. |
+| `float` | `range` | Numeric `gt`, `lt`, or both; frontend interval input emits open intervals only | Float comparison or open interval. |
+| `bool` | `must`, `must_not` | `conds: [true]` or `conds: [false]` | Equals / not equals the boolean value. |
+| `array<string>`, `array<int32>`, `array<int64>`, `array<float>` | `must`, `must_not` | `conds` array whose element type matches the field | Array contains / does not contain the listed values. |
+
+Do not use `and`, `or`, `partial_match`, query dynamic operators, or nested rule trees in `ShuffleExpr`.
+
 ### Field-Reference Constraints
 
 The following fields must use exact dataset schema field names and are case-sensitive:
@@ -381,14 +408,73 @@ The following fields must use exact dataset schema field names and are case-sens
 - `Config.PerDatasetConfigs[].FilterConfig.Config.field`.
 - `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[].Filter.field`.
 - Fields inside `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Config`.
+- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr.field` when `ShuffleType="expression"`.
 - `Config.PerDatasetConfigs[].FacetConfig.Facets[].Field`; facet fields must be filterable and supported for enum or numeric aggregation.
 
-Condition-tree DSL constraints:
+### Condition DSL Shapes
+
+The condition tree is used by `FilterConfig.Config`, `AuxiliaryPoolsConfig.Pools[].Filter`, `BoostBuryCondConfig.Rules[].Config`, and `ServingControlConfig.ServingControls[].QueryCondition`. The exact leaf operators differ by target field.
+
+Common tree constraints:
 
 - `FilterConfig.Config` and `BoostBuryCondConfig.Rules[].Config` allow at most 2 logic layers.
 - `AuxiliaryPoolsConfig.Pools[].Filter` allows at most 2 logic layers and at most 5 leaf conditions.
-- `ServingControlConfig.ServingControls[].QueryCondition` allows at most 2 logic layers and at most 5 leaf conditions.
+- `ServingControlConfig.ServingControls[].QueryCondition` allows at most 2 logic layers and at most 5 leaf conditions, and the serialized `QueryCondition` struct must be at most 1024 bytes.
 - `ServingControlConfig.ServingControls[]` child config blocks use the same enum-like values and numeric constraints as their top-level counterparts.
+
+For a single item-field condition, use the canonical leaf-node shape directly. The `Filter` / `Config` / `QueryCondition` object itself must contain `field`, `op`, and value fields at the top level:
+
+```json
+{
+  "field": "category",
+  "op": "must",
+  "conds": ["TShirt"]
+}
+```
+
+Do not wrap a single leaf condition inside `{"op":"and","conds":[...]}` or `{"op":"or","conds":[...]}`. Logical nodes are only for composing two or more child conditions:
+
+```json
+{
+  "op": "and",
+  "conds": [
+    {"field": "brand", "op": "must", "conds": ["Acme"]},
+    {"field": "price", "op": "range", "gte": 100}
+  ]
+}
+```
+
+Use `op="or"` for disjunction. For logical nodes, `conds` must be a non-empty array of child condition nodes.
+
+Item-field condition leaf operators:
+
+| Target config | Allowed leaf `op` values | Value shape and constraints |
+| --- | --- | --- |
+| `FilterConfig.Config` | `must`, `must_not`, `range`, `range_out`, `time_range`, `geo_range` | `field` must be a filterable dataset field. `must` / `must_not` use non-empty `conds`. `range` / `range_out` use one or more numeric bounds from `gt`, `gte`, `lt`, `lte`. `time_range` uses `gt` / `gte` / `lt` / `lte` with numeric timestamps or `now()` expressions. `geo_range` requires `center` and `radius`. |
+| `AuxiliaryPoolsConfig.Pools[].Filter` | Same as `FilterConfig.Config`, plus `partial_match`, `query_equal`, `query_in`, `query_partial_match` | Same shape as `FilterConfig.Config`, with at most 5 leaf conditions. `partial_match` uses non-empty string `conds` on `string` or `array<string>` fields. Query dynamic operators use the request query and must not carry static `conds` except missing, `null`, or `[]`; `query_equal` supports `string`, while `query_in` and `query_partial_match` support `string` and `array<string>`. Query dynamic operators and `partial_match` require a `full_text` ES index. |
+| `BoostBuryCondConfig.Rules[].Config` | `must`, `must_not`, `any_must`, `any_must_not`, `partial_match`, `range`, `time_range`, `geo_distance`, `query_equal`, `query_in`, `query_partial_match` | `field` must exist in the dataset schema. `must` / `must_not` support `string`, `bool`, `int32`, `int64`, timestamp/date fields, `array<string>`, `array<int32>`, and `array<int64>`. `range` supports `int32`, `int64`, `float`, and timestamp fields. `time_range` is for publish-time timestamp/date fields. `partial_match` supports non-empty string `conds` on `string` and `array<string>`. `any_must` / `any_must_not` are only for `array<object>` paths such as `items[*].tag`, with exactly one `[*].` segment, no nested child path after it, and one value in `conds`. `geo_distance` uses a longitude,latitude field pair and `mode` `inner` or `outer` with `radius` such as `1000m`. Query dynamic operators follow the same no-static-`conds` and field-type rules as above. |
+
+Frontend aliases such as `eq`, `ne`, `contains`, `not_contains`, `within`, `time_lt`, and `time_gt` are form-level operators; API payloads should use the stored forms above.
+
+`ServingControlConfig.ServingControls[].QueryCondition` is not an item-field condition. It can only use these fields and operators:
+
+| `field` | Allowed leaf `op` | Value shape |
+| --- | --- | --- |
+| `query` | `contains`, `must` | Non-empty `conds: string[]`. `contains` means the search query contains any listed string; `must` means the search query equals one listed string. |
+| `query_type` | `contains`, `must` | Non-empty `conds` using only `number` or `alnum`. `number` means the query is all digits; `alnum` means the query is ASCII letters and digits. |
+| `query_length` | `range` | One or more non-negative integer bounds from `gt`, `gte`, `lt`, `lte`. At least one bound is required; if both sides are present, the lower bound must not exceed the upper bound, and equal open bounds are invalid. |
+
+To trigger a serving control by query text, use `field="query"`, for example:
+
+```json
+{
+  "field": "query",
+  "op": "contains",
+  "conds": ["golf shoes"]
+}
+```
+
+Do not encode a serving-control query trigger as `{"query":"golf shoes"}`. Do not use item-field operators such as `query_in`, `query_partial_match`, `partial_match`, `must_not`, `time_range`, or `geo_distance` inside `QueryCondition`.
 
 ## Response Parameters
 

@@ -1,6 +1,5 @@
 ---
 name: vs-search-tuning-specify-policy-direction
-version: 1.0.0
 description: Viking Search tuning for specified policy directions. Use this when the user provides specific queries, a type of query, or a business policy direction, and asks to boost, suppress, or fix a class of search results through request-parameter passthrough. You must only perform read-only baseline evaluation and request-level candidate testing; do not modify search scenes, app config, dictionaries, recommend scenes, or primary recall parameters.
 category: search
 applies_to: codex, agents, external-agent
@@ -29,7 +28,7 @@ Mode selection:
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-search-tuning-specify-policy-direction`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

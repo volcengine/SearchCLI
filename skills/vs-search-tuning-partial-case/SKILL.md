@@ -1,6 +1,5 @@
 ---
 name: vs-search-tuning-partial-case
-version: 1.0.0
 description: "Use when the user provides 1-50 concrete bad-case search queries for one Viking Search app and wants local deterministic fixes. This skill only verifies request-level fine-operation interventions against a read-only baseline scene and delivers a console-ready configuration sheet, validated payloads, and a replay script. It must not mutate scenes, apps, dictionaries, datasets, recall core parameters, or online defaults."
 category: search
 applies_to: codex, agents, external-agent
@@ -23,7 +22,7 @@ This skill only performs local, highly deterministic, fine-grained operational f
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-search-tuning-partial-case`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

@@ -2,20 +2,7 @@
 
 This file is the first-level router for Viking AI Search API contracts. Use it only to decide whether to read control-plane or data-plane references next.
 
-The QA skill normally starts from this GitHub main URL:
-
-```text
-https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/README.md
-```
-
-When following links in this API Reference tree, resolve every relative Markdown link against the GitHub raw directory that contains the current document. Do not resolve these links against a local workspace checkout.
-
-For example, from this root README:
-
-```text
-./control-plane/README.md
-=> https://raw.githubusercontent.com/volcengine/SearchCLI/main/skills/vs-product-qa/references/api-references/control-plane/README.md
-```
+When following links in this API Reference tree, resolve every relative Markdown link against the local directory that contains the current document.
 
 ## First-Level Routing Rules
 

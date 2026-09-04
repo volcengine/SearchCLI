@@ -1,12 +1,11 @@
 ---
 name: vs-shared
-version: 1.0.0
 description: "Shared SearchCLI setup: install, authenticate, run doctor, and verify the local environment."
 category: shared
 applies_to: codex, agents, external-agent
 requires_cli: ">=0.1.0"
 keywords: install cli, auth import-env, auth login, llm login, doctor, first-time setup, profile switch, shared basics
-commands: auth import-env, auth login, auth status, auth use, auth list, llm login, llm import-env, llm status, llm logout, doctor, skill check, skill list, skill install, app status, app diagnose, search run, chat run
+commands: auth import-env, auth login, auth status, auth use, auth list, llm login, llm import-env, llm status, llm logout, doctor, skill list, skill install, app status, app diagnose, search run, chat run
 ---
 
 # Viking Shared
@@ -17,7 +16,7 @@ Use this skill when an external agent is setting up SearchCLI for the first time
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-shared`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 

@@ -1,6 +1,5 @@
 ---
 name: vs-project
-version: 1.0.0
 description: "Create Viking web projects, start and verify a local preview, or deploy a generated project to Volcengine IGA Pages when explicitly requested. Includes agent-guided feature, eligible application, dataset, scene, and authentication choices. Use only after confirming the installed CLI exposes `vs project`; otherwise stop without taking action."
 category: workflow
 applies_to: codex, agents, external-agent
@@ -17,7 +16,7 @@ Use this skill to create a Viking web project from existing application resource
 
 ## Version Check
 
-Before starting this skill workflow, run `vs skill check --name vs-project`. If the result reports `update-available`, tell the user that this skill is stale and update SearchCLI before continuing. This check uses the 24-hour cache at `~/.viking/online_version_cache.json`; `unknown` and `online-version-missing` are non-blocking.
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
 
 ## Preconditions
 
