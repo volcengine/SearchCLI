@@ -79,20 +79,20 @@ First, determine the dictionary `Type` from the target config area:
 | QueryCompletionConfig (搜索补全) | `query_completion` | `Config.QueryCompletionConfig.DictIds` |
 | CorrectionConfig (搜索词纠错) | `query_correction_exemption` | `Config.PerDatasetConfigs[].CorrectionConfig.DictIds` |
 
-Then branch based on whether the user provides a CSV/term file or an existing `DictId`:
+Then branch based on whether the user provides a CSV/term file or an existing `DictId`.
 
 Path A - user provides a CSV/term file:
 
 1. Run `dict create --name <name> --type <type>` and capture the returned `DictId`.
 2. Run `dict get --dict-id <id>` to confirm creation.
 3. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
-4. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json` to bind the dictionary to target application scenes. For synonyms and correction dictionaries, include `DatasetId` in each scene entry (`{"AppId":"...","SceneId":"...","DatasetId":"..."}`).
-5. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+4. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+5. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
 
 Path B - user provides an existing `DictId`:
 
-1. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json`.
-2. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+1. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+2. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
 
 ## Usage Note
 
