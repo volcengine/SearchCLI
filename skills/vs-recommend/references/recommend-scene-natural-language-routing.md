@@ -9,9 +9,9 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI r
 - runtime verification uses the data-plane `Recommend` API through `recommend run`.
 - request identity fields use `ApplicationId`, `SceneId`, `RuleId`, `DatasetId`, and `ItemDatasetId`.
 - `recommend scene update` publishes through `PublishRecommendSceneV2`.
-- Unlike SearchSceneV2, recommend scene updates should be treated as full scene publishes. Start from `recommend scene get`, preserve top-level scene fields and unrelated `Config` areas, then change only the requested area.
+- Unlike SearchSceneV2, recommend scene updates should be treated as full scene publishes. Start from `recommend scene get`, preserve top-level scene fields and unrelated `Config` areas, then change only the requested area. CLI first-level `Config` patches are merged over readback before publish; nested field edits still require the full updated first-level object.
 - A successful publish updates persistent scene rows and online runtime config. It writes generated `recommend_scene_meta` under the scene namespace and writes application-level `event_scene_mapping` for `scene-id -> selected UserEventScenes[]`.
-- The full list of possible `event_scene` values comes from the bound UserEvent dataset schema plus offline-received values returned by `dataset get --full`; that candidate list is not itself the scene config.
+- The full list of possible `event_scene` values comes from the bound UserEvent dataset schema plus offline-received values returned by `dataset get --full`. Console finds the UserEvent schema field whose business attribute is UserEventScene and renders its `EnumerateMeta[].EnumerateValue` values; that candidate list is not itself the scene config.
 - Use this file only to identify the config area or workflow. Before deciding concrete enum values, value ranges, required sibling fields, or payload shape, consult the matching API reference under `../../vs-product-qa/references/api-references/`.
 
 ## Intent Routing
@@ -60,7 +60,7 @@ Use this workflow when the user wants a new recommend scene.
 | Detail page related items, similar items, item-to-item recommendation | `related` |
 | Cart page, shopping-cart recommendation | `shopping_cart` |
 
-5. Confirm `UserEventScenes[]`. These values must exist in the UserEvent `event_scene` enum/candidate values returned by `dataset get --full`.
+5. Confirm `UserEventScenes[]`. These values must exist in the UserEvent `event_scene` enum/candidate values returned by `dataset get --full`; specifically, find the schema field whose business attribute is UserEventScene and use `EnumerateMeta[].EnumerateValue`.
 6. If using `RecommendModel=long_sequence`, confirm `ClickEventTypes[]`; values must exist in the UserEvent `event_type` enum values. Also set a non-empty optimization target such as `ctr`.
 7. If the scene needs parent/variant item scope at creation time, set `FilterConfig.ItemTypeFilter`.
 8. Run `recommend scene create` with `--confirm-entry-binding`; use `--dry-run` first when the payload is complex.
@@ -86,6 +86,7 @@ Use this workflow when the user wants a persistent change on an existing scene.
 4. Build the update from the readback as a full scene publish:
    - carry forward `Type`, `Name`, `Description`, `ItemDatasetId`, and `UserEventScenes[]` unless intentionally changing them
    - carry forward existing `Config.ImpressionConfig`, `Config.SuggestConfig`, rule IDs, `BoostBuryCondConfig`, `ShuffleConfig`, `ColdStartConfig`, `MergeConfigs`, `ReasonTemplateConfig`, `FilterConfig`, and `RecAssistantConfig` unless intentionally changing them
+   - replace only first-level `Config` sections such as `RecAssistantConfig`, `ImpressionConfig`, or `MergeConfigs`; if changing a nested field, construct and send the full updated first-level section
    - do not assume absent `Config` children are preserved by the backend
 5. If the update references item fields, resolve exact field names through `dataset get --id <item-dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`.
 6. If the update changes `UserEventScenes[]` or enables exposure dedupe, resolve the UserEvent `event_scene` candidates first and pass `--confirm-entry-binding` for the real write.
@@ -101,7 +102,7 @@ Common top-level update fields:
 | `Name` / `Description` | Metadata only. |
 | `ItemDatasetId` | Must refer to an item dataset bound to the application; field-based config may need schema revalidation after changing it. |
 | `UserEventScenes[]` | Selected behavior-scene bindings; values come from the bound UserEvent dataset's `event_scene` enum/candidate values. |
-| `Config` | `RecommendSceneConfigV2`. Treat as full-publish config and preserve unrelated areas. |
+| `Config` | `RecommendSceneConfigV2`. Treat as full-publish config and preserve unrelated areas. CLI `--config` may be a full config or first-level patch merged over readback; it is not a nested JSONPath patch. |
 
 ## Behavior Scene Binding Workflow
 
@@ -109,7 +110,7 @@ Use this workflow when the user asks about page/module binding, `UserEventScenes
 
 1. Identify the bound UserEvent dataset for the application. If unclear, inspect the application/dataset list.
 2. Run `dataset get --id <user-event-dataset-id> --full`.
-3. Find the schema field whose BizAttr is `user_event_event_scene`; its `EnumerateMeta[].EnumerateValue` contains configured enum values plus offline-received `event_scene` values when available.
+3. Find the schema field whose BizAttr/business attribute is UserEventScene, commonly serialized as `user_event_event_scene`; its `EnumerateMeta[].EnumerateValue` contains configured enum values plus offline-received `event_scene` values when available.
 4. Present the available values to the user only when a choice is needed. Do not invent values such as `home`, `detail`, or `Details`.
 5. Write selected values to the recommend scene's `UserEventScenes[]` through the Scene Update Workflow.
 6. Remember the deployment distinction:

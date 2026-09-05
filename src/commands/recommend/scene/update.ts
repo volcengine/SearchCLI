@@ -9,7 +9,8 @@ export default class RecommendSceneUpdate extends Command {
   static override description = 'Update and publish a recommend scene config.';
 
   static override examples = [
-    '<%= config.bin %> recommend scene update --application-id 123 --scene-id 456 --config @scene.json --confirm-entry-binding'
+    '<%= config.bin %> recommend scene update --application-id 123 --scene-id 456 --config @scene-config-patch.json --confirm-entry-binding',
+    '<%= config.bin %> recommend scene update --application-id 123 --scene-id 456 --rec-assistant-config @rec-assistant.json --confirm-entry-binding'
   ];
 
   static override flags = {
@@ -17,7 +18,7 @@ export default class RecommendSceneUpdate extends Command {
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'scene-id': Flags.string({ required: true, description: 'Viking scene ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
-    config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' }),
+    config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a RecommendSceneConfigV2 full object or first-level patch. The CLI reads the current scene and merges it before publish.' }),
     count: Flags.integer({ description: 'Max number of items returned in a single recommendation.' }),
     'filter-rule-id': Flags.string({ description: 'Recommend filter rule ID.' }),
     'degrade-rule-id': Flags.string({ description: 'The degrade rule ID to fallback.' }),

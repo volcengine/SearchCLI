@@ -25,6 +25,20 @@ message UpsertRecommendRuleV2Req {
 message UpsertRecommendRuleV2Resp {
   string RuleId = 1;
 }
+
+message RecommendRuleV2 {
+  string ApplicationId = 1;
+  string RuleId        = 2;
+  string Name          = 3;
+  string Type          = 4;
+  string Description   = 5;
+  string CreateTime    = 6;
+  string UpdateTime    = 7;
+  string DatasetId     = 11;
+  string ItemDatasetId = 12;
+  bool   Used          = 13;
+  google.protobuf.Struct Config = 21;
+}
 ```
 
 ## Request Parameters
@@ -63,6 +77,57 @@ Other V2 rule types may appear in list/get responses but should not be upserted 
 - `rec_reason`
 
 Use the snake_case rule type values listed above.
+
+## Config JSON Shapes
+
+The V2 IDL declares `Config` as `google.protobuf.Struct`; the concrete JSON shape depends on `Type`.
+
+### `degrade`
+
+```json
+{
+  "SortType": "EventAccumulation",
+  "EventType": "click",
+  "TimeWindowSeconds": 3600,
+  "ResultDimension": "item_id",
+  "EventScores": [
+    { "EventType": "click", "Weight": 1 }
+  ],
+  "ItemFieldSort": {
+    "SortField": "sales",
+    "SortOrder": "Desc"
+  },
+  "Fallback": {
+    "Enable": true,
+    "ItemFieldSort": {
+      "SortField": "sales",
+      "SortOrder": "Desc"
+    }
+  }
+}
+```
+
+### `filter` / `search_filter`
+
+```json
+{
+  "op": "must",
+  "field": "category",
+  "conds": ["shoes"]
+}
+```
+
+### `force_item`
+
+```json
+{
+  "EffectDuration": "request",
+  "Enable": true,
+  "Items": [
+    { "ItemPkValue": "sku_001", "Position": 1 }
+  ]
+}
+```
 
 ## Config Constraints
 

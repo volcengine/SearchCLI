@@ -30,7 +30,7 @@ Before starting this skill workflow, run `vs version check --json`. Continue onl
 
 - an `application-id` is available
 - runtime checks need a `scene-id` and usually at least one of `user-id`, `parent-id`, or shopping-cart item context
-- scene creation needs an item dataset bound to the application and at least one behavior scene value from the bound UserEvent dataset
+- scene creation needs an item dataset bound to the application and at least one behavior scene value from the bound UserEvent dataset; resolve it with `dataset get --full` from the UserEvent schema field whose business attribute is UserEventScene
 - if the scene does not exist yet, inspect the existing scene list first and only create a new scene when reuse is not possible
 - the agent should treat the installed CLI behavior as authoritative when help text, skill text, and runtime behavior disagree
 
@@ -81,7 +81,7 @@ Recommend scene deployment is not just a row update.
 - Deployment updates deduplication/invert configs when impression/exposure dedupe is enabled.
 - `GetRecommendSceneExpConfigV2` is a preview/experience-config helper and is not a public CLI/OpenAPI workflow.
 
-Important difference from search scenes: SearchSceneV2 supports partial `Config` publish semantics. Recommend `PublishRecommendSceneV2` should be treated as a full scene publish. Build update payloads from the current `recommend scene get` response and preserve unrelated config areas unless the user explicitly asks to replace them.
+Important difference from search scenes: SearchSceneV2 supports partial `Config` publish semantics. Recommend `PublishRecommendSceneV2` should be treated as a full scene publish. Build update payloads from the current `recommend scene get` response and preserve unrelated config areas unless the user explicitly asks to replace them. When using the CLI, `--config` and advanced flags are merged over the readback at the first `Config` level; if changing a nested field, provide the full updated first-level object.
 
 ## Commands
 
@@ -105,12 +105,12 @@ Important difference from search scenes: SearchSceneV2 supports partial `Config`
    - a readiness, behavior-scene binding, or online-config diagnosis
 2. Before running any concrete command, consult `vs-product-qa` to confirm the current command behavior and exact parameter requirements.
 3. For runtime checks, use `recommend run` first, then inspect `result.rec_results`, `extra_info`, recall info, boost status, diversity status, and invalid parent items from the raw response.
-4. For persistent scene changes, run `recommend scene list/get` first and inspect the current scene before mutating it. Treat the readback as the base payload for a full publish.
+4. For persistent scene changes, run `recommend scene list/get` first and inspect the current scene before mutating it. Treat the readback as the base payload for a full publish; first-level `Config` sections may be replaced, but nested field edits require a full updated first-level section.
 5. For natural-language scene-change requests, use `references/recommend-scene-natural-language-routing.md` to identify the target V2 field, config area, deployment check, or rule-resource workflow.
 6. Before building a `recommend scene create` or `recommend scene update` payload, consult the matching V2 API reference. The routing reference identifies where to edit; it is not sufficient for final payload values.
 7. Before creating or updating a recommend scene, resolve the target page/module and the required `UserEventScenes`. For real writes, pass `--confirm-entry-binding`.
 8. Resolve dataset facts before writing:
-   - use `dataset get --id <user-event-dataset-id> --full` to inspect `event_scene` and `event_type` enum values
+   - use `dataset get --id <user-event-dataset-id> --full` to inspect `event_scene` and `event_type` enum values; for `event_scene`, find the schema field whose business attribute is UserEventScene and read `EnumerateMeta[].EnumerateValue`
    - use `dataset get --id <item-dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full` for exact item field casing and filterable fields
 9. For rule-resource changes, run `recommend rule list/get` before `recommend rule upsert`; after a rule change, update the scene only when the user also wants that rule attached or replaced in a scene.
 10. After every scene mutation, immediately read the scene back with `recommend scene get` and verify that the intended persistent fields are visible.
@@ -138,10 +138,10 @@ Important difference from search scenes: SearchSceneV2 supports partial `Config`
 
 - Before executing any concrete `vs ...` command in this recommend workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Before building a `recommend scene create` or `recommend scene update` payload, consult the matching V2 API reference. The routing reference only identifies the config area; it is not sufficient for final payload values.
-- Recommend scene update is a full publish workflow. Start from `recommend scene get`, carry forward top-level fields and existing `Config`, then modify only the requested area. Do not send a tiny partial `Config` unless the installed CLI/API reference explicitly proves it is safe for the target field.
+- Recommend scene update is a full publish workflow. Start from `recommend scene get`, carry forward top-level fields and existing `Config`, then modify only the requested area. The CLI may accept first-level `Config` patches and merge them over readback; do not send or recommend tiny nested patches such as only `RecAssistantConfig.AnswerStyle`.
 - When the user request includes a scene type, model, optimization, strategy, channel, or mode qualifier such as `for_you`, `related`, `shopping_cart`, `long_sequence`, `ctr`, `custom merge`, `cold_start`, `item_similarity`, `always`, `boost`, or `bury`, do not treat enabling the feature as sufficient. Set the corresponding field explicitly and verify that exact value in the readback response.
 - **Field name case sensitivity**: All item dataset field names used in recommendation filters, `ShuffleConfig.Rules[].FieldName`, `ShuffleConfig.Rules[].ShuffleExpression.field`, `BoostBuryCondConfig.Rules[].Config.field`, `ColdStartConfig.ItemFilter.field`, `FilterConfig.ItemTypeFilter.Filter.field`, and rule `Config` are **case-sensitive**. Before writing any field name into config, first look up the exact item dataset schema or data-config via `dataset get --id <item-dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy the field name exactly as it appears there. If the field name does not match the schema, stop and ask the user to confirm which field they mean instead of guessing.
-- `UserEventScenes[]` values must come from the bound UserEvent dataset's `event_scene` enum values. `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` values must come from that dataset's `event_type` enum values.
+- `UserEventScenes[]` values must come from the bound UserEvent dataset's `event_scene` enum values. In console, the dropdown is populated from the UserEvent schema field whose business attribute is UserEventScene, using `EnumerateMeta[].EnumerateValue` returned by `GetDataset`; mirror that with `dataset get --full`. `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` values must come from that dataset's `event_type` enum values.
 - `event_scene` option discovery is read-time metadata: `dataset get --full` returns schema enum metadata plus offline-received event_scene values when available. Do not assume those candidate values are written to scene config until the user selects them and publishes the scene.
 - `FilterConfig.ItemTypeFilter` is schema-dependent: it is required when the item dataset has an ItemType business attribute, invalid when the dataset has no ItemType business attribute, and requires the paired ParentId business attribute plus a filterable ItemType field.
 - Check scene-specific merge constraints before writing `MergeConfigs`: `for_you` does not support `item_similarity`, and `shopping_cart` supports only `item_similarity_first` or `custom`.

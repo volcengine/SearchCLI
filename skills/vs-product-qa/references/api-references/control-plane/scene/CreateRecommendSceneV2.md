@@ -31,6 +31,15 @@ message CreateRecommendSceneV2Req {
 message CreateRecommendSceneV2Resp {
   string SceneId = 1;
 }
+
+message FilterConfig {
+  ItemTypeFilter ItemTypeFilter = 3;
+}
+
+message ItemTypeFilter {
+  bool ForParent = 1; // true selects parent items; false selects variants/children when paired with Filter.
+  optional google.protobuf.Struct Filter = 3; // Viking Filter DSL for the item type field.
+}
 ```
 
 ## Request Parameters

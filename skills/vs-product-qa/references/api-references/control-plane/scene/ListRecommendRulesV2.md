@@ -21,6 +21,20 @@ message ListRecommendRulesV2Req {
 message ListRecommendRulesV2Resp {
   repeated RecommendRuleV2 Rules = 1;
 }
+
+message RecommendRuleV2 {
+  string ApplicationId = 1;
+  string RuleId        = 2;
+  string Name          = 3;
+  string Type          = 4;
+  string Description   = 5;
+  string CreateTime    = 6;
+  string UpdateTime    = 7;
+  string DatasetId     = 11;
+  string ItemDatasetId = 12;
+  bool   Used          = 13;
+  google.protobuf.Struct Config = 21;
+}
 ```
 
 ## Request Parameters
@@ -67,3 +81,56 @@ V2 removed the V1 `TotalCount` and `Items[]` response fields. Use `Rules[]`.
 - `InvertItemDatasetId` only applies to invert/recall rules and filters by the item dataset embedded in the rule config.
 - `ItemDatasetId` filters degrade rules by their scoped item dataset.
 - List responses do not guarantee full `Config`; call `GetRecommendRuleV2` before modifying a rule.
+
+## Config JSON Shapes
+
+`RecommendRuleV2.Config` is a `google.protobuf.Struct`, so the concrete JSON shape depends on `Type`. List responses may omit or trim `Config`; use `GetRecommendRuleV2` for full config before updating.
+
+### `degrade`
+
+```json
+{
+  "SortType": "EventAccumulation",
+  "EventType": "click",
+  "TimeWindowSeconds": 3600,
+  "ResultDimension": "item_id",
+  "EventScores": [
+    { "EventType": "click", "Weight": 1 }
+  ],
+  "ItemFieldSort": {
+    "SortField": "sales",
+    "SortOrder": "Desc"
+  },
+  "Fallback": {
+    "Enable": true,
+    "ItemFieldSort": {
+      "SortField": "sales",
+      "SortOrder": "Desc"
+    }
+  }
+}
+```
+
+### `filter` / `search_filter`
+
+```json
+{
+  "op": "must",
+  "field": "category",
+  "conds": ["shoes"]
+}
+```
+
+### `force_item`
+
+```json
+{
+  "EffectDuration": "request",
+  "Enable": true,
+  "Items": [
+    { "ItemPkValue": "sku_001", "Position": 1 }
+  ]
+}
+```
+
+`impression`, `suggest`, `boost_bury_cond`, `cold_start`, `shuffle`, `rec_reason`, `user_interest`, and `item_cf` may appear in readback but are not writable through `UpsertRecommendRuleV2` unless the API reference changes.

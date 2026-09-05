@@ -10,18 +10,148 @@
 
 ```proto
 message PublishRecommendSceneV2Req {
-  string          ProjectName     = 1;
-  string          ApplicationId   = 2;
-  string          SceneId         = 3;
-  string          Type            = 4;
-  string          Name            = 5;
-  string          Description     = 6;
-  string          ItemDatasetId   = 7;
-  repeated string UserEventScenes = 8;
+  string          ProjectName     = 1; // Project name for project-level isolation.
+  string          ApplicationId   = 2; // Application ID.
+  string          SceneId         = 3; // Recommend scene ID.
+  string          Type            = 4; // for_you / related / shopping_cart.
+  string          Name            = 5; // Recommend scene name.
+  string          Description     = 6; // Recommend scene description.
+  string          ItemDatasetId   = 7; // Bound item dataset ID.
+  repeated string UserEventScenes = 8; // Selected event_scene values from the bound UserEvent dataset.
+
+  RecommendSceneConfigV2 Config = 21; // Required full recommend scene config.
+
+  bool DryRun = 31; // Validate only; do not publish.
+}
+
+message RecommendSceneV2 {
+  string ApplicationId = 1;
+  string SceneId       = 2;
+  string Type          = 3; // for_you / related / shopping_cart.
+  string Name          = 4;
+  string Description   = 5;
+  string ItemDatasetId = 6;
+  string CreateTime    = 7; // RFC3339.
+  string UpdateTime    = 8; // RFC3339.
+  string Status        = 9; // unpublished / configuring / activating / published.
+
+  string          RecommendModel              = 11; // default / long_sequence.
+  string          RecommendOptimizationTarget = 12; // ctr, or empty.
+  string          SceneConfigPhase            = 13; // sample_prepare / prepare_train / training / serving, or empty.
+  repeated string UserEventScenes             = 14; // Selected event_scene values.
+  repeated string ClickEventTypes             = 15; // Selected event_type values.
+  repeated string PositiveEventTypes          = 16; // Selected event_type values.
+  repeated string NegativeEventTypes          = 17; // Selected event_type values.
 
   RecommendSceneConfigV2 Config = 21;
+}
 
-  bool DryRun = 31;
+message RecommendSceneConfigV2 {
+  int64                      MaxResults           = 1; // Single-request maximum result count.
+  string                     FilterRuleId         = 2; // Reusable recommend filter rule ID.
+  ImpressionConfig           ImpressionConfig     = 3; // Impression/exposure deduplication.
+  string                     DegradeRuleId        = 4; // Degrade/fallback rule ID.
+  SuggestConfig              SuggestConfig        = 5; // Recommendation wording prompt config.
+  string                     ForceItemRuleId      = 6; // Forced-item rule ID.
+  rule.ShuffleConfigV2       ShuffleConfig        = 7; // Diversity/shuffle rules.
+  rule.BoostBuryCondConfigV2 BoostBuryCondConfig  = 8; // Conditional boost/bury rules.
+  rule.ColdStartConfig       ColdStartConfig      = 9; // Cold-start injection.
+  repeated MergeConfigV2     MergeConfigs         = 10; // Recall-channel merge configs.
+  ReasonTemplateConfig       ReasonTemplateConfig = 11; // Recommendation reason templates.
+  FilterConfig               FilterConfig         = 12; // Parent/variant recommendation scope.
+  RecAssistantConfig         RecAssistantConfig   = 13; // LLM recommendation assistant.
+}
+
+message ImpressionConfig {
+  int64 TimeWindowSeconds = 1; // Deduplicate returned items within this time window, in seconds.
+  int64 MaxSize           = 2; // Maximum deduplication history size.
+  ExposureConfig ExposureCfg = 3; // Exposure-based deduplication.
+}
+
+message ExposureConfig {
+  int64 TimeWindowSeconds = 1; // Exposure deduplication time window, in seconds.
+  int64 MaxSize           = 2; // Maximum exposure deduplication history size.
+}
+
+message SuggestConfig {
+  string SuggestRawPrompt = 1; // Raw recommendation wording prompt.
+}
+
+message CustomMergeWeight {
+  string RecallChannel = 1; // multimodal / user_profile / item_cf / hot_item / item_similarity / cold_start.
+  float  Weight        = 2; // Non-negative custom merge weight.
+}
+
+message MergeConfigV2 {
+  string Strategy = 1; // user_profile_first / multimodal_first / hot_item_first / item_similarity_first / custom.
+  repeated CustomMergeWeight CustomWeights = 2; // Used when Strategy=custom.
+}
+
+message FilterConfig {
+  ItemTypeFilter ItemTypeFilter = 3;
+}
+
+message ItemTypeFilter {
+  bool ForParent = 1; // true selects parent items; false selects variants/children when paired with Filter.
+  optional google.protobuf.Struct Filter = 3; // Viking Filter DSL for the item type field.
+}
+
+message RecAssistantConfig {
+  bool Enable = 1;
+  string AssistantRole = 2;
+  string AnswerStyle   = 3;
+  string FollowUpStyle = 4;
+}
+
+message ReasonTemplateConfig {
+  bool Enable = 1;
+  repeated ReasonTemplateRule Templates = 2;
+  string FallbackReason = 3;
+}
+
+message ReasonTemplateRule {
+  bool Enable = 1;
+  string RecallChannel = 2; // multimodal / user_profile / item_cf / hot_item / item_similarity / cold_start.
+  string Template = 3;
+  repeated string Variables = 4; // For example: ["item.id"].
+}
+
+message ColdStartConfig {
+  bool   Enable                = 1;
+  string ItemConditionType     = 2; // import_time / custom_filter.
+  int64  ImportTimeWindowHours = 3;
+  google.protobuf.Value ItemFilter = 4;
+  int64 ExposureThreshold = 5;
+  int64 MaxInjectCount = 6;
+  string Name = 7;
+}
+
+message BoostBuryCondConfigV2 {
+  repeated BoostBuryCondRuleV2 Rules = 2;
+}
+
+message BoostBuryCondRuleV2 {
+  uint32 Id = 1; // Omit to let the server generate a stable positive ID.
+  bool Enable = 2;
+  string Name = 3;
+  google.protobuf.Struct Config = 4;
+  double Boost = 5; // [-1, 1].
+}
+
+message ShuffleConfigV2 {
+  repeated ShuffleRuleV2 Rules = 1;
+}
+
+message ShuffleRuleV2 {
+  uint32 Id = 1; // Omit to let the server generate a stable positive ID.
+  optional bool Enable = 2; // Defaults to enabled.
+  string Name = 3;
+  string WindowType = 4; // SLIDE / TOP.
+  int64 WindowSize = 5;
+  int64 MaxSize = 6;
+  string ShuffleType = 7; // dimension / expression.
+  string FieldName = 8;
+  google.protobuf.Struct ShuffleExpression = 9;
 }
 ```
 
@@ -102,13 +232,17 @@ For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must 
 
 ## Deployment Notes
 
-- Treat `PublishRecommendSceneV2` as a full scene publish. Start from `recommend scene get`, preserve unrelated fields, and change only the requested area.
+- Treat `PublishRecommendSceneV2` as a full scene publish at the request level. Start from `recommend scene get`, preserve top-level scene fields and unrelated `Config` fields, then change only the requested area.
+- The practical partial-update granularity is the first level under `Config`. For example, replacing `Config.RecAssistantConfig` or `Config.ImpressionConfig` is acceptable after readback, but changing a nested field such as `Config.RecAssistantConfig.AnswerStyle` requires sending the full updated `RecAssistantConfig` object together with the rest of the full publish payload.
 - A successful publish updates persistent scene rows and online runtime config. It also writes `recommend_scene_meta` and application-level `event_scene_mapping`.
-- `UserEventScenes[]` is the selected behavior-scene binding. The full candidate list comes from UserEvent dataset metadata and offline event statistics.
+- `UserEventScenes[]` is the selected behavior-scene binding. The full candidate list comes from the bound UserEvent dataset: fetch it with `dataset get --full`, read the field whose business attribute is UserEventScene, and use its `EnumerateMeta` values. The backend may merge schema metadata with offline event statistics before returning the dataset schema.
 
 ## CLI Notes
 
 - `vs recommend scene update --count <n>` maps to `Config.MaxResults`.
 - `--user-event-scenes` maps to `UserEventScenes`.
 - `--boost-bury-cond-config`, `--shuffle-config`, `--impression-config`, `--suggest-config`, `--reason-template-config`, `--cold-start-config`, `--merge-configs`, `--filter-config`, and `--rec-assistant-config` map to the same V2 `Config` children.
+- For `recommend scene update`, the CLI first reads the current scene with `GetRecommendSceneV2`, merges `--config` or advanced flags at the first `Config` level, and then sends a full `PublishRecommendSceneV2` payload. Prefer passing the full first-level child object when modifying nested fields.
+- `--config @file.json` may contain a full `RecommendSceneConfigV2` or a first-level patch such as `{ "RecAssistantConfig": { ...full object... } }`. It is merged over the current `Config`; it is not a raw nested JSONPath patch.
+- `--data @file.json` is the escape hatch for an already assembled full `PublishRecommendSceneV2Req`; when using `--data`, include `ApplicationId`, `SceneId`, `Type`, `Name`, `ItemDatasetId`, `UserEventScenes`, and complete `Config`.
 - Use `--dry-run` to validate without publishing.

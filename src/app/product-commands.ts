@@ -1379,64 +1379,94 @@ function validateRecommendSceneConfig(config: any): void {
   }
 }
 
+function extractRecommendSceneV2(response: unknown): Record<string, any> {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    throw new Error('GetRecommendSceneV2 returned an invalid response.');
+  }
+  const body = response as Record<string, any>;
+  const result = body.Result ?? body.Scene ?? body;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('GetRecommendSceneV2 returned an invalid scene payload.');
+  }
+  return result as Record<string, any>;
+}
+
+async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
+  const configPatch = await loadJsonInput(options.config);
+  const flagConfigPatch = compactObject({
+    MaxResults: options.count,
+    FilterRuleId: options.filterRuleId,
+    DegradeRuleId: options.degradeRuleId,
+    ForceItemRuleId: options.forceItemRuleId,
+    BoostBuryCondConfig: await loadJsonInput(options.boostBuryCondConfig),
+    ShuffleConfig: await loadJsonInput(options.shuffleConfig),
+    ImpressionConfig: await loadJsonInput(options.impressionConfig),
+    SuggestConfig: await loadJsonInput(options.suggestConfig),
+    ReasonTemplateConfig: await loadJsonInput(options.reasonTemplateConfig),
+    ColdStartConfig: await loadJsonInput(options.coldStartConfig),
+    MergeConfigs: await loadJsonInput(options.mergeConfigs),
+    FilterConfig: await loadJsonInput(options.filterConfig),
+    RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
+  });
+  const userEventScenes = await loadOptionalStringArray(options.userEventScenes);
+  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0;
+  const hasTopLevelPatch =
+    options.type !== undefined ||
+    options.name !== undefined ||
+    options.description !== undefined ||
+    options.itemDatasetId !== undefined ||
+    userEventScenes !== undefined ||
+    options.dryRun !== undefined;
+
+  if (!hasConfigPatch && !hasTopLevelPatch) {
+    return {};
+  }
+
+  if (configPatch !== undefined) {
+    if (!configPatch || typeof configPatch !== 'object' || Array.isArray(configPatch)) {
+      throw new Error('--config for recommend scene update must be a RecommendSceneConfigV2 object or first-level object patch.');
+    }
+    validateRecommendSceneConfig(configPatch);
+  }
+  if (Object.keys(flagConfigPatch).length > 0) {
+    validateRecommendSceneConfig(flagConfigPatch);
+  }
+
+  const current = extractRecommendSceneV2(await callOpenApi('GetRecommendSceneV2', {
+    ProjectName: options.projectName,
+    ApplicationId: options.applicationId,
+    SceneId: options.sceneId
+  }, options));
+  const currentConfig = current.Config;
+  if (!currentConfig || typeof currentConfig !== 'object' || Array.isArray(currentConfig)) {
+    throw new Error('GetRecommendSceneV2 did not return a full Config. Cannot build a full PublishRecommendSceneV2 payload.');
+  }
+
+  const mergedConfig = {
+    ...currentConfig,
+    ...(configPatch as Record<string, unknown> | undefined),
+    ...flagConfigPatch
+  };
+  validateRecommendSceneConfig(mergedConfig);
+
+  return compactObject({
+    ProjectName: options.projectName,
+    ApplicationId: options.applicationId,
+    SceneId: options.sceneId,
+    Type: options.type ?? current.Type,
+    Name: options.name ?? current.Name,
+    Description: options.description ?? current.Description,
+    ItemDatasetId: options.itemDatasetId ?? current.ItemDatasetId,
+    UserEventScenes: userEventScenes ?? current.UserEventScenes,
+    Config: mergedConfig,
+    DryRun: options.dryRun
+  });
+}
+
 export async function runRecommendSceneUpdateCommand(options: RecommendSceneUpdateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene update');
-  
-  let configPayload = await loadJsonInput(options.config);
-  
-  if (
-    !configPayload &&
-    (
-      options.count !== undefined ||
-      options.boostBuryCondConfig ||
-      options.shuffleConfig ||
-      options.impressionConfig ||
-      options.suggestConfig ||
-      options.degradeRuleId ||
-      options.filterRuleId ||
-      options.forceItemRuleId ||
-      options.reasonTemplateConfig ||
-      options.coldStartConfig ||
-      options.mergeConfigs ||
-      options.filterConfig ||
-      options.recAssistantConfig
-    )
-  ) {
-    configPayload = compactObject({
-      MaxResults: options.count,
-      FilterRuleId: options.filterRuleId,
-      DegradeRuleId: options.degradeRuleId,
-      ForceItemRuleId: options.forceItemRuleId,
-      BoostBuryCondConfig: await loadJsonInput(options.boostBuryCondConfig),
-      ShuffleConfig: await loadJsonInput(options.shuffleConfig),
-      ImpressionConfig: await loadJsonInput(options.impressionConfig),
-      SuggestConfig: await loadJsonInput(options.suggestConfig),
-      ReasonTemplateConfig: await loadJsonInput(options.reasonTemplateConfig),
-      ColdStartConfig: await loadJsonInput(options.coldStartConfig),
-      MergeConfigs: await loadJsonInput(options.mergeConfigs),
-      FilterConfig: await loadJsonInput(options.filterConfig),
-      RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
-    });
-  }
-
-  if (configPayload) {
-    validateRecommendSceneConfig(configPayload);
-  }
-
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId,
-      Type: options.type,
-      Name: options.name,
-      Description: options.description,
-      ItemDatasetId: options.itemDatasetId,
-      UserEventScenes: await loadOptionalStringArray(options.userEventScenes),
-      Config: configPayload,
-      DryRun: options.dryRun
-    });
+  const explicitPayload = await loadJsonInput(options.data);
+  const payload = explicitPayload ?? await buildRecommendScenePublishPayload(options);
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for recommend scene update.');
   await printResult(callOpenApi('PublishRecommendSceneV2', payload, options));
 }
@@ -2245,7 +2275,7 @@ SEARCH SCENE ENUMS
         'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @scene.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
         'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
         'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
