@@ -9,6 +9,8 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 - scene config is `Config: SearchSceneConfigV2`.
 - dataset-level search settings live under `Config.PerDatasetConfigs[]`, keyed by `DatasetId`.
 - `search scene update` publishes via `PublishSearchSceneV2`; pass a partial V2 `Config` because absent child config fields are not overwritten.
+- `Config` supports partial updates, so include only the configuration area that should change. The publish request must still carry `ApplicationId`, `SceneId`, the target `DatasetId` for dataset-level updates, and the requested configuration content.
+- If a publish returns `ResourceNotFound.Application`, stop and re-check the application/scene identity and environment before retrying.
 - Use this file only to identify the config area. Before deciding concrete string enum values, range limits, defaulting behavior, or required sibling fields, consult `../../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`.
 
 ## Intent Routing
@@ -85,14 +87,19 @@ Path A - user provides a CSV/term file:
 
 1. Run `dict create --name <name> --type <type>` and capture the returned `DictId`.
 2. Run `dict get --dict-id <id>` to confirm creation.
-3. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
-4. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
-5. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
+3. If the input needs validation, run `dict check-input` and stop on validation errors.
+4. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
+5. Resolve the target `application-id`, `scene-id`, and, for dataset-level settings, `dataset-id` with `search scene get` before building the payload.
+6. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above. This command must publish through `PublishSearchSceneV2`.
+7. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
+
+Do not call `dict bind-scenes` / `BindDictToScenes` in this workflow. That API-level association does not replace publishing the target search scene configuration through `search scene update`.
 
 Path B - user provides an existing `DictId`:
 
-1. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
-2. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
+1. Resolve the target `application-id`, `scene-id`, and, for dataset-level settings, `dataset-id` with `search scene get` before building the payload.
+2. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above. This command must publish through `PublishSearchSceneV2`.
+3. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
 
 ## Usage Note
 

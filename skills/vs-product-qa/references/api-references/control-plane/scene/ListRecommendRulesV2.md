@@ -1,0 +1,45 @@
+# ListRecommendRulesV2
+
+## Overview
+
+- API name: `ListRecommendRulesV2`
+- Category: Control Plane - Scene
+- Description: Lists V2 recommend rules under an application.
+
+## IDL Definition
+
+```proto
+message ListRecommendRulesV2Req {
+  string ProjectName   = 1;
+  string ApplicationId = 2;
+  repeated string Types = 3;
+  string DatasetId = 4;
+  string InvertItemDatasetId = 5;
+  string ItemDatasetId = 6;
+}
+
+message ListRecommendRulesV2Resp {
+  repeated RecommendRuleV2 Rules = 1;
+}
+```
+
+## Request Parameters
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ProjectName` | string | No | Project name. |
+| `ApplicationId` | string | Yes | Application ID. |
+| `Types[]` | array<string> | No | Rule type filters. |
+| `DatasetId` | string | No | Dataset ID filter. |
+| `InvertItemDatasetId` | string | No | Inverted item dataset filter. |
+| `ItemDatasetId` | string | No | Item dataset filter. |
+
+## Response Parameters
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `Rules[]` | array<RecommendRuleV2> | Recommend rule list. List responses do not guarantee full `Config`. |
+
+V2 removed the V1 `TotalCount` and `Items[]` response fields. Use `Rules[]`.
+
+Rule type values are snake_case in V2, for example `user_interest`, `item_cf`, `force_item`, `boost_bury_cond`, `cold_start`, and `rec_reason`.

@@ -20,17 +20,17 @@ This file is the final-level router for scene-related control-plane API contract
 | Direct search-scene update API named by user | [UpdateSearchSceneV2](./UpdateSearchSceneV2.md) |
 | Get application online config, `vs app online-config get` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
 | Create or update application online config, `vs app online-config update` | [UpsertAppOnlineConfig](./UpsertAppOnlineConfig.md) |
-| Create recommend scene, `vs recommend scene create` | [CreateRecommendScene](./CreateRecommendScene.md) |
-| Update or online recommend scene, `vs recommend scene update` | [OnlineRecommendScene](./OnlineRecommendScene.md) |
-| List recommend scenes, `vs recommend scene list` | [ListRecommendScene](./ListRecommendScene.md) |
-| Get recommend scene, `vs recommend scene get` | [GetRecommendScene](./GetRecommendScene.md) |
-| Delete recommend scene, `vs recommend scene delete` | [DeleteRecommendScene](./DeleteRecommendScene.md) |
+| Create recommend scene, `vs recommend scene create` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
+| Update or publish recommend scene, `vs recommend scene update` | [PublishRecommendSceneV2](./PublishRecommendSceneV2.md) |
+| List recommend scenes, `vs recommend scene list` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |
+| Get recommend scene, `vs recommend scene get` | [GetRecommendSceneV2](./GetRecommendSceneV2.md) |
+| Delete recommend scene, `vs recommend scene delete` | [DeleteRecommendSceneV2](./DeleteRecommendSceneV2.md) |
 | Recommend scene experiment config update | [UpsertRecommendSceneExpConfig](./UpsertRecommendSceneExpConfig.md) |
 | Recommend scene experiment config get | [GetRecommendSceneExpConfig](./GetRecommendSceneExpConfig.md) |
-| Upsert recommend rule, `vs recommend rule upsert` | [UpsertRecommendRule](./UpsertRecommendRule.md) |
-| List recommend rules, `vs recommend rule list` | [ListRecommendRule](./ListRecommendRule.md) |
-| Get recommend rule, `vs recommend rule get` | [GetRecommendRule](./GetRecommendRule.md) |
-| Delete recommend rule, `vs recommend rule delete` | [DeleteRecommendRule](./DeleteRecommendRule.md) |
+| Upsert recommend rule, `vs recommend rule upsert` | [UpsertRecommendRuleV2](./UpsertRecommendRuleV2.md) |
+| List recommend rules, `vs recommend rule list` | [ListRecommendRulesV2](./ListRecommendRulesV2.md) |
+| Get recommend rule, `vs recommend rule get` | [GetRecommendRuleV2](./GetRecommendRuleV2.md) |
+| Delete recommend rule, `vs recommend rule delete` | [DeleteRecommendRuleV2](./DeleteRecommendRuleV2.md) |
 
 ## OpenAPI Name Routing
 
@@ -49,9 +49,18 @@ This file is the final-level router for scene-related control-plane API contract
 | `ListRecommendScene` | [ListRecommendScene](./ListRecommendScene.md) |
 | `GetRecommendScene` | [GetRecommendScene](./GetRecommendScene.md) |
 | `DeleteRecommendScene` | [DeleteRecommendScene](./DeleteRecommendScene.md) |
+| `CreateRecommendSceneV2` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
+| `PublishRecommendSceneV2` | [PublishRecommendSceneV2](./PublishRecommendSceneV2.md) |
+| `ListRecommendScenesV2` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |
+| `GetRecommendSceneV2` | [GetRecommendSceneV2](./GetRecommendSceneV2.md) |
+| `DeleteRecommendSceneV2` | [DeleteRecommendSceneV2](./DeleteRecommendSceneV2.md) |
 | `UpsertRecommendSceneExpConfig` | [UpsertRecommendSceneExpConfig](./UpsertRecommendSceneExpConfig.md) |
 | `GetRecommendSceneExpConfig` | [GetRecommendSceneExpConfig](./GetRecommendSceneExpConfig.md) |
 | `UpsertRecommendRule` | [UpsertRecommendRule](./UpsertRecommendRule.md) |
 | `ListRecommendRule` | [ListRecommendRule](./ListRecommendRule.md) |
 | `GetRecommendRule` | [GetRecommendRule](./GetRecommendRule.md) |
 | `DeleteRecommendRule` | [DeleteRecommendRule](./DeleteRecommendRule.md) |
+| `UpsertRecommendRuleV2` | [UpsertRecommendRuleV2](./UpsertRecommendRuleV2.md) |
+| `ListRecommendRulesV2` | [ListRecommendRulesV2](./ListRecommendRulesV2.md) |
+| `GetRecommendRuleV2` | [GetRecommendRuleV2](./GetRecommendRuleV2.md) |
+| `DeleteRecommendRuleV2` | [DeleteRecommendRuleV2](./DeleteRecommendRuleV2.md) |

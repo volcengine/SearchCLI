@@ -59,11 +59,13 @@ This skill stays at the search workflow level. Do not embed low-level API field 
    - a readiness diagnosis for a failing app
 2. If the request is a persistent search strategy change, use `search scene list/get` first and inspect the current scene before mutating it.
 3. Before running any concrete command, consult `vs-product-qa` to confirm the current command behavior and the exact parameter requirements.
-4. Use `search run` for verification requests and `search scene update` for persistent scene changes.
-5. After every scene mutation, immediately read the scene back with `search scene get` and verify that the intended change is visible online.
-6. If a fresh app fails, check `app status` and then `app diagnose`.
-7. Only after readiness is clear should you focus on recall quality or scene configuration.
-8. If the command behavior conflicts with the skill text or `--help`, trust the installed CLI behavior first, and only then inspect repository code when needed to explain or fix the gap.
+4. For a persistent update, resolve and retain the target `application-id`, `scene-id`, and, when a dataset-level config is involved, the exact `dataset-id` before constructing the update payload. Use `search scene get`, `dataset get`, or `app dataset-config get` as appropriate.
+5. `Config` supports partial updates: include only the configuration area that should change, while preserving unrelated existing settings. The final update must still carry non-empty `application-id`, `scene-id`, the target `dataset-id` for dataset-level updates, and the requested configuration content. A `ResourceNotFound.Application` response must trigger a read/identity check, not a blind retry.
+6. Use `search run` for verification requests and `search scene update` for persistent scene changes. The persistent update path must publish through `PublishSearchSceneV2`.
+7. After every scene mutation, immediately read the scene back with `search scene get` and verify that the intended change is visible online.
+8. If a fresh app fails, check `app status` and then `app diagnose`.
+9. Only after readiness is clear should you focus on recall quality or scene configuration.
+10. If the command behavior conflicts with the skill text or `--help`, trust the installed CLI behavior first, and only then inspect repository code when needed to explain or fix the gap.
 
 ## References
 
@@ -88,6 +90,8 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 - For fresh apps, treat readiness as the first hypothesis before blaming the query
 - Prefer public `vs search ...` commands over bypassing the CLI and calling lower-level APIs directly
 - Use `search scene update` for persistent search behavior and do not invent low-level API mappings inside this skill
+- Dictionary import/binding is part of the persistent scene workflow: after the dictionary is created and terms are written, update the target scene's V2 `DictIds` field and publish the scene.
+- Do not use `dict bind-scenes` or the `BindDictToScenes` API as a substitute for `search scene update`. A dictionary-to-scene association is not sufficient unless the target scene's configuration is published and confirmed by `search scene get`.
 - For natural-language scene-change requests, use `references/search-scene-natural-language-routing.md` as the routing layer; if the target is a rule-resource workflow such as filter-item-scope, do not reduce it to a single inline scene field edit
 - Do not assume `--help`, skill text, and the installed command implementation are perfectly aligned; verify the actual command behavior before making high-risk scene changes
 - For scene updates, prefer a readback check after mutation instead of assuming the write succeeded

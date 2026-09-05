@@ -424,12 +424,14 @@ export interface RecommendSceneCreateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
-  recommendModel?: number;
-  optimizationTarget?: number;
-  bhvSceneTypes?: string;
+  recommendModel?: string;
+  optimizationTarget?: string;
+  userEventScenes?: string;
   clickEventTypes?: string;
   positiveEventTypes?: string;
   negativeEventTypes?: string;
+  filterConfig?: string;
+  dryRun?: boolean;
   confirmEntryBinding?: boolean;
 }
 
@@ -441,6 +443,7 @@ export interface RecommendSceneListOptions extends ProjectScopedOptions {
 export interface RecommendSceneGetOptions extends ProjectScopedOptions {
   applicationId: string;
   sceneId: string;
+  dryRun?: boolean;
 }
 
 export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
@@ -450,14 +453,22 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
-  bhvSceneTypes?: string;
+  userEventScenes?: string;
   config?: string;
   count?: number;
-  boostBuryConfig?: string;
+  boostBuryCondConfig?: string;
   shuffleConfig?: string;
   impressionConfig?: string;
   suggestConfig?: string;
   degradeRuleId?: string;
+  filterRuleId?: string;
+  forceItemRuleId?: string;
+  reasonTemplateConfig?: string;
+  coldStartConfig?: string;
+  mergeConfigs?: string;
+  filterConfig?: string;
+  recAssistantConfig?: string;
+  dryRun?: boolean;
   confirmEntryBinding?: boolean;
 }
 
@@ -468,11 +479,13 @@ export interface RecommendRuleListOptions extends ProjectScopedOptions {
   types?: string;
   datasetId?: string;
   invertItemDatasetId?: string;
+  itemDatasetId?: string;
 }
 
 export interface RecommendRuleGetOptions extends ProjectScopedOptions {
   applicationId: string;
   ruleId?: string;
+  dryRun?: boolean;
 }
 
 export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
@@ -482,7 +495,9 @@ export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
   type?: string;
   description?: string;
   datasetId?: string;
+  itemDatasetId?: string;
   config?: string;
+  dryRun?: boolean;
 }
 
 export interface DictCreateOptions extends ProjectScopedOptions {
@@ -1299,67 +1314,68 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
+  const userEventScenes = options.userEventScenes;
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
       ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
       Type: options.type,
       Name: options.name,
       Description: options.description,
-      ItemDatasetID: options.itemDatasetId,
+      ItemDatasetId: options.itemDatasetId,
       RecommendModel: options.recommendModel,
       RecommendOptimizationTarget: options.optimizationTarget,
-      BhvSceneTypes: await loadOptionalStringArray(options.bhvSceneTypes),
+      UserEventScenes: await loadOptionalStringArray(userEventScenes),
       ClickEventTypes: await loadOptionalStringArray(options.clickEventTypes),
       PositiveEventTypes: await loadOptionalStringArray(options.positiveEventTypes),
-      NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes)
+      NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes),
+      FilterConfig: await loadJsonInput(options.filterConfig),
+      DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data or required scene fields for recommend scene create.');
   requireNonEmptyArrayField(
     payload,
-    'BhvSceneTypes',
-    'Need --bhv-scene-types (at least one behavior scene type) or a --data payload containing BhvSceneTypes for recommend scene create.'
+    'UserEventScenes',
+    'Need --user-event-scenes (at least one behavior scene value) or a --data payload containing UserEventScenes for recommend scene create.'
   );
-  await printResult(callOpenApi('/api/v1/CreateRecommendScene', payload, options));
+  await printResult(callOpenApi('CreateRecommendSceneV2', payload, options));
 }
 
 export async function runRecommendSceneListCommand(options: RecommendSceneListOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
       ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
       Types: await loadOptionalStringArray(options.types)
     });
-  await printResult(callOpenApi('/api/v1/ListRecommendScene', payload, options));
+  await printResult(callOpenApi('ListRecommendScenesV2', payload, options));
 }
 
 export async function runRecommendSceneGetCommand(options: RecommendSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
-      ProjectName: options.projectName
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId
     });
-  await printResult(callOpenApi('/api/v1/GetRecommendScene', payload, options));
+  await printResult(callOpenApi('GetRecommendSceneV2', payload, options));
 }
 
 function validateRecommendSceneConfig(config: any): void {
-  if (config?.BoostBuryConfig?.Rules) {
-    const validOperators = [
-      'eq', 'ne', 'contains', 'not_contains', 'must', 'must_not', 
-      'any_must', 'any_must_not', 'gt', 'gte', 'lt', 'lte', 
-      'geo_distance_inner', 'geo_distance_outer', 'time_gt', 
-      'time_gte', 'time_lt', 'time_lte'
-    ];
-    
-    for (const rule of config.BoostBuryConfig.Rules) {
-      if (rule.Operator && !validOperators.includes(rule.Operator)) {
-        throw new Error(`Invalid BoostBuryRule Operator: '${rule.Operator}'. Allowed values are: ${validOperators.join(', ')}.\nNote: Make sure the field '${rule.Field}' is configured as a FilterField in the dataset schema, and the operator matches its type (e.g., use 'eq' for strings instead of 'contains' or '==').`);
-      }
-    }
+  if (config?.BoostBuryConfig) {
+    throw new Error('Config.BoostBuryConfig was removed in RecommendSceneConfigV2. Use Config.BoostBuryCondConfig instead.');
+  }
+  if (config?.Count !== undefined) {
+    throw new Error('Config.Count was renamed to Config.MaxResults in RecommendSceneConfigV2.');
+  }
+  if (config?.FilterRuleID !== undefined || config?.DegradeRuleID !== undefined || config?.ForceItemRuleID !== undefined) {
+    throw new Error('RecommendSceneConfigV2 uses FilterRuleId, DegradeRuleId, and ForceItemRuleId.');
+  }
+  if (config?.Impression !== undefined || config?.Suggest !== undefined || config?.Shuffle !== undefined || config?.ReasonTemplate !== undefined) {
+    throw new Error('RecommendSceneConfigV2 uses ImpressionConfig, SuggestConfig, ShuffleConfig, and ReasonTemplateConfig.');
   }
 }
 
@@ -1368,14 +1384,38 @@ export async function runRecommendSceneUpdateCommand(options: RecommendSceneUpda
   
   let configPayload = await loadJsonInput(options.config);
   
-  if (!configPayload && (options.count !== undefined || options.boostBuryConfig || options.shuffleConfig || options.impressionConfig || options.suggestConfig || options.degradeRuleId)) {
+  if (
+    !configPayload &&
+    (
+      options.count !== undefined ||
+      options.boostBuryCondConfig ||
+      options.shuffleConfig ||
+      options.impressionConfig ||
+      options.suggestConfig ||
+      options.degradeRuleId ||
+      options.filterRuleId ||
+      options.forceItemRuleId ||
+      options.reasonTemplateConfig ||
+      options.coldStartConfig ||
+      options.mergeConfigs ||
+      options.filterConfig ||
+      options.recAssistantConfig
+    )
+  ) {
     configPayload = compactObject({
-      Count: options.count,
-      DegradeRuleID: options.degradeRuleId,
-      BoostBuryConfig: await loadJsonInput(options.boostBuryConfig),
-      Shuffle: await loadJsonInput(options.shuffleConfig),
-      Impression: await loadJsonInput(options.impressionConfig),
-      Suggest: await loadJsonInput(options.suggestConfig)
+      MaxResults: options.count,
+      FilterRuleId: options.filterRuleId,
+      DegradeRuleId: options.degradeRuleId,
+      ForceItemRuleId: options.forceItemRuleId,
+      BoostBuryCondConfig: await loadJsonInput(options.boostBuryCondConfig),
+      ShuffleConfig: await loadJsonInput(options.shuffleConfig),
+      ImpressionConfig: await loadJsonInput(options.impressionConfig),
+      SuggestConfig: await loadJsonInput(options.suggestConfig),
+      ReasonTemplateConfig: await loadJsonInput(options.reasonTemplateConfig),
+      ColdStartConfig: await loadJsonInput(options.coldStartConfig),
+      MergeConfigs: await loadJsonInput(options.mergeConfigs),
+      FilterConfig: await loadJsonInput(options.filterConfig),
+      RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
     });
   }
 
@@ -1386,53 +1426,56 @@ export async function runRecommendSceneUpdateCommand(options: RecommendSceneUpda
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId,
       Type: options.type,
       Name: options.name,
       Description: options.description,
-      ItemDatasetID: options.itemDatasetId,
-      BhvSceneTypes: await loadOptionalStringArray(options.bhvSceneTypes),
+      ItemDatasetId: options.itemDatasetId,
+      UserEventScenes: await loadOptionalStringArray(options.userEventScenes),
       Config: configPayload,
-      ProjectName: options.projectName
+      DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for recommend scene update.');
-  await printResult(callOpenApi('/api/v1/OnlineRecommendScene', payload, options));
+  await printResult(callOpenApi('PublishRecommendSceneV2', payload, options));
 }
 
 export async function runRecommendSceneDeleteCommand(options: RecommendSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      SceneID: options.sceneId,
-      ProjectName: options.projectName
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      SceneId: options.sceneId,
+      DryRun: options.dryRun
     });
-  await printResult(callOpenApi('/api/v1/DeleteRecommendScene', payload, options));
+  await printResult(callOpenApi('DeleteRecommendSceneV2', payload, options));
 }
 
 export async function runRecommendRuleListCommand(options: RecommendRuleListOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
       ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
       Types: await loadOptionalStringArray(options.types),
-      DatasetID: options.datasetId,
-      InvertItemDatasetID: options.invertItemDatasetId
+      DatasetId: options.datasetId,
+      InvertItemDatasetId: options.invertItemDatasetId,
+      ItemDatasetId: options.itemDatasetId
     });
-  await printResult(callOpenApi('/api/v1/ListRecommendRule', payload, options));
+  await printResult(callOpenApi('ListRecommendRulesV2', payload, options));
 }
 
 export async function runRecommendRuleGetCommand(options: RecommendRuleGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      RuleID: options.ruleId,
-      ProjectName: options.projectName
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      RuleId: options.ruleId
     });
-  await printResult(callOpenApi('/api/v1/GetRecommendRule', payload, options));
+  await printResult(callOpenApi('GetRecommendRuleV2', payload, options));
 }
 
 export async function runRecommendRuleUpsertCommand(options: RecommendRuleUpsertOptions): Promise<void> {
@@ -1440,28 +1483,31 @@ export async function runRecommendRuleUpsertCommand(options: RecommendRuleUpsert
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      RuleID: options.ruleId,
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      RuleId: options.ruleId,
       Name: options.name,
       Type: options.type,
       Description: options.description,
-      DatasetID: options.datasetId,
+      DatasetId: options.datasetId,
+      ItemDatasetId: options.itemDatasetId,
       Config: configPayload,
-      ProjectName: options.projectName
+      DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data or rule fields for recommend rule upsert.');
-  await printResult(callOpenApi('/api/v1/UpsertRecommendRule', payload, options));
+  await printResult(callOpenApi('UpsertRecommendRuleV2', payload, options));
 }
 
 export async function runRecommendRuleDeleteCommand(options: RecommendRuleGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      RuleID: options.ruleId,
-      ProjectName: options.projectName
+      ProjectName: options.projectName,
+      ApplicationId: options.applicationId,
+      RuleId: options.ruleId,
+      DryRun: options.dryRun
     });
-  await printResult(callOpenApi('/api/v1/DeleteRecommendRule', payload, options));
+  await printResult(callOpenApi('DeleteRecommendRuleV2', payload, options));
 }
 
 export async function runDictCreateCommand(options: DictCreateOptions): Promise<void> {
@@ -2196,15 +2242,15 @@ SEARCH SCENE ENUMS
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
-        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <n>] [--optimization-target <n>] [--bhv-scene-types <types>] [--click-event-types <types>] [--positive-event-types <types>] [--negative-event-types <types>] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]',
-        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [service flags]',
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @scene.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
+        'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
         'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
-        'vs recommend rule upsert --application-id <id> [--rule-id <id>] --name <name> --type <type> [--description <text>] [--dataset-id <id>] --config @rule.json [service flags]',
-        'vs recommend rule delete --application-id <id> --rule-id <id> [service flags]'
+        'vs recommend rule upsert --application-id <id> [--rule-id <id>] --name <name> --type <degrade|filter|search_filter|force_item> [--description <text>] [--dataset-id <id>] [--item-dataset-id <id>] --config @rule.json [--dry-run] [service flags]',
+        'vs recommend rule delete --application-id <id> --rule-id <id> [--dry-run] [service flags]'
       ]
     )}
 
@@ -3891,9 +3937,11 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
-          recommendModel: parseOptionalInt(optionalString(values['recommend-model'])),
-          optimizationTarget: parseOptionalInt(optionalString(values['optimization-target'])),
-          bhvSceneTypes: optionalString(values['bhv-scene-types']),
+          recommendModel: optionalString(values['recommend-model']),
+          optimizationTarget: optionalString(values['optimization-target']),
+          userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
+          filterConfig: optionalString(values['filter-config']),
+          dryRun: optionalBoolean(values['dry-run']),
           confirmEntryBinding: optionalBoolean(values['confirm-entry-binding']),
           clickEventTypes: optionalString(values['click-event-types']),
           positiveEventTypes: optionalString(values['positive-event-types']),
@@ -3923,14 +3971,22 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
-          bhvSceneTypes: optionalString(values['bhv-scene-types']),
+          userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
           config: optionalString(values.config),
           count: parseOptionalInt(optionalString(values.count)),
-          boostBuryConfig: optionalString(values['boost-bury-config']),
+          filterRuleId: optionalString(values['filter-rule-id']),
+          degradeRuleId: optionalString(values['degrade-rule-id']),
+          forceItemRuleId: optionalString(values['force-item-rule-id']),
+          boostBuryCondConfig: optionalString(values['boost-bury-cond-config']),
           shuffleConfig: optionalString(values['shuffle-config']),
           impressionConfig: optionalString(values['impression-config']),
           suggestConfig: optionalString(values['suggest-config']),
-          degradeRuleId: optionalString(values['degrade-rule-id']),
+          reasonTemplateConfig: optionalString(values['reason-template-config']),
+          coldStartConfig: optionalString(values['cold-start-config']),
+          mergeConfigs: optionalString(values['merge-configs']),
+          filterConfig: optionalString(values['filter-config']),
+          recAssistantConfig: optionalString(values['rec-assistant-config']),
+          dryRun: optionalBoolean(values['dry-run']),
           confirmEntryBinding: optionalBoolean(values['confirm-entry-binding'])
         });
         return;
@@ -3938,7 +3994,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
         await runRecommendSceneDeleteCommand({
           ...projectOptions,
           applicationId,
-          sceneId: requiredString(values['scene-id'], '--scene-id')
+          sceneId: requiredString(values['scene-id'], '--scene-id'),
+          dryRun: optionalBoolean(values['dry-run'])
         });
         return;
       default:
@@ -3956,6 +4013,7 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           types: optionalString(values.types),
           datasetId: optionalString(values['dataset-id']),
           invertItemDatasetId: optionalString(values['invert-item-dataset-id']),
+          itemDatasetId: optionalString(values['item-dataset-id']),
           projectName: optionalString(values['project-name'])
         });
         return;
@@ -3975,14 +4033,17 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           type: optionalString(values.type),
           description: optionalString(values.description),
           datasetId: optionalString(values['dataset-id']),
-          config: optionalString(values.config)
+          itemDatasetId: optionalString(values['item-dataset-id']),
+          config: optionalString(values.config),
+          dryRun: optionalBoolean(values['dry-run'])
         });
         return;
       case 'delete':
         await runRecommendRuleDeleteCommand({
           ...projectOptions,
           applicationId,
-          ruleId: requiredString(values['rule-id'], '--rule-id')
+          ruleId: requiredString(values['rule-id'], '--rule-id'),
+          dryRun: optionalBoolean(values['dry-run'])
         });
         return;
       default:
@@ -4296,16 +4357,24 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'recommend-bhv-scene-types': { type: 'string' },
       'recommend-user-id': { type: 'string' },
       'recommend-parent-id': { type: 'string' },
+      'user-event-scenes': { type: 'string' },
       'bhv-scene-types': { type: 'string' },
       'click-event-types': { type: 'string' },
       'positive-event-types': { type: 'string' },
       'negative-event-types': { type: 'string' },
       count: { type: 'string' },
-      'boost-bury-config': { type: 'string' },
+      'filter-rule-id': { type: 'string' },
+      'force-item-rule-id': { type: 'string' },
+      'boost-bury-cond-config': { type: 'string' },
       'shuffle-config': { type: 'string' },
       'impression-config': { type: 'string' },
       'suggest-config': { type: 'string' },
       'degrade-rule-id': { type: 'string' },
+      'reason-template-config': { type: 'string' },
+      'cold-start-config': { type: 'string' },
+      'merge-configs': { type: 'string' },
+      'filter-config': { type: 'string' },
+      'rec-assistant-config': { type: 'string' },
       'rule-id': { type: 'string' },
       'dict-id': { type: 'string' },
       'dict-ids': { type: 'string' },

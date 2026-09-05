@@ -16,7 +16,8 @@ export default class RecommendRuleDelete extends Command {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'rule-id': Flags.string({ required: true, description: 'Recommend rule ID.' }),
-    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' })
+    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
+    'dry-run': Flags.boolean({ description: 'Validate without deleting the recommend rule.' })
   };
 
   async run(): Promise<void> {
@@ -33,7 +34,8 @@ export default class RecommendRuleDelete extends Command {
       data: flags.data,
       projectName: flags['project-name'],
       applicationId: flags['application-id'],
-      ruleId: flags['rule-id']
+      ruleId: flags['rule-id'],
+      dryRun: flags['dry-run']
     });
   }
 }

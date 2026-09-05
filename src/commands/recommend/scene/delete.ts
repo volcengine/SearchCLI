@@ -12,7 +12,8 @@ export default class RecommendSceneDelete extends Command {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'scene-id': Flags.string({ required: true, description: 'Viking scene ID.' }),
-    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' })
+    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
+    'dry-run': Flags.boolean({ description: 'Validate without deleting the recommend scene.' })
   };
 
   async run(): Promise<void> {
@@ -29,7 +30,8 @@ export default class RecommendSceneDelete extends Command {
       data: flags.data,
       projectName: flags['project-name'],
       applicationId: flags['application-id'],
-      sceneId: flags['scene-id']
+      sceneId: flags['scene-id'],
+      dryRun: flags['dry-run']
     });
   }
 }
