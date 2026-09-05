@@ -31,3 +31,10 @@ message EmptyResp {}
 ## CLI Notes
 
 Use `vs recommend scene delete --dry-run` to validate deletion without removing the scene.
+
+## Validation Notes
+
+- The target scene must exist in the application.
+- A real delete removes the persisted scene row and deletes the online scene config.
+- If the deleted scene is referenced by app opening-remarks recommendation config, the app online chat config is reset to the default opening-remarks config.
+- If the deleted scene uses `RecommendModel=long_sequence`, the backend also cleans up long-sequence training tasks and model-training records.

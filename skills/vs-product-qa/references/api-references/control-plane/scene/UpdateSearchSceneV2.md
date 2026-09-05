@@ -105,10 +105,11 @@ message ImageSearchConfig {
 }
 
 message FilterConfigV2 {
-  optional string RuleId = 1;
+  optional string RuleId = 1; // If set during update/publish, use the stored search_filter rule and ignore Name/Config. If omitted and Config is non-empty, the backend creates a search_filter rule and fills RuleId.
 
   optional string Name = 2;
   google.protobuf.Struct Config = 3;
+  recommend.ItemTypeFilter ItemTypeFilter = 4;
 }
 
 message AuxiliaryPoolsConfig {
@@ -365,6 +366,25 @@ These fields are encoded as strings. Do not send numeric enum codes.
 | `Config.PerDatasetConfigs[].FacetConfig.Facets[].NumberRanges[]`           | at least one bound; do not set both`Lt` and `Lte`, or both `Gt` and `Gte`; lower bound must be less than upper bound                           | Applies to numeric facet ranges.                                                                                                    |
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Threshold`       | finite and`>= 0`; additionally `<= 1` for `Mode="relative"` and for `Mode="static"` with `ScoreType` `text_semantic` or `image_semantic` | `static` thresholds for `keyword` and `final` use the corresponding score scale.                                              |
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Fallback.MinResultCount` | `> 0` when fallback is enabled                                                                                                                       | Applies only when`Fallback.Enable=true`.                                                                                          |
+
+### FilterConfig Rule Materialization
+
+`Config.PerDatasetConfigs[].FilterConfig` and `ServingControlConfig.ServingControls[].FilterConfig` model the search-scene item-scope filter as a `search_filter` recommend rule.
+
+- If `FilterConfig.RuleId` is a non-empty string, the backend loads that stored `search_filter` rule for the same application and dataset. In this mode request `Name` and `Config` are ignored.
+- If `FilterConfig.RuleId` is omitted or empty and `FilterConfig.Config` is non-empty, send the desired filter DSL in `Config` and optional `Name`; do not invent a `RuleId`. During non-dry-run publish, the backend creates or upserts the backing `search_filter` rule and writes the generated `RuleId` back into the scene config.
+- If both `RuleId` and `Config` are absent, the filter rule binding is not changed. If either field is explicitly present but both resolve to empty, the item-scope filter is cleared.
+- `FilterConfig.ItemTypeFilter` is independent from the generated backing rule ID: it may be updated without changing `RuleId`, `Name`, or `Config`.
+
+### Cross-config Constraints
+
+- For one dataset, `ShuffleConfig.Rules[].ID` values must be unique across the dataset-level shuffle config and all `ServingControlConfig.ServingControls[].ShuffleConfig` blocks.
+- For one dataset, `BoostBuryCondConfig.Rules[].ID` values must be unique across the dataset-level boost/bury config and all `ServingControlConfig.ServingControls[].BoostBuryCondConfig` blocks.
+- `WantToSearchConfig.DictIds[]` must reference existing dictionaries of type `query_recommendation`.
+- `QueryCompletionConfig.DictIds[]` must reference existing dictionaries of type `query_completion`.
+- `CorrectionConfig.DictIds[]` must reference existing dictionaries of type `query_correction_exemption`.
+- `SynonymConfig.DictIds[]` must reference existing dictionaries of type `bidirection_synonyms` or `unidirection_synonyms`.
+- `FilterConfig.ItemTypeFilter` is only valid when the dataset schema has an ItemType business attribute and its paired ParentId business attribute; the ItemType field must be filterable.
 
 ### Shuffle Expression Shape
 

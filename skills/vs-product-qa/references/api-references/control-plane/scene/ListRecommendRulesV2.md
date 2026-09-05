@@ -42,4 +42,28 @@ message ListRecommendRulesV2Resp {
 
 V2 removed the V1 `TotalCount` and `Items[]` response fields. Use `Rules[]`.
 
-Rule type values are snake_case in V2, for example `user_interest`, `item_cf`, `force_item`, `boost_bury_cond`, `cold_start`, and `rec_reason`.
+## Rule Type Filters
+
+`Types[]` accepts these V2 rule type values; empty means all:
+
+- `degrade`
+- `filter`
+- `search_filter`
+- `impression`
+- `suggest`
+- `user_interest`
+- `item_cf`
+- `force_item`
+- `boost_bury_cond`
+- `cold_start`
+- `shuffle`
+- `rec_reason`
+
+`ListRecommendRulesV2` may return rules that are not writable through `UpsertRecommendRuleV2`. Use `UpsertRecommendRuleV2` only for `degrade`, `filter`, `search_filter`, and `force_item`.
+
+## Filter Semantics
+
+- `DatasetId` filters rules by their directly bound dataset. For invert/recall rules, this is the UserEvent dataset.
+- `InvertItemDatasetId` only applies to invert/recall rules and filters by the item dataset embedded in the rule config.
+- `ItemDatasetId` filters degrade rules by their scoped item dataset.
+- List responses do not guarantee full `Config`; call `GetRecommendRuleV2` before modifying a rule.

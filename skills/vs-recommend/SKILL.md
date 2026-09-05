@@ -63,7 +63,7 @@ Recommend scene and rule commands now use the V2 OpenAPI surface.
 V2 naming differences:
 
 - request IDs use `ApplicationId`, `SceneId`, `RuleId`, `DatasetId`, `ItemDatasetId`
-- behavior-scene binding is `UserEventScenes[]`; `--bhv-scene-types` is only a deprecated CLI alias for `--user-event-scenes`
+- behavior-scene binding is `UserEventScenes[]`; use `--user-event-scenes`
 - `RecommendModel` is a string: `default` or `long_sequence`
 - `RecommendOptimizationTarget` is a string: `ctr` or empty
 - create/publish/delete/upsert write APIs support `DryRun`
@@ -143,6 +143,8 @@ Important difference from search scenes: SearchSceneV2 supports partial `Config`
 - **Field name case sensitivity**: All item dataset field names used in recommendation filters, `ShuffleConfig.Rules[].FieldName`, `ShuffleConfig.Rules[].ShuffleExpression.field`, `BoostBuryCondConfig.Rules[].Config.field`, `ColdStartConfig.ItemFilter.field`, `FilterConfig.ItemTypeFilter.Filter.field`, and rule `Config` are **case-sensitive**. Before writing any field name into config, first look up the exact item dataset schema or data-config via `dataset get --id <item-dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy the field name exactly as it appears there. If the field name does not match the schema, stop and ask the user to confirm which field they mean instead of guessing.
 - `UserEventScenes[]` values must come from the bound UserEvent dataset's `event_scene` enum values. `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` values must come from that dataset's `event_type` enum values.
 - `event_scene` option discovery is read-time metadata: `dataset get --full` returns schema enum metadata plus offline-received event_scene values when available. Do not assume those candidate values are written to scene config until the user selects them and publishes the scene.
+- `FilterConfig.ItemTypeFilter` is schema-dependent: it is required when the item dataset has an ItemType business attribute, invalid when the dataset has no ItemType business attribute, and requires the paired ParentId business attribute plus a filterable ItemType field.
+- Check scene-specific merge constraints before writing `MergeConfigs`: `for_you` does not support `item_similarity`, and `shopping_cart` supports only `item_similarity_first` or `custom`.
 - Do not create or update a recommend scene until the target page/module and `UserEventScenes` are resolved; use `--confirm-entry-binding` for real writes.
 - Start with the scene when debugging recommendation behavior; do not jump to raw API calls first.
 - Use `recommend scene update` for persistent recommendation behavior and do not invent low-level API mappings inside this skill.

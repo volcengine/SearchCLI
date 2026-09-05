@@ -51,6 +51,8 @@ message RecommendSceneV2 {
 - `RecommendSceneV2` no longer exposes `UpdatedBy`.
 - `Status` values include `unpublished`, `configuring`, `activating`, and `published`.
 - `RecommendModel` values are `default` and `long_sequence`.
+- `RecommendOptimizationTarget` is `ctr` or empty.
 - `SceneConfigPhase` values include `sample_prepare`, `prepare_train`, `training`, and `serving`; empty means not applicable.
-- `UserEventScenes[]` replaces V1 `BhvSceneTypes[]`.
-- `Config` is `RecommendSceneConfigV2`; list responses may omit full config, but get returns the full detail.
+- `UserEventScenes[]` contains selected UserEvent `event_scene` values.
+- `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` contain UserEvent `event_type` values.
+- `Config` is `RecommendSceneConfigV2`; list responses may omit full config, but get returns the full detail. For publishable config enum values and validation constraints, see [PublishRecommendSceneV2](./PublishRecommendSceneV2.md#enum-values).

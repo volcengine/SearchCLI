@@ -25,8 +25,6 @@ This file is the final-level router for scene-related control-plane API contract
 | List recommend scenes, `vs recommend scene list` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |
 | Get recommend scene, `vs recommend scene get` | [GetRecommendSceneV2](./GetRecommendSceneV2.md) |
 | Delete recommend scene, `vs recommend scene delete` | [DeleteRecommendSceneV2](./DeleteRecommendSceneV2.md) |
-| Recommend scene experiment config update | [UpsertRecommendSceneExpConfig](./UpsertRecommendSceneExpConfig.md) |
-| Recommend scene experiment config get | [GetRecommendSceneExpConfig](./GetRecommendSceneExpConfig.md) |
 | Upsert recommend rule, `vs recommend rule upsert` | [UpsertRecommendRuleV2](./UpsertRecommendRuleV2.md) |
 | List recommend rules, `vs recommend rule list` | [ListRecommendRulesV2](./ListRecommendRulesV2.md) |
 | Get recommend rule, `vs recommend rule get` | [GetRecommendRuleV2](./GetRecommendRuleV2.md) |
@@ -44,22 +42,11 @@ This file is the final-level router for scene-related control-plane API contract
 | `DeleteSearchSceneV2` | [DeleteSearchSceneV2](./DeleteSearchSceneV2.md) |
 | `GetAppOnlineConfig` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
 | `UpsertAppOnlineConfig` | [UpsertAppOnlineConfig](./UpsertAppOnlineConfig.md) |
-| `CreateRecommendScene` | [CreateRecommendScene](./CreateRecommendScene.md) |
-| `OnlineRecommendScene` | [OnlineRecommendScene](./OnlineRecommendScene.md) |
-| `ListRecommendScene` | [ListRecommendScene](./ListRecommendScene.md) |
-| `GetRecommendScene` | [GetRecommendScene](./GetRecommendScene.md) |
-| `DeleteRecommendScene` | [DeleteRecommendScene](./DeleteRecommendScene.md) |
 | `CreateRecommendSceneV2` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
 | `PublishRecommendSceneV2` | [PublishRecommendSceneV2](./PublishRecommendSceneV2.md) |
 | `ListRecommendScenesV2` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |
 | `GetRecommendSceneV2` | [GetRecommendSceneV2](./GetRecommendSceneV2.md) |
 | `DeleteRecommendSceneV2` | [DeleteRecommendSceneV2](./DeleteRecommendSceneV2.md) |
-| `UpsertRecommendSceneExpConfig` | [UpsertRecommendSceneExpConfig](./UpsertRecommendSceneExpConfig.md) |
-| `GetRecommendSceneExpConfig` | [GetRecommendSceneExpConfig](./GetRecommendSceneExpConfig.md) |
-| `UpsertRecommendRule` | [UpsertRecommendRule](./UpsertRecommendRule.md) |
-| `ListRecommendRule` | [ListRecommendRule](./ListRecommendRule.md) |
-| `GetRecommendRule` | [GetRecommendRule](./GetRecommendRule.md) |
-| `DeleteRecommendRule` | [DeleteRecommendRule](./DeleteRecommendRule.md) |
 | `UpsertRecommendRuleV2` | [UpsertRecommendRuleV2](./UpsertRecommendRuleV2.md) |
 | `ListRecommendRulesV2` | [ListRecommendRulesV2](./ListRecommendRulesV2.md) |
 | `GetRecommendRuleV2` | [GetRecommendRuleV2](./GetRecommendRuleV2.md) |

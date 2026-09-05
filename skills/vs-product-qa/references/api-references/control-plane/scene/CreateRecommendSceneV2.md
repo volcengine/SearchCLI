@@ -65,8 +65,22 @@ message CreateRecommendSceneV2Resp {
 | `Type` | `for_you`, `related`, `shopping_cart` | Homepage feed, detail-page related items, or shopping-cart recommendation. |
 | `RecommendModel` | `default`, `long_sequence` | V2 uses string code instead of proto enum integer. |
 | `RecommendOptimizationTarget` | `ctr` | Empty string means unspecified. |
+| `FilterConfig.ItemTypeFilter.ForParent` | `true` or `false` | `true` means recommend parent items; `false` means recommend variant/child items when paired with a matching `Filter`. |
 
-`UserEventScenes[]` values must exist in the bound UserEvent dataset's `event_scene` enum/candidate values. Candidate discovery is done through `dataset get --full`.
+## Validation Constraints
+
+- `Name` must be non-empty after trimming whitespace.
+- `UserEventScenes[]` must be non-empty and every value must exist in the bound UserEvent dataset's `event_scene` enum/candidate values. Candidate discovery is done through `dataset get --full`; candidates are merged from schema metadata and offline event statistics.
+- `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` values must come from the bound UserEvent dataset's `event_type` enum values.
+- `RecommendModel=""` is treated as `default`; any non-empty value other than `default` or `long_sequence` is rejected.
+- `RecommendOptimizationTarget=""` means unspecified; any non-empty value other than `ctr` is rejected.
+- The application must have a bound and activated UserEvent dataset unless the backend path explicitly allows pending user-event datasets.
+- `ItemDatasetId` must identify an item-like dataset in the same application; the app data config must be activated, and the item dataset primary-key field must be filterable.
+- If the item dataset schema has an ItemType business attribute, `FilterConfig.ItemTypeFilter` is required. The schema must also have the paired ParentId business attribute, and the ItemType field must be filterable.
+- If the item dataset schema has no ItemType business attribute, do not send `FilterConfig.ItemTypeFilter`.
+- If `FilterConfig.ItemTypeFilter` is present, its `Filter` must be a non-empty Viking Filter DSL object.
+
+Long-sequence scenes are created through an async training/configuration path. Read back `Status` and `SceneConfigPhase`; possible phases are `sample_prepare`, `prepare_train`, `training`, and `serving`.
 
 `FilterConfig.ItemTypeFilter` can constrain parent/variant recommendation scope:
 
@@ -82,7 +96,6 @@ message CreateRecommendSceneV2Resp {
 ## CLI Notes
 
 - `vs recommend scene create --user-event-scenes a,b` maps to `UserEventScenes`.
-- `--bhv-scene-types` is a deprecated alias of `--user-event-scenes`.
 - `--recommend-model` expects `default` or `long_sequence`, not integer enum values.
 - `--optimization-target` expects `ctr`, not integer enum values.
 - Use `--dry-run` to validate without creating.

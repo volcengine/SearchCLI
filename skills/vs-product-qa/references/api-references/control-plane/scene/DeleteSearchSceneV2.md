@@ -42,6 +42,8 @@ This API has no explicit business response fields.
 | `SceneId` | non-empty | The target search scene must exist and be visible in the project. |
 | `DryRun` | `true` or `false` | `true` only validates the delete request and dependencies; it does not delete the scene. |
 
+Default search scenes cannot be deleted. Check `IsDefault=false` from `GetSearchSceneV2` or `ListSearchScenesV2` before issuing a real delete.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

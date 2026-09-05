@@ -41,5 +41,7 @@ message RecommendRuleV2 {
 ## Response Notes
 
 - `RecommendRuleV2` no longer exposes `UpdatedBy`.
-- Rule type values are snake_case in V2.
+- Rule type values are V2 strings: `degrade`, `filter`, `search_filter`, `impression`, `suggest`, `user_interest`, `item_cf`, `force_item`, `boost_bury_cond`, `cold_start`, `shuffle`, and `rec_reason`.
 - `GetRecommendRuleV2` returns the full rule `Config`; list responses may not.
+- Only `degrade`, `filter`, `search_filter`, and `force_item` are writable through `UpsertRecommendRuleV2`; other returned rule types are managed as scene-bound config or system-generated recall rules.
+- `Used=true` means at least one recommend scene references the rule. Used rules cannot be deleted, and update is limited to name-only changes.

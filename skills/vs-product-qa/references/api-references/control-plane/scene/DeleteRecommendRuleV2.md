@@ -31,3 +31,8 @@ message EmptyResp {}
 ## CLI Notes
 
 Use `vs recommend rule delete --dry-run` to validate deletion without removing the rule.
+
+## Validation Notes
+
+- The target rule must exist in the application.
+- Rules referenced by any recommend scene cannot be deleted. Check `Used=false` from `GetRecommendRuleV2` or `ListRecommendRulesV2` before issuing a real delete.

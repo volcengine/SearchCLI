@@ -116,6 +116,7 @@ message FilterConfigV2 {
 
   optional string Name = 2;
   google.protobuf.Struct Config = 3;
+  recommend.ItemTypeFilter ItemTypeFilter = 4;
 }
 
 message AuxiliaryPoolsConfig {
