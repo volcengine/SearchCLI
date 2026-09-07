@@ -112,6 +112,7 @@ async function runV2OnboardingSuite() {
   await runTest('v2-dataset-create-dry-run', testDatasetCreateDryRun);
   await runTest('v2-app-create-dry-run', testAppCreateDryRun);
   await runTest('v2-app-attach-dataset-dry-run', testAppAttachDatasetDryRun);
+  await runTest('v2-recommend-scene-update-data-dry-run', testRecommendSceneUpdateDataDryRun);
   await runTest('v2-dataset-ingest-dry-run', testDatasetIngestDryRun);
 
   await runTest('v2-dataset-import-url-mock', testDatasetImportUrlMock);
@@ -1704,6 +1705,59 @@ async function testAppAttachDatasetDryRun() {
     assert.ok(state.requests[0].body.DataConfig);
     assert.match(stdout, /req-attach-dry-run/);
     return `${command.prefix} app attach-dataset --data @${tempPath}`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testRecommendSceneUpdateDataDryRun() {
+  const state = {
+    requests: [],
+    responses: {
+      PublishRecommendSceneV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-rec-scene-update-dry-run' },
+        Result: { DryRun: body?.DryRun === true }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    const tempPath = path.join(reportDir, 'recommend-scene-update-dry-run.json');
+    fs.writeFileSync(tempPath, JSON.stringify({
+      ApplicationId: 'acc-app-1',
+      SceneId: 'acc-scene-1',
+      Type: 'for_you',
+      Name: 'acc-rec-scene',
+      ItemDatasetId: 'acc-item-ds-1',
+      UserEventScenes: ['home'],
+      Config: { MaxResults: 12 }
+    }));
+    const { stdout } = await runCli(
+      [
+        'recommend',
+        'scene',
+        'update',
+        '--application-id',
+        'acc-app-1',
+        '--scene-id',
+        'acc-scene-1',
+        '--data',
+        `@${tempPath}`,
+        '--dry-run',
+        '--confirm-entry-binding',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    assert.equal(state.requests.length, 1);
+    assert.equal(state.requests[0].kind, 'control-plane');
+    assert.equal(state.requests[0].action, 'PublishRecommendSceneV2');
+    assert.equal(state.requests[0].body.ApplicationId, 'acc-app-1');
+    assert.equal(state.requests[0].body.SceneId, 'acc-scene-1');
+    assert.equal(state.requests[0].body.DryRun, true);
+    assert.equal(state.requests[0].body.Config.MaxResults, 12);
+    assert.match(stdout, /req-rec-scene-update-dry-run/);
+    return `${command.prefix} recommend scene update --data @${tempPath} --dry-run`;
   } finally {
     await server.close();
   }

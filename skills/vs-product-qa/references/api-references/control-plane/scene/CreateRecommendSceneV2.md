@@ -71,7 +71,7 @@ message ItemTypeFilter {
 
 | Field | Allowed values | Notes |
 | --- | --- | --- |
-| `Type` | `for_you`, `related`, `shopping_cart` | Homepage feed, detail-page related items, or shopping-cart recommendation. |
+| `Type` | `for_you`, `related`, `shopping_cart` | UI labels map as: 猜你喜欢 -> `for_you`, 相关推荐 -> `related`, 购物车推荐 -> `shopping_cart`. |
 | `RecommendModel` | `default`, `long_sequence` | V2 uses string code instead of proto enum integer. |
 | `RecommendOptimizationTarget` | `ctr` | Empty string means unspecified. |
 | `FilterConfig.ItemTypeFilter.ForParent` | `true` or `false` | `true` means recommend parent items; `false` means recommend variant/child items when paired with a matching `Filter`. |

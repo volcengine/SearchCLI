@@ -89,7 +89,6 @@ The V2 IDL declares `Config` as `google.protobuf.Struct`; the concrete JSON shap
   "SortType": "EventAccumulation",
   "EventType": "click",
   "TimeWindowSeconds": 3600,
-  "ResultDimension": "item_id",
   "EventScores": [
     { "EventType": "click", "Weight": 1 }
   ],
@@ -134,7 +133,8 @@ The V2 IDL declares `Config` as `google.protobuf.Struct`; the concrete JSON shap
 - `Config` is required and must match `Type`; unknown fields are not a substitute for the expected config structure.
 - Existing rules that are already used by a scene cannot change type, dataset binding, or config. Only a name-only update is allowed for used rules.
 - `filter`, `search_filter`, and `force_item` must set `DatasetId` to an item dataset in the same application.
-- `degrade` must set `DatasetId` to the bound UserEvent dataset. It must also set `ItemDatasetId` when `Config.SortType="ItemField"` or when `Config.Fallback.Enable=true`.
+- `degrade` must set `DatasetId` to the bound UserEvent dataset. For scene-facing hot-item recall rules, also set `ItemDatasetId` to the scene's item dataset. Console lists hot-item recall rule candidates with both `DatasetId` and `ItemDatasetId`; a degrade rule without `ItemDatasetId` can still be attached by ID, but it will not appear in that dropdown.
+- `degrade` requires `ItemDatasetId` when `Config.SortType="ItemField"` or when `Config.Fallback.Enable=true`.
 - `ItemDatasetId` is scoped to `degrade`; for other writable rule types it is ignored by the backend.
 
 ### `degrade` Config
@@ -144,11 +144,13 @@ The V2 IDL declares `Config` as `google.protobuf.Struct`; the concrete JSON shap
 | `SortType` | `EventAccumulation` or `ItemField`. |
 | `EventType` | Required for `EventAccumulation`; must exist in the UserEvent dataset's `event_type` enum values. |
 | `TimeWindowSeconds` | Required for `EventAccumulation`; must be between `300` and `1209600` seconds. |
-| `ResultDimension` | Required for `EventAccumulation`; must equal the UserEvent item primary-key field. |
+| `ResultDimension` | Derived by the V2 backend from the bound UserEvent dataset field whose business attribute is UserEventItemPK. The request may omit it; readback contains the resolved field name. Do not ask users to provide it. |
 | `EventScores[]` | Required for `EventAccumulation`; each `EventType` must be unique and exist in UserEvent `event_type`; each `Weight` must be finite and in `[-100, 100]`. |
 | `ItemFieldSort.SortField` | Required for `ItemField`; field must exist in `ItemDatasetId` schema and be int, float, or time-like. A `_item_data.` prefix is accepted and stripped before schema lookup. |
 | `ItemFieldSort.SortOrder` | `Asc` or `Desc`. |
 | `Fallback` | Required for `EventAccumulation`; if `Fallback.Enable=true`, `Fallback.ItemFieldSort` is required and follows the same `ItemFieldSort` constraints. |
+
+`EventType`, `EventScores`, `TimeWindowSeconds`, and `Fallback` belong to `EventAccumulation`. For `SortType="ItemField"`, send `ItemFieldSort` and omit those behavior-statistics fields.
 
 ### `filter` and `search_filter` Config
 

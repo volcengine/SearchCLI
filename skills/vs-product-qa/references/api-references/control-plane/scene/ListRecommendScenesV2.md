@@ -168,7 +168,7 @@ V2 removed the V1 `TotalCount` and `Items[]` response fields. Use `Scenes[]`.
 
 ## Field Semantics
 
-- `Types[]` accepts `for_you`, `related`, and `shopping_cart`; empty means all scene types.
+- `Types[]` accepts `for_you` (猜你喜欢), `related` (相关推荐), and `shopping_cart` (购物车推荐); empty means all scene types.
 - `Scenes[].Status` values are `unpublished`, `configuring`, `activating`, and `published`.
 - `Scenes[].RecommendModel` values are `default` and `long_sequence`.
 - `Scenes[].RecommendOptimizationTarget` is `ctr` or empty.

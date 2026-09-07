@@ -1466,7 +1466,11 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
 export async function runRecommendSceneUpdateCommand(options: RecommendSceneUpdateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene update');
   const explicitPayload = await loadJsonInput(options.data);
-  const payload = explicitPayload ?? await buildRecommendScenePublishPayload(options);
+  const payload = explicitPayload !== undefined
+    ? options.dryRun === true && isRecord(explicitPayload)
+      ? { ...explicitPayload, DryRun: true }
+      : explicitPayload
+    : await buildRecommendScenePublishPayload(options);
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for recommend scene update.');
   await printResult(callOpenApi('PublishRecommendSceneV2', payload, options));
 }

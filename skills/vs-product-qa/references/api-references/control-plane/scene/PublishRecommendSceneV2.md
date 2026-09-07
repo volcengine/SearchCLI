@@ -192,7 +192,7 @@ message ShuffleRuleV2 {
 
 | Field | Allowed values |
 | --- | --- |
-| `Type` | `for_you`, `related`, `shopping_cart` |
+| `Type` | `for_you` (猜你喜欢), `related` (相关推荐), `shopping_cart` (购物车推荐) |
 | `MergeConfigs[].Strategy` | `user_profile_first`, `multimodal_first`, `hot_item_first`, `item_similarity_first`, `custom` |
 | `MergeConfigs[].CustomWeights[].RecallChannel` | `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start` |
 | `ReasonTemplateConfig.Templates[].RecallChannel` | `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start` |
@@ -218,10 +218,12 @@ For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must 
 - Referenced `FilterRuleId`, `DegradeRuleId`, and `ForceItemRuleId` must exist in the same application. `filter` and `force_item` rules must use the same item dataset as `ItemDatasetId`.
 - `UserEventScenes[]` is required when `ImpressionConfig.ExposureCfg` is set, and every value must exist in the bound UserEvent dataset's `event_scene` candidate values. Fetch candidates with `vs dataset get --full`; they are merged from schema metadata and offline event statistics.
 - `ImpressionConfig.TimeWindowSeconds` and `ImpressionConfig.ExposureCfg.TimeWindowSeconds` must be `> 0`; `MaxSize` fields must be in `0..30000`.
+- `ColdStartConfig.ItemFilter` uses the same item-filter DSL emitted by the console. For a single equality condition such as `category = 短袖`, send a flat rule: `{"field":"category","op":"must","conds":["短袖"]}`. Do not wrap one condition in `{"op":"and","conds":[...]}`, and do not use condition-tree syntax such as `{"field":"category","op":"eq","value":"短袖"}`. Console maps `=` / `==` and `in` to `op:"must"`; `!=` and `not_in` to `op:"must_not"`; range comparisons to `op:"range"`.
 - `FilterConfig.ItemTypeFilter` is required when the item dataset schema has an ItemType business attribute. The schema must also have the paired ParentId business attribute, and the ItemType field must be filterable.
 - If the item dataset schema has no ItemType business attribute, do not send `FilterConfig.ItemTypeFilter`.
 - `FilterConfig.ItemTypeFilter.Filter` and `ColdStartConfig.ItemFilter` use Viking Filter DSL objects; `ItemTypeFilter.Filter` must be non-empty when `ItemTypeFilter` is present.
-- `ColdStartConfig.ImportTimeWindowHours`, `ExposureThreshold`, and `MaxInjectCount` must be `>= 0`. When `ItemConditionType=import_time`, `ImportTimeWindowHours` must be `> 0`; when `ItemConditionType=custom_filter`, `ItemFilter` must be non-empty.
+- `ColdStartConfig.ImportTimeWindowHours`, `ExposureThreshold`, and `MaxInjectCount` must be `>= 0`. When `ItemConditionType=import_time`, `ImportTimeWindowHours` must be `> 0` and `ItemFilter` is unused. When `ItemConditionType=custom_filter`, `ItemFilter` must be non-empty and `ImportTimeWindowHours` is unused/returned as `0`.
+- For `ColdStartConfig.ItemConditionType=custom_filter`, each `ItemFilter.field` must exactly match a field in the bound item dataset schema, including casing, and should be selected from the app data config's filterable fields.
 - `BoostBuryCondConfig.Rules[].Id` may be omitted; the server generates stable positive IDs. If provided, IDs must be unique. Each rule requires `Name` and `Config`; `Boost` must be in `[-1, 1]`.
 - `BoostBuryCondConfig.Rules[].Config` is a condition tree with `op`, `field`, and `conds`, or logic nodes with `op: "and"|"or"` and child `conds`. Logic nesting is limited to 2 layers. Recommend scene boost/bury does not allow query-dynamic operators such as `query_equal`, `query_in`, or `query_partial_match`.
 - Boost/bury condition operators include `must`, `must_not`, `any_must`, `any_must_not`, `partial_match`, `range`, `geo_distance`, and `time_range`; field/operator compatibility is checked against the item dataset schema.
