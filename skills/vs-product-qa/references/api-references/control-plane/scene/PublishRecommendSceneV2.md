@@ -113,7 +113,7 @@ message ReasonTemplateRule {
   bool Enable = 1;
   string RecallChannel = 2; // multimodal / user_profile / item_cf / hot_item / item_similarity / cold_start.
   string Template = 3;
-  repeated string Variables = 4; // For example: ["item.id"].
+  repeated string Variables = 4; // Required when Enable=true. Examples: ["rank"], ["category"], ["item.product_name"].
 }
 
 message ColdStartConfig {
@@ -230,7 +230,9 @@ For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must 
 - Boost/bury condition operators include `must`, `must_not`, `any_must`, `any_must_not`, `partial_match`, `range`, `geo_distance`, and `time_range`; field/operator compatibility is checked against the item dataset schema.
 - `ShuffleConfig.Rules[].Id` may be omitted; the server generates stable positive IDs. If provided, IDs must be unique. Each rule requires `Name`, `FieldName`, `WindowSize > 0`, `MaxSize > 0`, and `WindowSize >= MaxSize`.
 - `ShuffleType=expression` requires `ShuffleExpression`. Duplicate shuffle rules are rejected. Dimension duplicates are based on `FieldName + WindowType + WindowSize`; expression duplicates also include `ShuffleExpression`.
-- `ReasonTemplateConfig.Enable=false` disables recommendation reasons. Enabled templates require `RecallChannel` and `Template`; `item.*` variables are validated against the item dataset schema, and `array<object>` paths are not supported.
+- `ReasonTemplateConfig.Enable=false` disables recommendation reasons. Enabled templates require `RecallChannel`, non-empty `Template`, and an explicit non-null `Variables[]` array. Do not omit `Variables` and do not rely on frontend/backend inference.
+- `ReasonTemplateConfig.Templates[].Variables` must mirror console behavior: `hot_item` uses `["rank"]`; `user_profile` uses `["category"]`; `item_cf` and `item_similarity` use the de-duplicated `{{item.<field_path>}}` placeholders found in `Template`, preserving first-seen order and keeping the `item.` prefix; `multimodal` and `cold_start` use `[]` unless the product contract defines variables for them.
+- `ReasonTemplateConfig` rejects unresolved `{{item}}` placeholders in practice because item channels must point at concrete item fields such as `{{item.product_name}}`. `item.*` variables are validated against the item dataset schema, and `array<object>` paths are not supported.
 - `RecAssistantConfig.Enable=false` disables the LLM recommendation assistant. When enabled, `AssistantRole`, `AnswerStyle`, and `FollowUpStyle` may be empty and can be filled by online defaults.
 
 ## Deployment Notes

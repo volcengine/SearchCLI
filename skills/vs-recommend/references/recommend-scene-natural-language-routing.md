@@ -266,10 +266,15 @@ Use this workflow for `单个物品推荐原因`.
 
 1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and inspect scene `Type`.
 2. Choose recall channels valid for the scene type; `for_you` reason channels typically exclude `item_similarity`.
-3. If a template references `item.*`, run `vs dataset get --id <item-dataset-id> --full` and verify the exact field path. Do not reference fields under `array<object>` paths.
-4. Build the full `Config.ReasonTemplateConfig` object with `Enable`, `Templates[]`, and `FallbackReason`.
+3. If any requested template references `item.*`, this is a required in-flow validation step: run `vs dataset get --id <item-dataset-id> --full` using the `ItemDatasetId` from step 1, before any dry-run or publish command, and verify the exact field path. Do not skip this step because the field name appears obvious, comes from the prompt, or exists in prior context. Do not reference fields under `array<object>` paths.
+4. Build the full `Config.ReasonTemplateConfig` object with `Enable`, `Templates[]`, and `FallbackReason`. Every enabled `Templates[]` entry must include an explicit non-null `Variables` array; do not rely on the console or backend to infer it from `Template`.
+   - `hot_item`: set `Variables` to `["rank"]`.
+   - `user_profile`: set `Variables` to `["category"]`.
+   - `item_cf` and `item_similarity`: extract all `{{item.<field_path>}}` placeholders from `Template`, keep the `item.` prefix in each `Variables` value, preserve first-seen order, and de-duplicate.
+   - `multimodal` and `cold_start`: set `Variables` to `[]` unless a future product contract explicitly defines supported variables.
+   - Reject unresolved `{{item}}` placeholders; require a concrete item field such as `{{item.product_name}}`.
 5. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-reason-template-config> --confirm-entry-binding`.
-6. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify `Config.ReasonTemplateConfig`.
+6. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify `Config.ReasonTemplateConfig`, including exact `Templates[].Variables` arrays.
 
 ## Recommendation Wording Workflow
 
@@ -316,7 +321,7 @@ Backend deployment effects to keep in mind:
 | `Config.BoostBuryCondConfig.Rules[]` | `Id`, `Enable`, `Name`, `Config`, `Boost` | `Boost` must be in `[-1, 1]`; condition DSL allows at most 2 logic layers. Field names must match item schema casing. |
 | `Config.ColdStartConfig` | `Enable`, `ItemConditionType`, `ImportTimeWindowHours`, `ItemFilter`, `ExposureThreshold`, `MaxInjectCount`, `Name` | `ItemConditionType` is `import_time` or `custom_filter`; `import_time` requires `ImportTimeWindowHours > 0`; `custom_filter` requires non-empty `ItemFilter`; numeric thresholds/counts must be non-negative. |
 | `Config.MergeConfigs[]` | `Strategy`, `CustomWeights[]` | Strategies: `for_you` supports `user_profile_first`, `multimodal_first`, `hot_item_first`, `custom`; `related` also supports `item_similarity_first`; `shopping_cart` supports only `item_similarity_first` and `custom`. For `custom`, use `CustomWeights[].RecallChannel` and `CustomWeights[].Weight`; channels are `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start`; weights must be non-negative and sum to `> 0`; duplicate channels are rejected. `item_similarity` is not allowed for `for_you`. |
-| `Config.ReasonTemplateConfig` | `Enable`, `Templates[]`, `FallbackReason` | Template channels: `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start`. Enabled templates require non-empty `Template`. |
+| `Config.ReasonTemplateConfig` | `Enable`, `Templates[]`, `FallbackReason` | Template channels: `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start`. Enabled templates require non-empty `Template` and explicit non-null `Variables[]`: `hot_item=["rank"]`, `user_profile=["category"]`, item channels use de-duplicated `item.*` placeholders from `Template`, and channels without variables use `[]`. |
 | `Config.FilterConfig.ItemTypeFilter` | `ForParent`, `Filter` | Required when the item dataset schema has an ItemType business attribute; invalid when the schema has no ItemType business attribute. The schema must also have the paired ParentId business attribute, the ItemType field must be filterable, and `Filter.field` must match item schema casing. |
 | `Config.RecAssistantConfig` | `Enable`, `AssistantRole`, `AnswerStyle`, `FollowUpStyle` | Controls LLM recommendation assistant behavior. |
 
