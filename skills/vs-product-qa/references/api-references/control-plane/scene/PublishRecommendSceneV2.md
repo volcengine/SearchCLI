@@ -209,7 +209,7 @@ message ShuffleRuleV2 {
 | `related` | `user_profile_first`, `multimodal_first`, `hot_item_first`, `item_similarity_first`, `custom` |
 | `shopping_cart` | `item_similarity_first`, `custom` |
 
-For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must be `>= 0`, and the total weight must be greater than `0`. `item_similarity` is not allowed as a custom recall channel for `for_you`.
+For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must be `>= 0`, and the total weight must be greater than `0`. To match the console UI, treat percentages as decimal weights (`35%` -> `0.35`) and keep the UI-equivalent weights summing to `1`; the console displays each value as `Weight * 100`. For `for_you`, the console custom channels are `item_cf`, `user_profile`, `multimodal`, and `hot_item`; `item_similarity` and `cold_start` are not UI-selectable for this scene type.
 
 ## Validation Constraints
 
@@ -225,6 +225,7 @@ For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must 
 - `ColdStartConfig.ImportTimeWindowHours`, `ExposureThreshold`, and `MaxInjectCount` must be `>= 0`. When `ItemConditionType=import_time`, `ImportTimeWindowHours` must be `> 0` and `ItemFilter` is unused. When `ItemConditionType=custom_filter`, `ItemFilter` must be non-empty and `ImportTimeWindowHours` is unused/returned as `0`.
 - For `ColdStartConfig.ItemConditionType=custom_filter`, each `ItemFilter.field` must exactly match a field in the bound item dataset schema, including casing, and should be selected from the app data config's filterable fields.
 - `BoostBuryCondConfig.Rules[].Id` may be omitted; the server generates stable positive IDs. If provided, IDs must be unique. Each rule requires `Name` and `Config`; `Boost` must be in `[-1, 1]`.
+- `BoostBuryCondConfig` is scene-inline config in `PublishRecommendSceneV2`, not a standalone reusable rule binding. Preserve existing generated rule IDs when appending, send the complete final `Rules[]` when replacing, and send `Rules: []` to clear all boost/bury behavior; do not call `DeleteRecommendRuleV2` for these inline rules.
 - `BoostBuryCondConfig.Rules[].Config` is a condition tree with `op`, `field`, and `conds`, or logic nodes with `op: "and"|"or"` and child `conds`. Logic nesting is limited to 2 layers. Recommend scene boost/bury does not allow query-dynamic operators such as `query_equal`, `query_in`, or `query_partial_match`.
 - Boost/bury condition operators include `must`, `must_not`, `any_must`, `any_must_not`, `partial_match`, `range`, `geo_distance`, and `time_range`; field/operator compatibility is checked against the item dataset schema.
 - `ShuffleConfig.Rules[].Id` may be omitted; the server generates stable positive IDs. If provided, IDs must be unique. Each rule requires `Name`, `FieldName`, `WindowSize > 0`, `MaxSize > 0`, and `WindowSize >= MaxSize`.

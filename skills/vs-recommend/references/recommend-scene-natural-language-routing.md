@@ -21,6 +21,7 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI r
 | run recommend, verify recommendation, check returned items, first-pass result check | Run `vs recommend run` with the selected scene and user/item context; inspect raw `rec_results` and `extra_info`. |
 | recommendation returns empty, no results, bad recall, wrong items | Inspect readiness/status, then run `vs recommend scene get`, then inspect runtime `extra_info`; do not mutate config until the current scene and request context are clear. |
 | create a recommend scene, add Guess You Like / 猜你喜欢, add related recommendation / 相关推荐, add shopping-cart recommendation / 购物车推荐 | Use the Scene Create Workflow. Run `vs recommend scene list` first only when the user did not explicitly ask for a new scene. |
+| delete recommend scene, remove recommend scene, 删除推荐场景 | Use the Scene Delete Workflow. |
 | rename scene, update scene description | Run the Scene Update Workflow and modify `Name` or `Description`; preserve existing `Type`, `ItemDatasetId`, `UserEventScenes`, and full `Config`. |
 | change item dataset binding | Run the Scene Update Workflow and modify `ItemDatasetId`; verify the dataset is item type and bound to the application; re-check all field-based rules against the new schema. |
 | associated behavior scene, associated behavior page/module, bind behavior scene, change behavior scene to `home`, change behavior scene to `Details`, `event_scene` mapping, 关联行为发生场景 | Use the Behavior Scene Binding Workflow; it resolves candidates from the UserEvent dataset schema, then runs the Scene Update Workflow and modifies `UserEventScenes[]`. |
@@ -105,6 +106,14 @@ Common top-level update fields:
 | `UserEventScenes[]` | Selected behavior-scene bindings; values come from the bound UserEvent dataset's `event_scene` enum/candidate values. |
 | `Config` | `RecommendSceneConfigV2`. Treat as full-publish config and preserve unrelated areas. CLI `--config` may be a full config or first-level patch merged over readback; it is not a nested JSONPath patch. |
 
+## Scene Delete Workflow
+
+Use this workflow when the user wants to delete an existing recommend scene.
+
+1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` to confirm the exact target scene.
+2. Run `vs recommend scene delete --application-id <application-id> --scene-id <scene-id>`; use `--dry-run` only after step 1 and before the real delete.
+3. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and expect `ResourceNotFound.RecommendScene`.
+
 ## Behavior Scene Binding Workflow
 
 Use this workflow when the user asks about page/module binding, `UserEventScenes`, or `event_scene`.
@@ -132,7 +141,7 @@ Use this workflow for `筛选物品范围` or reusable item-scope filters.
 3. Confirm every requested filter `field` exists and is filterable; copy field casing exactly.
 4. Run `vs recommend rule list --application-id <application-id> --types filter --dataset-id <item-dataset-id>`.
 5. Create the new rule with `vs recommend rule upsert --application-id <application-id> --type filter --dataset-id <item-dataset-id> --config <filter-dsl>`; use `--dry-run` only after steps 1-4 and before the real upsert.
-6. Run `vs recommend rule get --application-id <application-id> --rule-id <rule-id>`.
+6. Run `vs recommend rule get --application-id <application-id> --rule-id <rule-id>` to explicitly confirm the rule was created successfully, including the rule type, dataset binding, and filter DSL.
 7. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` as the full publish base.
 8. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-filter-rule-id> --confirm-entry-binding`.
 9. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify `Config.FilterRuleId`.
@@ -195,11 +204,11 @@ Use this workflow for `置顶物品` or forced item injection.
 
 Use this workflow for `新物品冷启动召回`.
 
-1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and preserve the full scene config.
+1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and preserve the full scene config. Use this readback as the authoritative source of `ItemDatasetId`; this step must run before any item-schema lookup even when an item dataset ID is available from context.
 2. Treat the two item-condition modes as mutually exclusive:
    - import time: set `ItemConditionType="import_time"` and `ImportTimeWindowHours > 0`; omit `ItemFilter`
-   - item fields: run `vs dataset get --id <item-dataset-id> --full`, set `ItemConditionType="custom_filter"` with a non-empty Viking Filter DSL `ItemFilter`, and omit `ImportTimeWindowHours` because it is not used in this mode
-3. For `custom_filter`, every `ItemFilter.field` must match the item schema exactly, including casing, and must be filterable in the app data config. Do not infer or normalize field names from natural language.
+   - item fields: use `ItemConditionType="custom_filter"` with a non-empty Viking Filter DSL `ItemFilter`, and omit `ImportTimeWindowHours` because it is not used in this mode
+3. For `custom_filter`, run `vs dataset get --id <item-dataset-id-from-step-1> --full`. Every `ItemFilter.field` must match the item schema exactly, including casing, and must be filterable in the app data config. Do not infer or normalize field names from natural language.
 4. Build `ItemFilter` in the same shape that the console emits. A single equality condition such as `category = 短袖` must be a flat rule: `{"field":"category","op":"must","conds":["短袖"]}`. Do not add an outer group for one condition, and do not use condition-tree syntax such as `{"op":"and","conds":[{"field":"category","op":"eq","value":"短袖"}]}`. Operator mapping: `=` / `==` / `in` -> `must`; `!=` / `not_in` -> `must_not`; range operators -> `range`.
 5. Build and send the complete first-level `ColdStartConfig` object, including `Enable`, `Name`, `ItemConditionType`, the selected condition field (`ImportTimeWindowHours` or `ItemFilter`), `ExposureThreshold`, and `MaxInjectCount`. Do not send a nested `ItemFilter` patch by itself.
 6. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-cold-start-config> --confirm-entry-binding`; use `--dry-run` only after required read steps and before the real publish.
@@ -211,7 +220,7 @@ Use this workflow for `召回融合策略`.
 
 1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and inspect `Type`.
 2. Choose only strategies/channels valid for that scene type: `for_you` must not use `item_similarity`; `shopping_cart` supports only `item_similarity_first` or `custom`.
-3. For `Strategy="custom"`, build `CustomWeights[]` with non-negative weights whose sum is greater than `0`; avoid duplicate `RecallChannel` values.
+3. For `Strategy="custom"`, build `CustomWeights[]` from the console percentage model: write each `Weight` as `percent / 100` (for example, `35%` -> `0.35`) and make the UI-equivalent weights sum to `1`. Avoid duplicate `RecallChannel` values. For `for_you`, use the console channels `item_cf`, `user_profile`, `multimodal`, and `hot_item`; do not include `item_similarity` or `cold_start`.
 4. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-merge-configs> --confirm-entry-binding`.
 5. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify `Config.MergeConfigs[]`.
 
@@ -221,11 +230,12 @@ Use this workflow for `提权、降权`.
 
 1. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` to identify `ItemDatasetId`.
 2. Run `vs dataset get --id <item-dataset-id> --full` and confirm every condition field exists and has a compatible operator.
-3. Build `Config.BoostBuryCondConfig.Rules[]`; omit `Id` for new rules and let the backend generate stable positive IDs.
-4. Use `Boost > 0` for promotion and `Boost < 0` for suppression; values must be in `[-1, 1]`.
-5. Do not use query-dynamic operators such as `query_equal`, `query_in`, or `query_partial_match` in recommend scene boost/bury.
-6. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-boost-bury-rules> --confirm-entry-binding`.
-7. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify generated rule IDs and rule content in readback.
+3. Build the complete desired `Config.BoostBuryCondConfig.Rules[]`; omit `Id` only for new rules and let the backend generate stable positive IDs. When appending, preserve existing rules and their generated `Id` values from the scene readback. When replacing, submit exactly the final rule set. To remove all boost/bury behavior, submit `{"BoostBuryCondConfig":{"Rules":[]}}`.
+4. Treat boost/bury as scene-inline config, not independent `recommend rule` resources. Do not run `vs recommend rule delete` when clearing boost/bury.
+5. Use `Boost > 0` for promotion and `Boost < 0` for suppression; values must be in `[-1, 1]`.
+6. Do not use query-dynamic operators such as `query_equal`, `query_in`, or `query_partial_match` in recommend scene boost/bury.
+7. Run `vs recommend scene update --application-id <application-id> --scene-id <scene-id> --config <config-with-boost-bury-rules> --confirm-entry-binding`.
+8. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify generated rule IDs and rule content in readback.
 
 ## Impression Dedupe Workflow
 
