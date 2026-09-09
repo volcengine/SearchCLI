@@ -33,6 +33,17 @@ message EmptyResp {}
 
 This API has no explicit business response fields.
 
+## Field Semantics and Validation Notes
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `ProjectName` | non-empty | Project scope for the target scene. |
+| `ApplicationId` | non-empty | The target scene must belong to this application. |
+| `SceneId` | non-empty | The target search scene must exist and be visible in the project. |
+| `DryRun` | `true` or `false` | `true` only validates the delete request and dependencies; it does not delete the scene. |
+
+Default search scenes cannot be deleted. Check `IsDefault=false` from `GetSearchSceneV2` or `ListSearchScenesV2` before issuing a real delete.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

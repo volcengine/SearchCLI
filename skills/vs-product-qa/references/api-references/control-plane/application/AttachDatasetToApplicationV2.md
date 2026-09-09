@@ -65,7 +65,7 @@ message AugmentedFieldV2 {
 | `DataConfig.AugmentedFields[]` | array<AugmentedFieldV2> | No | Augmented fields. |
 | `DataConfig.FilterFieldsMap.Fields[]` | array<string> | No | Fields. |
 | `DataConfig.AugmentedFields[].FieldName` | string | See service validation | Field name. |
-| `DataConfig.AugmentedFields[].FieldType` | string | See service validation | Field type. |
+| `DataConfig.AugmentedFields[].FieldType` | string | See service validation | Field type. Enum values are snake_case (e.g. `search_queries`, `item_summary`, `doc_chunk_id`). |
 | `DataConfig.AugmentedFields[].SourceFields[]` | array<string> | No | Source fields. |
 | `DataConfig.AugmentedFields[].MaxGenerationNum` | int32 | See service validation | Max generation num. |
 | `DataConfig.AugmentedFields[].SystemPrompt` | string | See service validation | System prompt. |

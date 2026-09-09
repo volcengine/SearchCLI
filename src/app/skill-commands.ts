@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { parseArgs } from 'node:util';
-import { isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import { isDomainHelpRequest, renderUsageBlock, withOpenApiReferenceHint } from '../core/help-utils';
 import { printOutput } from '../core/output-format';
 import {
   createRepoSkillScaffold,
@@ -88,7 +88,7 @@ export function printSkillHelp(): void {
     '  vs skill validate'
   ];
 
-  console.log(`${renderUsageBlock(
+  console.log(withOpenApiReferenceHint(`${renderUsageBlock(
     [
       'vs skill list',
       'vs skill list [--category <name>]',
@@ -107,7 +107,7 @@ EXAMPLES
 ${examples.join('\n')}
 
 COMMON FLAGS
-  --format --json --table --yaml --pretty --ndjson --csv --jq --output`);
+  --format --json --table --yaml --pretty --ndjson --csv --jq --output`));
 }
 
 export async function runSkillListCommand(

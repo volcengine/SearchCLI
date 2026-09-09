@@ -14,6 +14,10 @@ commands: auth import-env, auth login, auth status, auth use, auth list, llm log
 
 Use this skill when an external agent is setting up SearchCLI for the first time, or when it needs to check authentication, profiles, and local readiness.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 
 - `Node.js >= 20` is installed

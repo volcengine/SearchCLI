@@ -106,7 +106,7 @@ function buildPerDatasetConfig(datasetId: string, strategy: TuningStrategy): Rec
     RerankConfig: compactObject({
       Enable: dynamic.rerank_enabled,
       RerankTopK: dynamic.rerank_topk,
-      RerankModel: dynamic.rerank_model,
+      RerankModel: normalizeRerankModel(dynamic.rerank_model),
       RerankDoubaoConfig: toPascalObject(dynamic.rerank_doubao_config)
     })
   });
@@ -118,6 +118,11 @@ function normalizeSceneQueryKeywordMatchPercent(value: number | undefined): numb
     throw new Error(`Invalid recommended query_keyword_match_percent: ${String(value)}.`);
   }
   return value;
+}
+
+function normalizeRerankModel(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.replace(/-/g, '_');
 }
 
 function normalizeSceneMode(value: SearchDynamic['mode']): string | undefined {

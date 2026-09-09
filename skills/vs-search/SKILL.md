@@ -23,6 +23,10 @@ Use this skill for:
 
 If the user wants automated batch evaluation or similarity tuning across many queries and strategies, use `vs-search-tuning` instead.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 
 - an `application-id` is available
@@ -38,7 +42,7 @@ Before changing anything, decide whether the user wants:
 - a temporary runtime verification
 - a readiness diagnosis for a failing app
 
-This skill stays at the search workflow level. Do not embed low-level API field mappings, payload design, or enum interpretation here. When a concrete command needs exact parameters, first consult `vs-product-qa`.
+This skill stays at the search workflow level. Do not embed low-level API field mappings, payload design, or enum interpretation here. When a concrete command needs exact parameters, first consult `vs-product-qa` and the matching API reference. For `search scene update`, the authoritative scene publish contract is `vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`.
 
 ## Commands
 
@@ -55,15 +59,19 @@ This skill stays at the search workflow level. Do not embed low-level API field 
    - a readiness diagnosis for a failing app
 2. If the request is a persistent search strategy change, use `search scene list/get` first and inspect the current scene before mutating it.
 3. Before running any concrete command, consult `vs-product-qa` to confirm the current command behavior and the exact parameter requirements.
-4. Use `search run` for verification requests and `search scene update` for persistent scene changes.
-5. After every scene mutation, immediately read the scene back with `search scene get` and verify that the intended change is visible online.
-6. If a fresh app fails, check `app status` and then `app diagnose`.
-7. Only after readiness is clear should you focus on recall quality or scene configuration.
-8. If the command behavior conflicts with the skill text or `--help`, trust the installed CLI behavior first, and only then inspect repository code when needed to explain or fix the gap.
+4. For a persistent update, resolve and retain the target `application-id`, `scene-id`, and, when a dataset-level config is involved, the exact `dataset-id` before constructing the update payload. Use `search scene get`, `dataset get`, or `app dataset-config get` as appropriate.
+5. `Config` supports partial updates: include only the configuration area that should change, while preserving unrelated existing settings. The final update must still carry non-empty `application-id`, `scene-id`, the target `dataset-id` for dataset-level updates, and the requested configuration content. A `ResourceNotFound.Application` response must trigger a read/identity check, not a blind retry.
+6. Never use `search scene update` with an incomplete payload to probe the service. Do not send `--data`, `--config`, or other write flags with placeholder or identity-only JSON. Use only read-only commands such as `--help`, `search scene get`, `dataset get`, `app dataset-config get`, or `search scene list` to inspect command behavior, schema, or current state.
+7. Use `search run` for verification requests and `search scene update` for persistent scene changes. The persistent update path must publish through `PublishSearchSceneV2`.
+8. After every scene mutation, immediately read the scene back with `search scene get` and verify that the intended change is visible online.
+9. If a fresh app fails, check `app status` and then `app diagnose`.
+10. Only after readiness is clear should you focus on recall quality or scene configuration.
+11. If the command behavior conflicts with the skill text or `--help`, trust the installed CLI behavior first, and only then inspect repository code when needed to explain or fix the gap.
 
 ## References
 
 - `references/search-scene-natural-language-routing.md`: workflow-oriented mapping from natural-language search-scene requests to the first config area or workflow you should inspect
+- `../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`: authoritative SearchSceneV2 publish payload, enum-like string values, and validation notes for persistent scene updates
 
 ## Customer Environment Principle
 
@@ -76,11 +84,17 @@ This skill stays at the search workflow level. Do not embed low-level API field 
 ## Constraints
 
 - Before executing any concrete `vs ...` command in this search workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
+- Before building a `search scene update` payload, consult `vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md` for the concrete SearchSceneV2 field semantics, enum-like string values, and validation constraints. The routing reference only identifies the config area; it is not sufficient for final payload values.
+- Never probe the service with an incomplete write payload. Before executing `search scene update`, validate the complete request envelope: `ApplicationId`, `SceneId`, and, for dataset-level updates, `Config.PerDatasetConfigs[].DatasetId` plus the intended partial `Config` block must all be present and non-empty. For command or API discovery, use read-only commands only; an invalid `update --data` request is not a valid probe.
+- When the user request includes a mode/model qualifier such as `strong`, `weak`, `semantic priority`, `image similarity`, `multimodal`, `always`, or `suggestion_only`, do not treat enabling the feature as sufficient. Set the corresponding mode/model/config field explicitly and verify that exact value in the readback response.
+- For search item-scope filtering, do not invent `FilterConfig.RuleId`. Use `RuleId` only when reusing an existing stored `search_filter` rule. For a new filter, send `FilterConfig.Config` and optional `Name`; the backend creates or upserts the backing rule during non-dry-run publish and returns the generated `RuleId` in scene readback.
 - **Field name case sensitivity**: All dataset field names (used in `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPools[].Filter.field`, etc.) are **case-sensitive**. Never infer or normalize field name casing from the user's natural-language description. Before writing any field name into a config, first look up the exact field name from the dataset schema or data-config via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`, and copy the field name exactly as it appears there (case-for-case). If the field name you have doesn't match any field in the schema, stop and ask the user to confirm which field they mean instead of guessing.
 - When an app is bound to exactly one dataset, the CLI can infer `dataset-id`
 - For fresh apps, treat readiness as the first hypothesis before blaming the query
 - Prefer public `vs search ...` commands over bypassing the CLI and calling lower-level APIs directly
 - Use `search scene update` for persistent search behavior and do not invent low-level API mappings inside this skill
+- Dictionary import/binding is part of the persistent scene workflow: after the dictionary is created and terms are written, update the target scene's V2 `DictIds` field and publish the scene.
+- Do not use `dict bind-scenes` or the `BindDictToScenes` API as a substitute for `search scene update`. A dictionary-to-scene association is not sufficient unless the target scene's configuration is published and confirmed by `search scene get`.
 - For natural-language scene-change requests, use `references/search-scene-natural-language-routing.md` as the routing layer; if the target is a rule-resource workflow such as filter-item-scope, do not reduce it to a single inline scene field edit
 - Do not assume `--help`, skill text, and the installed command implementation are perfectly aligned; verify the actual command behavior before making high-risk scene changes
 - For scene updates, prefer a readback check after mutation instead of assuming the write succeeded

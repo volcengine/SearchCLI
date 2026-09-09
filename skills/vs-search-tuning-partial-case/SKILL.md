@@ -20,6 +20,10 @@ This skill only performs local, highly deterministic, fine-grained operational f
 - It does not change online configuration; it only validates candidates through request-level payloads.
 - The final deliverables are a fine-grained operations configuration sheet that can be copied into the console, validated payloads, and a replay script.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 
 - A Viking Search application id is available.

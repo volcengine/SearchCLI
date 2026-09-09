@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REQUIRED_HEADINGS = ['## When to Use', '## Preconditions', '## Commands', '## Workflow', '## Constraints'];
+const REQUIRED_HEADINGS = ['## When to Use', '## Version Check', '## Preconditions', '## Commands', '## Workflow', '## Constraints'];
 const ALLOWED_CATEGORIES = new Set(['shared', 'app', 'data', 'search', 'recommend', 'chat', 'openapi', 'workflow']);
 const ALLOWED_APPLIES_TO = new Set(['codex', 'agents', 'external-agent']);
 const CLI_REQUIREMENT_PATTERN = /^>=\d+\.\d+\.\d+$/;

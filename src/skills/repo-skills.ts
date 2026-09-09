@@ -7,7 +7,7 @@ import path from 'node:path';
 import { EMBEDDED_REPO_SKILLS } from './embedded-repo-skills';
 import { VERSION } from '../version';
 
-const REQUIRED_HEADINGS = ['## When to Use', '## Preconditions', '## Commands', '## Workflow', '## Constraints'] as const;
+const REQUIRED_HEADINGS = ['## When to Use', '## Version Check', '## Preconditions', '## Commands', '## Workflow', '## Constraints'] as const;
 export const REPO_SKILL_CATEGORIES = ['shared', 'app', 'data', 'search', 'recommend', 'chat', 'workflow'] as const;
 export const REPO_SKILL_TARGETS = ['codex', 'agents', 'external-agent'] as const;
 const DEFAULT_REPO_SKILL_COMMANDS = ['skill list', 'skill show'] as const;
@@ -80,17 +80,20 @@ const FALLBACK_COMMANDS = [
   'dataset schema check',
   'dataset update',
   'doctor',
-  'item apply',
-  'item plan',
-  'item profile',
   'llm import-env',
   'llm login',
   'llm logout',
   'llm status',
   'purchase link',
+  'purchase order create',
+  'purchase order price',
   'purchase order status',
   'purchase order wait',
   'recommend run',
+  'recommend rule delete',
+  'recommend rule get',
+  'recommend rule list',
+  'recommend rule upsert',
   'recommend scene create',
   'recommend scene delete',
   'recommend scene get',
@@ -102,6 +105,7 @@ const FALLBACK_COMMANDS = [
   'search scene get',
   'search scene list',
   'search scene update',
+  'version check',
   'skill install',
   'skill init',
   'skill list',
@@ -839,6 +843,10 @@ commands: ${skill.commands.join(', ')}
 ## When to Use
 
 TODO describe when external agents should use this skill.
+
+## Version Check
+
+Before starting this skill workflow, run \`vs version check --json\`. Continue only when the status is \`up-to-date\`. If the status is \`update-available\`, stop and tell the user to update the cloned \`vs\` repository, then run \`git pull --ff-only\`, \`bash ./scripts/install.sh\`, and \`bash ./scripts/install-skills.sh all --target auto --force\` (PowerShell: \`scripts/install.ps1\` and \`scripts/install-skills.ps1\`).
 
 ## Preconditions
 

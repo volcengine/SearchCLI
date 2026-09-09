@@ -52,7 +52,6 @@ SearchCLI 是 AI Search on Volcengine 的开放 CLI。
 
 ## 核心能力
 
-- 使用 `vs item profile | plan | apply` 完成结构化 item onboarding。
 - 使用 `vs app`、`vs dataset`、`vs data` 管理应用和数据集。
 - 使用 `vs search run`、`vs recommend run`、`vs chat run` 做运行时验证。
 - 使用 `vs search tune query-generate | plan | run | report` 做第一版文本相似度自动测评与调优。
@@ -102,49 +101,22 @@ vs search tune llm-check --live --json
 
 ### 3. 跑通第一条 Onboarding 流程
 
-如果用户希望同时创建应用、完成 bind-time 字段配置确认，并做运行时验证，请走 `dataset+app` 路径：
+使用 V2 后端驱动的 Schema 推断流程，将 JSONL 文件接入到新应用：
 
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-如果你只需要数据集创建和导入，请走 `dataset-only` 路径，在生成 plan 时加上 `--skip-app`，并在 `dataset create + ingest` 后结束：
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-如果 plan 已经产出了 `dataset-create.json`，优先使用它创建数据集，这样可以把 `Schema` 和 `DataFieldConfig` 一起提交。`--name <dataset-name> --type item --schema @schema.json` 仍然保留为没有完整 create payload 时的手动 schema-only 兜底方式。
+如果只需要数据集（不需要应用），在 `vs data write` 之后停止即可。
 
-当你已经有一个现成的 plan、但还想在执行阶段强制保持 `dataset-only` 边界时，`vs item provision` 和 `vs item apply` 也都支持 `--skip-app` 作为执行期保护开关。
-
-如果你要创建的是视频数据集，不要依赖默认类型，必须显式传入 `--type video`：
-
-对于 `dataset+app`：
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-对于 `dataset-only`：
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-对于视频 `dataset-only` 流程，优先使用 `dataset-create.json` 发起创建请求，确保同时带上 `DataFieldConfig`；仅使用 `--schema @schema.json` 可能会触发 `MissingParameter.DefaultFieldStrategy`。
+对于用户行为数据集，使用 `--type user_event` 并省略 `--theme`。
 
 ## 快速开始（AI Agent）
 

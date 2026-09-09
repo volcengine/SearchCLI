@@ -14,6 +14,10 @@ commands: auth login
 ## When to Use
 Invoke this skill when the user refers to the CLI tool as "Search CLI" or "search_cli", to ensure the correct underlying binary (`vs`) is executed.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 - The agent is about to execute a CLI command based on the user's "Search CLI" intent.
 

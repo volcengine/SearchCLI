@@ -19,20 +19,22 @@ export default class RecommendRuleUpsert extends Command {
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'rule-id': Flags.string({
       description:
-        'Recommend rule ID. Omit to create a new rule; provide to update an existing one. The response returns the RuleID.'
+        'Recommend rule ID. Omit to create a new rule; provide to update an existing one. The response returns the RuleId.'
     }),
     name: Flags.string({ description: 'Rule name (required for create).' }),
     type: Flags.string({
       description:
-        'Rule type (required for create). Allowed values: degrade, filter, search_filter, impression, suggest, userInterest, itemCf, forceItem'
+        'Rule type (required for create). Upsert V2 currently allows: degrade, filter, search_filter, force_item.'
     }),
     description: Flags.string({ description: 'Rule description.' }),
     'dataset-id': Flags.string({ description: 'Dataset ID associated with the rule.' }),
+    'item-dataset-id': Flags.string({ description: 'Item dataset ID associated with the rule.' }),
     config: Flags.string({
       description:
         'Inline JSON, @file path, or JSON file path for the rule Config. Structure depends on rule type; for search_filter / filter rules it is a recursive rule tree with group (and/or) and leaf (must/must_not/range/time_range) nodes.'
     }),
-    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' })
+    'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
+    'dry-run': Flags.boolean({ description: 'Validate without creating or updating the recommend rule.' })
   };
 
   async run(): Promise<void> {
@@ -54,7 +56,9 @@ export default class RecommendRuleUpsert extends Command {
       type: flags.type,
       description: flags.description,
       datasetId: flags['dataset-id'],
-      config: flags.config
+      itemDatasetId: flags['item-dataset-id'],
+      config: flags.config,
+      dryRun: flags['dry-run']
     });
   }
 }

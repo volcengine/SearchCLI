@@ -105,14 +105,15 @@ message ImageSearchConfig {
 }
 
 message FilterConfigV2 {
-  optional string RuleId = 1;
+  optional string RuleId = 1; // If set during update/publish, use the stored search_filter rule and ignore Name/Config. If omitted and Config is non-empty, the backend creates a search_filter rule and fills RuleId.
 
   optional string Name = 2;
   google.protobuf.Struct Config = 3;
+  recommend.ItemTypeFilter ItemTypeFilter = 4;
 }
 
 message AuxiliaryPoolsConfig {
-  repeated dataset.DatasetFilter Pools = 1;
+  repeated search_scene.DatasetFilter Pools = 1;
 }
 
 message PersonalizedRecall {
@@ -270,145 +271,323 @@ message NumberRange {
 
 ## Request Parameters
 
-| Field | Type | Required | Description |
+| Field                                                   | Type                                       | Required               | Description                                            |
+| ------------------------------------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
+| `ProjectName`                                         | string                                     | See service validation | Project name.                                          |
+| `ApplicationId`                                       | string                                     | See service validation | Application id.                                        |
+| `SceneId`                                             | string                                     | See service validation | Scene ID.                                              |
+| `Config`                                              | SearchSceneConfigV2                        | See service validation | Config.                                                |
+| `DryRun`                                              | bool                                       | See service validation | Dry-run flag.                                          |
+| `Config.WantToSearchConfig`                           | WantToSearchConfigV2                       | See service validation | Want to search config.                                 |
+| `Config.QueryCompletionConfig`                        | QueryCompletionConfigV2                    | See service validation | Query completion config.                               |
+| `Config.OverviewConfig`                               | OverviewConfig                             | See service validation | Overview config.                                       |
+| `Config.PerDatasetConfigs[]`                          | array<PerDatasetConfig></perdatasetconfig> | No                     | Per dataset configs.                                   |
+| `Config.WantToSearchConfig.MinWordLength`             | int64                                      | See service validation | Min word length.                                       |
+| `Config.WantToSearchConfig.MaxWordLength`             | int64                                      | See service validation | Max word length.                                       |
+| `Config.WantToSearchConfig.WordNum`                   | int64                                      | See service validation | Word num.                                              |
+| `Config.WantToSearchConfig.Enable`                    | bool                                       | No                     | Enable.                                                |
+| `Config.WantToSearchConfig.DictIds[]`                 | array<string></string>                     | No                     | Dict ids.                                              |
+| `Config.WantToSearchConfig.EnableApiLog`              | bool                                       | No                     | Enable api log.                                        |
+| `Config.QueryCompletionConfig.SugMaxRecallNum`        | int64                                      | See service validation | Sug max recall num.                                    |
+| `Config.QueryCompletionConfig.SugMinNum`              | int64                                      | See service validation | Sug min num.                                           |
+| `Config.QueryCompletionConfig.Enable`                 | bool                                       | No                     | Enable.                                                |
+| `Config.QueryCompletionConfig.DictIds[]`              | array<string></string>                     | No                     | Dict ids.                                              |
+| `Config.QueryCompletionConfig.EnableApiLog`           | bool                                       | No                     | Enable api log.                                        |
+| `Config.OverviewConfig.Mode`                          | string                                     | See service validation | Mode.                                                  |
+| `Config.OverviewConfig.TriggerPrompt`                 | string                                     | See service validation | Trigger prompt.                                        |
+| `Config.OverviewConfig.ContentPrompt`                 | string                                     | See service validation | Content prompt.                                        |
+| `Config.OverviewConfig.EnableOverview`                | bool                                       | See service validation | Enable overview.                                       |
+| `Config.PerDatasetConfigs[].DatasetId`                | string                                     | See service validation | Dataset ID.                                            |
+| `Config.PerDatasetConfigs[].TextSearchConfig`         | TextSearchConfig                           | See service validation | Text search config.                                    |
+| `Config.PerDatasetConfigs[].ImageSearchConfig`        | ImageSearchConfig                          | See service validation | Image search config.                                   |
+| `Config.PerDatasetConfigs[].MaxRecallNum`             | int64                                      | No                     | Max recall num.                                        |
+| `Config.PerDatasetConfigs[].FilterConfig`             | FilterConfigV2                             | See service validation | Filter config.                                         |
+| `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig`     | AuxiliaryPoolsConfig                       | See service validation | Auxiliary pools config.                                |
+| `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall                         | See service validation | Personalized recall config.                            |
+| `Config.PerDatasetConfigs[].EnableRerankWithHot`      | bool                                       | No                     | Enable rerank with hot.                                |
+| `Config.PerDatasetConfigs[].RerankConfig`             | RerankConfig                               | See service validation | Rerank config.                                         |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel` | string                                     | See service validation | Rerank model. Enum:`gte-rerank` / `doubao-rerank`. |
+| `Config.PerDatasetConfigs[].BoostBuryCondConfig`      | BoostBuryCondConfig                        | See service validation | Boost bury cond config.                                |
+| `Config.PerDatasetConfigs[].SortRulesConfig`          | SortRulesConfig                            | See service validation | Sort rules config.                                     |
+| `Config.PerDatasetConfigs[].ShuffleConfig`            | ShuffleConfig                              | See service validation | Shuffle config.                                        |
+| `Config.PerDatasetConfigs[].ServingControlConfig`     | ServingControlConfig                       | See service validation | Serving control config.                                |
+| `Config.PerDatasetConfigs[].CorrectionConfig`         | CorrectionConfigV2                         | See service validation | Correction config.                                     |
+| `Config.PerDatasetConfigs[].SynonymConfig`            | SynonymConfigV2                            | See service validation | Synonym config.                                        |
+| `Config.PerDatasetConfigs[].FacetConfig`              | FacetConfig                                | See service validation | Facet config.                                          |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig`    | RelevanceCutoffConfig                      | See service validation | Relevance cutoff config.                               |
+
+## Field Semantics and Validation Notes
+
+`UpdateSearchSceneV2` applies incremental update semantics to the draft config only; it does not publish online behavior. Omitted or `null` child config blocks do not overwrite existing draft config. For the same persistent online update path used by `vs search scene update`, see `PublishSearchSceneV2.md`.
+
+### String Enum Values
+
+These fields are encoded as strings. Do not send numeric enum codes.
+
+| Field                                                                      | Allowed values                                                              | Notes                                                                                                      |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Status`                                                                 | `unpublished`, `published`                                              | Response field.                                                                                            |
+| `Config.OverviewConfig.Mode`                                             | `ondemand`, `always`                                                    | Overview trigger mode.                                                                                     |
+| `Config.PerDatasetConfigs[].TextSearchConfig.Mode`                       | `balanced`, `semantic_priority`, `keyword_priority`, `user_defined` | Retrieval mode. Empty input is normalized by service behavior to the default balanced mode.                |
+| `Config.PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode`      | `keyword_semantic`, `keyword_only`, `semantic_only`                   | Only meaningful when`TextSearchConfig.Mode="user_defined"`.                                              |
+| `Config.PerDatasetConfigs[].ImageSearchConfig.InstructionType`           | `preset_image`, `preset_item`, `custom`                               | `custom` requires a non-empty `ImageInstruction`.                                                      |
+| `Config.PerDatasetConfigs[].PersonalizedRecallConfig.Mode`               | `strong`, `weak`                                                        | If the user asks for strong personalization, set both`Enable=true` and `Mode="strong"`.                |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel`                    | `gte-rerank`, `doubao-rerank`                                           | `doubao-rerank` enables multimodal rerank configuration.                                                 |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.ItemFeature` | `text`, `mixed`, `image`                                              | Only effective with`RerankModel="doubao-rerank"`.                                                        |
+| `Config.PerDatasetConfigs[].SortRulesConfig.Rules[].Order`               | `asc`, `desc`                                                           | Sort ascending or descending by the configured field.                                                      |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowType`            | `SLIDE`, `TOP`                                                          | Empty value is normalized to`SLIDE` by service behavior.                                                 |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleType`           | `dimension`, `expression`                                               | Empty value is accepted for legacy dimension-shuffle behavior; expression shuffle requires`ShuffleExpr`. |
+| `Config.PerDatasetConfigs[].CorrectionConfig.Mode`                       | `auto`, `suggestion_only`                                               | `auto` directly rewrites the query; `suggestion_only` returns suggestions only.                        |
+| `Config.PerDatasetConfigs[].CorrectionConfig.MatchMode`                  | `exact`, `partial`                                                      | Match mode for correction dictionary matching.                                                             |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].ScoreType`     | `keyword`, `text_semantic`, `image_semantic`, `final`               | Relevance score used for cutoff.                                                                           |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Mode`          | `static`, `relative`                                                    | `static` uses a fixed threshold; `relative` compares with the top score.                               |
+
+### Numeric and Length Constraints
+
+| Field                                                                        | Constraint                                                                                                                                             | Notes                                                                                                                               |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Config.WantToSearchConfig.MinWordLength`                                  | `> 0`                                                                                                                                                | Must be no greater than`MaxWordLength`.                                                                                           |
+| `Config.WantToSearchConfig.MaxWordLength`                                  | `> 0`                                                                                                                                                | Must be no less than`MinWordLength`.                                                                                              |
+| `Config.WantToSearchConfig.WordNum`                                        | `>= 0`                                                                                                                                               | Default response value is usually`5`.                                                                                             |
+| `Config.QueryCompletionConfig.SugMaxRecallNum`                             | no independent hard validation in the scene patch layer                                                                                                | Non-positive stored values are normalized to the default value in readback.                                                         |
+| `Config.QueryCompletionConfig.SugMinNum`                                   | no independent hard validation in the scene patch layer                                                                                                | Non-positive stored values are normalized to the default value in readback.                                                         |
+| `Config.PerDatasetConfigs[].TextSearchConfig.QueryKeywordMatchPercent`     | `(0, 1]` when present                                                                                                                                | Do not configure when`Mode="user_defined"` and `UserDefinedRecallMode="semantic_only"`.                                         |
+| `Config.PerDatasetConfigs[].TextSearchConfig.TextWeight`                   | `[0, 1]`                                                                                                                                             | Only meaningful when`Mode="user_defined"` and `UserDefinedRecallMode="semantic_only"`.                                          |
+| `Config.PerDatasetConfigs[].TextSearchConfig.DenseWeight`                  | `[0, 1]`                                                                                                                                             | Only meaningful when`Mode="user_defined"` and `UserDefinedRecallMode` is `keyword_semantic` or `semantic_only`.             |
+| `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Boost`             | `[-1, 1]`                                                                                                                                            | Positive values boost; negative values bury.                                                                                        |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ID`                      | non-zero and unique within the rule list                                                                                                               | Rule ID may be generated by service behavior when omitted through higher-level tooling, but persisted rules must have non-zero IDs. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].Name`                    | non-empty                                                                                                                                              | Required for each shuffle rule.                                                                                                     |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].FieldName`               | non-empty                                                                                                                                              | Must also satisfy the field-reference constraints below.                                                                            |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowSize`              | `> 0` and `>= MaxSize` or `RecallMax`                                                                                                            | `MaxSize` takes precedence; `RecallMax` is legacy compatibility.                                                                |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].MaxSize` / `RecallMax` | at least one effective value`> 0`                                                                                                                    | `RecallMax` is legacy compatibility.                                                                                              |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr`             | non-empty when`ShuffleType="expression"`                                                                                                             | Expression shuffle is invalid without an expression body.                                                                           |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.Instruction`   | length`<= 1023`                                                                                                                                      | User-editable Doubao rerank instruction.                                                                                            |
+| `Config.PerDatasetConfigs[].FacetConfig.Facets[].MaxFacetBuckets`          | `1..50` when non-zero                                                                                                                                | Default is`10` for enumerable facet fields.                                                                                       |
+| `Config.PerDatasetConfigs[].FacetConfig.Facets[].NumberRanges[]`           | at least one bound; do not set both`Lt` and `Lte`, or both `Gt` and `Gte`; lower bound must be less than upper bound                           | Applies to numeric facet ranges.                                                                                                    |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].Threshold`       | finite and`>= 0`; additionally `<= 1` for `Mode="relative"` and for `Mode="static"` with `ScoreType` `text_semantic` or `image_semantic` | `static` thresholds for `keyword` and `final` use the corresponding score scale.                                              |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Fallback.MinResultCount` | `> 0` when fallback is enabled                                                                                                                       | Applies only when`Fallback.Enable=true`.                                                                                          |
+
+### FilterConfig Rule Materialization
+
+`Config.PerDatasetConfigs[].FilterConfig` and `ServingControlConfig.ServingControls[].FilterConfig` model the search-scene item-scope filter as a `search_filter` recommend rule.
+
+- If `FilterConfig.RuleId` is a non-empty string, the backend loads that stored `search_filter` rule for the same application and dataset. In this mode request `Name` and `Config` are ignored.
+- If `FilterConfig.RuleId` is omitted or empty and `FilterConfig.Config` is non-empty, send the desired filter DSL in `Config` and optional `Name`; do not invent a `RuleId`. During non-dry-run publish, the backend creates or upserts the backing `search_filter` rule and writes the generated `RuleId` back into the scene config.
+- If both `RuleId` and `Config` are absent, the filter rule binding is not changed. If either field is explicitly present but both resolve to empty, the item-scope filter is cleared.
+- `FilterConfig.ItemTypeFilter` is independent from the generated backing rule ID: it may be updated without changing `RuleId`, `Name`, or `Config`.
+
+### Cross-config Constraints
+
+- For one dataset, `ShuffleConfig.Rules[].ID` values must be unique across the dataset-level shuffle config and all `ServingControlConfig.ServingControls[].ShuffleConfig` blocks.
+- For one dataset, `BoostBuryCondConfig.Rules[].ID` values must be unique across the dataset-level boost/bury config and all `ServingControlConfig.ServingControls[].BoostBuryCondConfig` blocks.
+- `WantToSearchConfig.DictIds[]` must reference existing dictionaries of type `query_recommendation`.
+- `QueryCompletionConfig.DictIds[]` must reference existing dictionaries of type `query_completion`.
+- `CorrectionConfig.DictIds[]` must reference existing dictionaries of type `query_correction_exemption`.
+- `SynonymConfig.DictIds[]` must reference existing dictionaries of type `bidirection_synonyms` or `unidirection_synonyms`.
+- `FilterConfig.ItemTypeFilter` is only valid when the dataset schema has an ItemType business attribute and its paired ParentId business attribute; the ItemType field must be filterable.
+
+### Shuffle Expression Shape
+
+`Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr` is used only when `ShuffleType="expression"`. It is a single leaf expression object, not a recursive condition tree.
+
+Required shape:
+
+```json
+{
+  "field": "<dataset-field-name>",
+  "op": "must",
+  "conds": ["<value>"]
+}
+```
+
+Allowed stored `op` values are `must`, `must_not`, and `range`.
+
+| `ShuffleExpr.field` field type | Allowed stored `op` | Value shape | Frontend meaning |
 | --- | --- | --- | --- |
-| `ProjectName` | string | See service validation | Project name. |
-| `ApplicationId` | string | See service validation | Application id. |
-| `SceneId` | string | See service validation | Scene ID. |
-| `Config` | SearchSceneConfigV2 | See service validation | Config. |
-| `DryRun` | bool | See service validation | Dry-run flag. |
-| `Config.WantToSearchConfig` | WantToSearchConfigV2 | See service validation | Want to search config. |
-| `Config.QueryCompletionConfig` | QueryCompletionConfigV2 | See service validation | Query completion config. |
-| `Config.OverviewConfig` | OverviewConfig | See service validation | Overview config. |
-| `Config.PerDatasetConfigs[]` | array<PerDatasetConfig> | No | Per dataset configs. |
-| `Config.WantToSearchConfig.MinWordLength` | int64 | See service validation | Min word length. |
-| `Config.WantToSearchConfig.MaxWordLength` | int64 | See service validation | Max word length. |
-| `Config.WantToSearchConfig.WordNum` | int64 | See service validation | Word num. |
-| `Config.WantToSearchConfig.Enable` | bool | No | Enable. |
-| `Config.WantToSearchConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `Config.WantToSearchConfig.EnableApiLog` | bool | No | Enable api log. |
-| `Config.QueryCompletionConfig.SugMaxRecallNum` | int64 | See service validation | Sug max recall num. |
-| `Config.QueryCompletionConfig.SugMinNum` | int64 | See service validation | Sug min num. |
-| `Config.QueryCompletionConfig.Enable` | bool | No | Enable. |
-| `Config.QueryCompletionConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `Config.QueryCompletionConfig.EnableApiLog` | bool | No | Enable api log. |
-| `Config.OverviewConfig.Mode` | string | See service validation | Mode. |
-| `Config.OverviewConfig.TriggerPrompt` | string | See service validation | Trigger prompt. |
-| `Config.OverviewConfig.ContentPrompt` | string | See service validation | Content prompt. |
-| `Config.OverviewConfig.EnableOverview` | bool | See service validation | Enable overview. |
-| `Config.PerDatasetConfigs[].DatasetId` | string | See service validation | Dataset ID. |
-| `Config.PerDatasetConfigs[].TextSearchConfig` | TextSearchConfig | See service validation | Text search config. |
-| `Config.PerDatasetConfigs[].ImageSearchConfig` | ImageSearchConfig | See service validation | Image search config. |
-| `Config.PerDatasetConfigs[].MaxRecallNum` | int64 | No | Max recall num. |
-| `Config.PerDatasetConfigs[].FilterConfig` | FilterConfigV2 | See service validation | Filter config. |
-| `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig` | AuxiliaryPoolsConfig | See service validation | Auxiliary pools config. |
-| `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
-| `Config.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
-| `Config.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `Config.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
-| `Config.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
-| `Config.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
-| `Config.PerDatasetConfigs[].ServingControlConfig` | ServingControlConfig | See service validation | Serving control config. |
-| `Config.PerDatasetConfigs[].CorrectionConfig` | CorrectionConfigV2 | See service validation | Correction config. |
-| `Config.PerDatasetConfigs[].SynonymConfig` | SynonymConfigV2 | See service validation | Synonym config. |
-| `Config.PerDatasetConfigs[].FacetConfig` | FacetConfig | See service validation | Facet config. |
-| `Config.PerDatasetConfigs[].RelevanceCutoffConfig` | RelevanceCutoffConfig | See service validation | Relevance cutoff config. |
+| `string` | `must`, `must_not` | `conds: string[]` | Contains / does not contain the listed values. |
+| `int32`, `int64` | `must`, `must_not` | `conds: number[]` | Equals / not equals the listed numeric values. |
+| `int32`, `int64` | `range` | One or more numeric bounds from `gt`, `gte`, `lt`, `lte`; frontend interval input supplies one lower and one upper bound | Numeric comparison or interval. |
+| `float` | `range` | Numeric `gt`, `lt`, or both; frontend interval input emits open intervals only | Float comparison or open interval. |
+| `bool` | `must`, `must_not` | `conds: [true]` or `conds: [false]` | Equals / not equals the boolean value. |
+| `array<string>`, `array<int32>`, `array<int64>`, `array<float>` | `must`, `must_not` | `conds` array whose element type matches the field | Array contains / does not contain the listed values. |
+
+Do not use `and`, `or`, `partial_match`, query dynamic operators, or nested rule trees in `ShuffleExpr`.
+
+### Field-Reference Constraints
+
+The following fields must use exact dataset schema field names and are case-sensitive:
+
+- `Config.PerDatasetConfigs[].PersonalizedRecallConfig.UserInterest[].InterestField`; when personalization is enabled, each referenced interest field must be filterable in the app dataset config.
+- `Config.PerDatasetConfigs[].SortRulesConfig.Rules[].Field`.
+- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].FieldName`.
+- `Config.PerDatasetConfigs[].FilterConfig.Config.field`.
+- `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[].Filter.field`.
+- Fields inside `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Config`.
+- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr.field` when `ShuffleType="expression"`.
+- `Config.PerDatasetConfigs[].FacetConfig.Facets[].Field`; facet fields must be filterable and supported for enum or numeric aggregation.
+
+### Condition DSL Shapes
+
+The condition tree is used by `FilterConfig.Config`, `AuxiliaryPoolsConfig.Pools[].Filter`, `BoostBuryCondConfig.Rules[].Config`, and `ServingControlConfig.ServingControls[].QueryCondition`. The exact leaf operators differ by target field.
+
+Common tree constraints:
+
+- `FilterConfig.Config` and `BoostBuryCondConfig.Rules[].Config` allow at most 2 logic layers.
+- `AuxiliaryPoolsConfig.Pools[].Filter` allows at most 2 logic layers and at most 5 leaf conditions.
+- `ServingControlConfig.ServingControls[].QueryCondition` allows at most 2 logic layers and at most 5 leaf conditions, and the serialized `QueryCondition` struct must be at most 1024 bytes.
+- `ServingControlConfig.ServingControls[]` child config blocks use the same enum-like values and numeric constraints as their top-level counterparts.
+
+For a single item-field condition, use the canonical leaf-node shape directly. The `Filter` / `Config` / `QueryCondition` object itself must contain `field`, `op`, and value fields at the top level:
+
+```json
+{
+  "field": "category",
+  "op": "must",
+  "conds": ["TShirt"]
+}
+```
+
+Do not wrap a single leaf condition inside `{"op":"and","conds":[...]}` or `{"op":"or","conds":[...]}`. Logical nodes are only for composing two or more child conditions:
+
+```json
+{
+  "op": "and",
+  "conds": [
+    {"field": "brand", "op": "must", "conds": ["Acme"]},
+    {"field": "price", "op": "range", "gte": 100}
+  ]
+}
+```
+
+Use `op="or"` for disjunction. For logical nodes, `conds` must be a non-empty array of child condition nodes.
+
+Item-field condition leaf operators:
+
+| Target config | Allowed leaf `op` values | Value shape and constraints |
+| --- | --- | --- |
+| `FilterConfig.Config` | `must`, `must_not`, `range`, `range_out`, `time_range`, `geo_range` | `field` must be a filterable dataset field. `must` / `must_not` use non-empty `conds`. `range` / `range_out` use one or more numeric bounds from `gt`, `gte`, `lt`, `lte`. `time_range` uses `gt` / `gte` / `lt` / `lte` with numeric timestamps or `now()` expressions. `geo_range` requires `center` and `radius`. |
+| `AuxiliaryPoolsConfig.Pools[].Filter` | Same as `FilterConfig.Config`, plus `partial_match`, `query_equal`, `query_in`, `query_partial_match` | Same shape as `FilterConfig.Config`, with at most 5 leaf conditions. `partial_match` uses non-empty string `conds` on `string` or `array<string>` fields. Query dynamic operators use the request query and must not carry static `conds` except missing, `null`, or `[]`; `query_equal` supports `string`, while `query_in` and `query_partial_match` support `string` and `array<string>`. Query dynamic operators and `partial_match` require a `full_text` ES index. |
+| `BoostBuryCondConfig.Rules[].Config` | `must`, `must_not`, `any_must`, `any_must_not`, `partial_match`, `range`, `time_range`, `geo_distance`, `query_equal`, `query_in`, `query_partial_match` | `field` must exist in the dataset schema. `must` / `must_not` support `string`, `bool`, `int32`, `int64`, timestamp/date fields, `array<string>`, `array<int32>`, and `array<int64>`. `range` supports `int32`, `int64`, `float`, and timestamp fields. `time_range` is for publish-time timestamp/date fields. `partial_match` supports non-empty string `conds` on `string` and `array<string>`. `any_must` / `any_must_not` are only for `array<object>` paths such as `items[*].tag`, with exactly one `[*].` segment, no nested child path after it, and one value in `conds`. `geo_distance` uses a longitude,latitude field pair and `mode` `inner` or `outer` with `radius` such as `1000m`. Query dynamic operators follow the same no-static-`conds` and field-type rules as above. |
+
+Frontend aliases such as `eq`, `ne`, `contains`, `not_contains`, `within`, `time_lt`, and `time_gt` are form-level operators; API payloads should use the stored forms above.
+
+`ServingControlConfig.ServingControls[].QueryCondition` is not an item-field condition. It can only use these fields and operators:
+
+| `field` | Allowed leaf `op` | Value shape |
+| --- | --- | --- |
+| `query` | `contains`, `must` | Non-empty `conds: string[]`. `contains` means the search query contains any listed string; `must` means the search query equals one listed string. |
+| `query_type` | `contains`, `must` | Non-empty `conds` using only `number` or `alnum`. `number` means the query is all digits; `alnum` means the query is ASCII letters and digits. |
+| `query_length` | `range` | One or more non-negative integer bounds from `gt`, `gte`, `lt`, `lte`. At least one bound is required; if both sides are present, the lower bound must not exceed the upper bound, and equal open bounds are invalid. |
+
+To trigger a serving control by query text, use `field="query"`, for example:
+
+```json
+{
+  "field": "query",
+  "op": "contains",
+  "conds": ["golf shoes"]
+}
+```
+
+Do not encode a serving-control query trigger as `{"query":"golf shoes"}`. Do not use item-field operators such as `query_in`, `query_partial_match`, `partial_match`, `must_not`, `time_range`, or `geo_distance` inside `QueryCondition`.
 
 ## Response Parameters
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `ApplicationId` | string | See service validation | Application id. |
-| `SceneId` | string | See service validation | Scene ID. |
-| `Name` | string | See service validation | Name. |
-| `Description` | string | See service validation | Description. |
-| `CreateTime` | string | See service validation | Create time. |
-| `UpdateTime` | string | See service validation | Update time. |
-| `UpdatedBy` | int64 | See service validation | Updated by. |
-| `IsDefault` | bool | See service validation | Is default. |
-| `Status` | string | See service validation | Status. |
-| `Config` | SearchSceneConfigV2 | See service validation | Config. |
-| `DraftConfig` | SearchSceneConfigV2 | See service validation | Draft config. |
-| `Config.WantToSearchConfig` | WantToSearchConfigV2 | See service validation | Want to search config. |
-| `Config.QueryCompletionConfig` | QueryCompletionConfigV2 | See service validation | Query completion config. |
-| `Config.OverviewConfig` | OverviewConfig | See service validation | Overview config. |
-| `Config.PerDatasetConfigs[]` | array<PerDatasetConfig> | No | Per dataset configs. |
-| `DraftConfig.WantToSearchConfig` | WantToSearchConfigV2 | See service validation | Want to search config. |
-| `DraftConfig.QueryCompletionConfig` | QueryCompletionConfigV2 | See service validation | Query completion config. |
-| `DraftConfig.OverviewConfig` | OverviewConfig | See service validation | Overview config. |
-| `DraftConfig.PerDatasetConfigs[]` | array<PerDatasetConfig> | No | Per dataset configs. |
-| `Config.WantToSearchConfig.MinWordLength` | int64 | See service validation | Min word length. |
-| `Config.WantToSearchConfig.MaxWordLength` | int64 | See service validation | Max word length. |
-| `Config.WantToSearchConfig.WordNum` | int64 | See service validation | Word num. |
-| `Config.WantToSearchConfig.Enable` | bool | No | Enable. |
-| `Config.WantToSearchConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `Config.WantToSearchConfig.EnableApiLog` | bool | No | Enable api log. |
-| `Config.QueryCompletionConfig.SugMaxRecallNum` | int64 | See service validation | Sug max recall num. |
-| `Config.QueryCompletionConfig.SugMinNum` | int64 | See service validation | Sug min num. |
-| `Config.QueryCompletionConfig.Enable` | bool | No | Enable. |
-| `Config.QueryCompletionConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `Config.QueryCompletionConfig.EnableApiLog` | bool | No | Enable api log. |
-| `Config.OverviewConfig.Mode` | string | See service validation | Mode. |
-| `Config.OverviewConfig.TriggerPrompt` | string | See service validation | Trigger prompt. |
-| `Config.OverviewConfig.ContentPrompt` | string | See service validation | Content prompt. |
-| `Config.OverviewConfig.EnableOverview` | bool | See service validation | Enable overview. |
-| `Config.PerDatasetConfigs[].DatasetId` | string | See service validation | Dataset ID. |
-| `Config.PerDatasetConfigs[].TextSearchConfig` | TextSearchConfig | See service validation | Text search config. |
-| `Config.PerDatasetConfigs[].ImageSearchConfig` | ImageSearchConfig | See service validation | Image search config. |
-| `Config.PerDatasetConfigs[].MaxRecallNum` | int64 | No | Max recall num. |
-| `Config.PerDatasetConfigs[].FilterConfig` | FilterConfigV2 | See service validation | Filter config. |
-| `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig` | AuxiliaryPoolsConfig | See service validation | Auxiliary pools config. |
-| `Config.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
-| `Config.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
-| `Config.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `Config.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
-| `Config.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
-| `Config.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
-| `Config.PerDatasetConfigs[].ServingControlConfig` | ServingControlConfig | See service validation | Serving control config. |
-| `Config.PerDatasetConfigs[].CorrectionConfig` | CorrectionConfigV2 | See service validation | Correction config. |
-| `Config.PerDatasetConfigs[].SynonymConfig` | SynonymConfigV2 | See service validation | Synonym config. |
-| `Config.PerDatasetConfigs[].FacetConfig` | FacetConfig | See service validation | Facet config. |
-| `Config.PerDatasetConfigs[].RelevanceCutoffConfig` | RelevanceCutoffConfig | See service validation | Relevance cutoff config. |
-| `DraftConfig.WantToSearchConfig.MinWordLength` | int64 | See service validation | Min word length. |
-| `DraftConfig.WantToSearchConfig.MaxWordLength` | int64 | See service validation | Max word length. |
-| `DraftConfig.WantToSearchConfig.WordNum` | int64 | See service validation | Word num. |
-| `DraftConfig.WantToSearchConfig.Enable` | bool | No | Enable. |
-| `DraftConfig.WantToSearchConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `DraftConfig.WantToSearchConfig.EnableApiLog` | bool | No | Enable api log. |
-| `DraftConfig.QueryCompletionConfig.SugMaxRecallNum` | int64 | See service validation | Sug max recall num. |
-| `DraftConfig.QueryCompletionConfig.SugMinNum` | int64 | See service validation | Sug min num. |
-| `DraftConfig.QueryCompletionConfig.Enable` | bool | No | Enable. |
-| `DraftConfig.QueryCompletionConfig.DictIds[]` | array<string> | No | Dict ids. |
-| `DraftConfig.QueryCompletionConfig.EnableApiLog` | bool | No | Enable api log. |
-| `DraftConfig.OverviewConfig.Mode` | string | See service validation | Mode. |
-| `DraftConfig.OverviewConfig.TriggerPrompt` | string | See service validation | Trigger prompt. |
-| `DraftConfig.OverviewConfig.ContentPrompt` | string | See service validation | Content prompt. |
-| `DraftConfig.OverviewConfig.EnableOverview` | bool | See service validation | Enable overview. |
-| `DraftConfig.PerDatasetConfigs[].DatasetId` | string | See service validation | Dataset ID. |
-| `DraftConfig.PerDatasetConfigs[].TextSearchConfig` | TextSearchConfig | See service validation | Text search config. |
-| `DraftConfig.PerDatasetConfigs[].ImageSearchConfig` | ImageSearchConfig | See service validation | Image search config. |
-| `DraftConfig.PerDatasetConfigs[].MaxRecallNum` | int64 | No | Max recall num. |
-| `DraftConfig.PerDatasetConfigs[].FilterConfig` | FilterConfigV2 | See service validation | Filter config. |
-| `DraftConfig.PerDatasetConfigs[].AuxiliaryPoolsConfig` | AuxiliaryPoolsConfig | See service validation | Auxiliary pools config. |
-| `DraftConfig.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall | See service validation | Personalized recall config. |
-| `DraftConfig.PerDatasetConfigs[].EnableRerankWithHot` | bool | No | Enable rerank with hot. |
-| `DraftConfig.PerDatasetConfigs[].RerankConfig` | RerankConfig | See service validation | Rerank config. |
-| `DraftConfig.PerDatasetConfigs[].BoostBuryCondConfig` | BoostBuryCondConfig | See service validation | Boost bury cond config. |
-| `DraftConfig.PerDatasetConfigs[].SortRulesConfig` | SortRulesConfig | See service validation | Sort rules config. |
-| `DraftConfig.PerDatasetConfigs[].ShuffleConfig` | ShuffleConfig | See service validation | Shuffle config. |
-| `DraftConfig.PerDatasetConfigs[].ServingControlConfig` | ServingControlConfig | See service validation | Serving control config. |
-| `DraftConfig.PerDatasetConfigs[].CorrectionConfig` | CorrectionConfigV2 | See service validation | Correction config. |
-| `DraftConfig.PerDatasetConfigs[].SynonymConfig` | SynonymConfigV2 | See service validation | Synonym config. |
-| `DraftConfig.PerDatasetConfigs[].FacetConfig` | FacetConfig | See service validation | Facet config. |
-| `DraftConfig.PerDatasetConfigs[].RelevanceCutoffConfig` | RelevanceCutoffConfig | See service validation | Relevance cutoff config. |
+| Field                                                        | Type                                       | Required               | Description                                            |
+| ------------------------------------------------------------ | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
+| `ApplicationId`                                            | string                                     | See service validation | Application id.                                        |
+| `SceneId`                                                  | string                                     | See service validation | Scene ID.                                              |
+| `Name`                                                     | string                                     | See service validation | Name.                                                  |
+| `Description`                                              | string                                     | See service validation | Description.                                           |
+| `CreateTime`                                               | string                                     | See service validation | Create time.                                           |
+| `UpdateTime`                                               | string                                     | See service validation | Update time.                                           |
+| `UpdatedBy`                                                | int64                                      | See service validation | Updated by.                                            |
+| `IsDefault`                                                | bool                                       | See service validation | Is default.                                            |
+| `Status`                                                   | string                                     | See service validation | Status.                                                |
+| `Config`                                                   | SearchSceneConfigV2                        | See service validation | Config.                                                |
+| `DraftConfig`                                              | SearchSceneConfigV2                        | See service validation | Draft config.                                          |
+| `Config.WantToSearchConfig`                                | WantToSearchConfigV2                       | See service validation | Want to search config.                                 |
+| `Config.QueryCompletionConfig`                             | QueryCompletionConfigV2                    | See service validation | Query completion config.                               |
+| `Config.OverviewConfig`                                    | OverviewConfig                             | See service validation | Overview config.                                       |
+| `Config.PerDatasetConfigs[]`                               | array<PerDatasetConfig></perdatasetconfig> | No                     | Per dataset configs.                                   |
+| `DraftConfig.WantToSearchConfig`                           | WantToSearchConfigV2                       | See service validation | Want to search config.                                 |
+| `DraftConfig.QueryCompletionConfig`                        | QueryCompletionConfigV2                    | See service validation | Query completion config.                               |
+| `DraftConfig.OverviewConfig`                               | OverviewConfig                             | See service validation | Overview config.                                       |
+| `DraftConfig.PerDatasetConfigs[]`                          | array<PerDatasetConfig></perdatasetconfig> | No                     | Per dataset configs.                                   |
+| `Config.WantToSearchConfig.MinWordLength`                  | int64                                      | See service validation | Min word length.                                       |
+| `Config.WantToSearchConfig.MaxWordLength`                  | int64                                      | See service validation | Max word length.                                       |
+| `Config.WantToSearchConfig.WordNum`                        | int64                                      | See service validation | Word num.                                              |
+| `Config.WantToSearchConfig.Enable`                         | bool                                       | No                     | Enable.                                                |
+| `Config.WantToSearchConfig.DictIds[]`                      | array<string></string>                     | No                     | Dict ids.                                              |
+| `Config.WantToSearchConfig.EnableApiLog`                   | bool                                       | No                     | Enable api log.                                        |
+| `Config.QueryCompletionConfig.SugMaxRecallNum`             | int64                                      | See service validation | Sug max recall num.                                    |
+| `Config.QueryCompletionConfig.SugMinNum`                   | int64                                      | See service validation | Sug min num.                                           |
+| `Config.QueryCompletionConfig.Enable`                      | bool                                       | No                     | Enable.                                                |
+| `Config.QueryCompletionConfig.DictIds[]`                   | array<string></string>                     | No                     | Dict ids.                                              |
+| `Config.QueryCompletionConfig.EnableApiLog`                | bool                                       | No                     | Enable api log.                                        |
+| `Config.OverviewConfig.Mode`                               | string                                     | See service validation | Mode.                                                  |
+| `Config.OverviewConfig.TriggerPrompt`                      | string                                     | See service validation | Trigger prompt.                                        |
+| `Config.OverviewConfig.ContentPrompt`                      | string                                     | See service validation | Content prompt.                                        |
+| `Config.OverviewConfig.EnableOverview`                     | bool                                       | See service validation | Enable overview.                                       |
+| `Config.PerDatasetConfigs[].DatasetId`                     | string                                     | See service validation | Dataset ID.                                            |
+| `Config.PerDatasetConfigs[].TextSearchConfig`              | TextSearchConfig                           | See service validation | Text search config.                                    |
+| `Config.PerDatasetConfigs[].ImageSearchConfig`             | ImageSearchConfig                          | See service validation | Image search config.                                   |
+| `Config.PerDatasetConfigs[].MaxRecallNum`                  | int64                                      | No                     | Max recall num.                                        |
+| `Config.PerDatasetConfigs[].FilterConfig`                  | FilterConfigV2                             | See service validation | Filter config.                                         |
+| `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig`          | AuxiliaryPoolsConfig                       | See service validation | Auxiliary pools config.                                |
+| `Config.PerDatasetConfigs[].PersonalizedRecallConfig`      | PersonalizedRecall                         | See service validation | Personalized recall config.                            |
+| `Config.PerDatasetConfigs[].EnableRerankWithHot`           | bool                                       | No                     | Enable rerank with hot.                                |
+| `Config.PerDatasetConfigs[].RerankConfig`                  | RerankConfig                               | See service validation | Rerank config.                                         |
+| `Config.PerDatasetConfigs[].RerankConfig.RerankModel`      | string                                     | See service validation | Rerank model. Enum:`gte-rerank` / `doubao-rerank`. |
+| `Config.PerDatasetConfigs[].BoostBuryCondConfig`           | BoostBuryCondConfig                        | See service validation | Boost bury cond config.                                |
+| `Config.PerDatasetConfigs[].SortRulesConfig`               | SortRulesConfig                            | See service validation | Sort rules config.                                     |
+| `Config.PerDatasetConfigs[].ShuffleConfig`                 | ShuffleConfig                              | See service validation | Shuffle config.                                        |
+| `Config.PerDatasetConfigs[].ServingControlConfig`          | ServingControlConfig                       | See service validation | Serving control config.                                |
+| `Config.PerDatasetConfigs[].CorrectionConfig`              | CorrectionConfigV2                         | See service validation | Correction config.                                     |
+| `Config.PerDatasetConfigs[].SynonymConfig`                 | SynonymConfigV2                            | See service validation | Synonym config.                                        |
+| `Config.PerDatasetConfigs[].FacetConfig`                   | FacetConfig                                | See service validation | Facet config.                                          |
+| `Config.PerDatasetConfigs[].RelevanceCutoffConfig`         | RelevanceCutoffConfig                      | See service validation | Relevance cutoff config.                               |
+| `DraftConfig.WantToSearchConfig.MinWordLength`             | int64                                      | See service validation | Min word length.                                       |
+| `DraftConfig.WantToSearchConfig.MaxWordLength`             | int64                                      | See service validation | Max word length.                                       |
+| `DraftConfig.WantToSearchConfig.WordNum`                   | int64                                      | See service validation | Word num.                                              |
+| `DraftConfig.WantToSearchConfig.Enable`                    | bool                                       | No                     | Enable.                                                |
+| `DraftConfig.WantToSearchConfig.DictIds[]`                 | array<string></string>                     | No                     | Dict ids.                                              |
+| `DraftConfig.WantToSearchConfig.EnableApiLog`              | bool                                       | No                     | Enable api log.                                        |
+| `DraftConfig.QueryCompletionConfig.SugMaxRecallNum`        | int64                                      | See service validation | Sug max recall num.                                    |
+| `DraftConfig.QueryCompletionConfig.SugMinNum`              | int64                                      | See service validation | Sug min num.                                           |
+| `DraftConfig.QueryCompletionConfig.Enable`                 | bool                                       | No                     | Enable.                                                |
+| `DraftConfig.QueryCompletionConfig.DictIds[]`              | array<string></string>                     | No                     | Dict ids.                                              |
+| `DraftConfig.QueryCompletionConfig.EnableApiLog`           | bool                                       | No                     | Enable api log.                                        |
+| `DraftConfig.OverviewConfig.Mode`                          | string                                     | See service validation | Mode.                                                  |
+| `DraftConfig.OverviewConfig.TriggerPrompt`                 | string                                     | See service validation | Trigger prompt.                                        |
+| `DraftConfig.OverviewConfig.ContentPrompt`                 | string                                     | See service validation | Content prompt.                                        |
+| `DraftConfig.OverviewConfig.EnableOverview`                | bool                                       | See service validation | Enable overview.                                       |
+| `DraftConfig.PerDatasetConfigs[].DatasetId`                | string                                     | See service validation | Dataset ID.                                            |
+| `DraftConfig.PerDatasetConfigs[].TextSearchConfig`         | TextSearchConfig                           | See service validation | Text search config.                                    |
+| `DraftConfig.PerDatasetConfigs[].ImageSearchConfig`        | ImageSearchConfig                          | See service validation | Image search config.                                   |
+| `DraftConfig.PerDatasetConfigs[].MaxRecallNum`             | int64                                      | No                     | Max recall num.                                        |
+| `DraftConfig.PerDatasetConfigs[].FilterConfig`             | FilterConfigV2                             | See service validation | Filter config.                                         |
+| `DraftConfig.PerDatasetConfigs[].AuxiliaryPoolsConfig`     | AuxiliaryPoolsConfig                       | See service validation | Auxiliary pools config.                                |
+| `DraftConfig.PerDatasetConfigs[].PersonalizedRecallConfig` | PersonalizedRecall                         | See service validation | Personalized recall config.                            |
+| `DraftConfig.PerDatasetConfigs[].EnableRerankWithHot`      | bool                                       | No                     | Enable rerank with hot.                                |
+| `DraftConfig.PerDatasetConfigs[].RerankConfig`             | RerankConfig                               | See service validation | Rerank config.                                         |
+| `DraftConfig.PerDatasetConfigs[].RerankConfig.RerankModel` | string                                     | See service validation | Rerank model. Enum:`gte-rerank` / `doubao-rerank`. |
+| `DraftConfig.PerDatasetConfigs[].BoostBuryCondConfig`      | BoostBuryCondConfig                        | See service validation | Boost bury cond config.                                |
+| `DraftConfig.PerDatasetConfigs[].SortRulesConfig`          | SortRulesConfig                            | See service validation | Sort rules config.                                     |
+| `DraftConfig.PerDatasetConfigs[].ShuffleConfig`            | ShuffleConfig                              | See service validation | Shuffle config.                                        |
+| `DraftConfig.PerDatasetConfigs[].ServingControlConfig`     | ServingControlConfig                       | See service validation | Serving control config.                                |
+| `DraftConfig.PerDatasetConfigs[].CorrectionConfig`         | CorrectionConfigV2                         | See service validation | Correction config.                                     |
+| `DraftConfig.PerDatasetConfigs[].SynonymConfig`            | SynonymConfigV2                            | See service validation | Synonym config.                                        |
+| `DraftConfig.PerDatasetConfigs[].FacetConfig`              | FacetConfig                                | See service validation | Facet config.                                          |
+| `DraftConfig.PerDatasetConfigs[].RelevanceCutoffConfig`    | RelevanceCutoffConfig                      | See service validation | Relevance cutoff config.                               |
 
 ## Error Codes
 
-| Error code | Trigger condition | Handling guidance |
-| --- | --- | --- |
-| `InvalidParameter` | The request payload, path parameter, or query parameter is invalid. | Fix the request according to the request parameter table and IDL definition. |
-| `AccessDenied` | The current credential is not authorized to access the target resource. | Check the API key, AK/SK, project scope, and resource ownership. |
-| `ResourceNotFound` | The target resource does not exist or is not visible in the current project. | Verify resource IDs and project name. |
-| `OperationDenied` | The operation is not allowed for the current resource state or account state. | Check the resource status and service enablement state before retrying. |
-| `InternalError` | The service encountered an internal error. | Keep the request ID and retry or escalate for server-side investigation. |
-| `ServiceUnavailable` | The service is temporarily unavailable. | Retry later. |
+| Error code             | Trigger condition                                                             | Handling guidance                                                            |
+| ---------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `InvalidParameter`   | The request payload, path parameter, or query parameter is invalid.           | Fix the request according to the request parameter table and IDL definition. |
+| `AccessDenied`       | The current credential is not authorized to access the target resource.       | Check the API key, AK/SK, project scope, and resource ownership.             |
+| `ResourceNotFound`   | The target resource does not exist or is not visible in the current project.  | Verify resource IDs and project name.                                        |
+| `OperationDenied`    | The operation is not allowed for the current resource state or account state. | Check the resource status and service enablement state before retrying.      |
+| `InternalError`      | The service encountered an internal error.                                    | Keep the request ID and retry or escalate for server-side investigation.     |
+| `ServiceUnavailable` | The service is temporarily unavailable.                                       | Retry later.                                                                 |

@@ -16,6 +16,10 @@ Use this skill when the user wants an external agent to evaluate and tune text s
 
 This first version is for similarity tuning. It defaults to text-query/text-item judging, fixes `mode=UserDefined`, and tunes the user-defined recall strategy, recall weights, keyword match ratio, and max retrieved count. It can optionally use text+image LLM judging when visual relevance matters; image fields are taken only from `GetAppDataConfig.ImageIndexFields`. It does not tune rerank, personalization, hotness, boost/bury, sort rules, serving controls, or business operating rules.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 
 - an `application-id` is available

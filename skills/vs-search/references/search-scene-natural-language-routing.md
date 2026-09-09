@@ -9,6 +9,10 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 - scene config is `Config: SearchSceneConfigV2`.
 - dataset-level search settings live under `Config.PerDatasetConfigs[]`, keyed by `DatasetId`.
 - `search scene update` publishes via `PublishSearchSceneV2`; pass a partial V2 `Config` because absent child config fields are not overwritten.
+- `Config` supports partial updates, so include only the configuration area that should change. The publish request must still carry `ApplicationId`, `SceneId`, the target `DatasetId` for dataset-level updates, and the requested configuration content.
+- Do not use an incomplete `search scene update --data` or `--config` request to probe the service. Inspect command behavior and schema with read-only commands, then execute update only after the complete request envelope has been constructed.
+- If a publish returns `ResourceNotFound.Application`, stop and re-check the application/scene identity and environment before retrying.
+- Use this file only to identify the config area. Before deciding concrete string enum values, range limits, defaulting behavior, or required sibling fields, consult `../../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md`.
 
 ## Intent Routing
 
@@ -23,9 +27,11 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI s
 | enable image recall, disable image recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].ImageSearchConfig.Enable` |
 | image relevance cutoff, image similarity cutoff, truncate low-relevance image results, 图片相关性截断, 图片低相关性结果截断 | Run `search scene update` and modify `Config.PerDatasetConfigs[].RelevanceCutoffConfig`; use `Rules[].ScoreType=image_semantic` for image relevance |
 | recall count, recall upper bound, returned items upper bound | Run `search scene update` and modify `Config.PerDatasetConfigs[].MaxRecallNum` |
-| filter item scope, restrict search scope, search only within some items | Run `search scene update` and modify `Config.PerDatasetConfigs[].FilterConfig.Config`; optionally set `Config.PerDatasetConfigs[].FilterConfig.Name` |
+| filter item scope, restrict search scope, search only within some items | Run `search scene update` and modify `Config.PerDatasetConfigs[].FilterConfig.Config`; optionally set `Config.PerDatasetConfigs[].FilterConfig.Name`. Do not invent `FilterConfig.RuleId`: if no existing `search_filter` rule ID is being reused, send `Config` and let publish generate the backing rule ID. |
 | protected recall channel, guaranteed recall source, auxiliary recall pool | Run `search scene update` and modify `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[]` |
-| personalized recall, personalization on/off, user-interest recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig` |
+| strong personalization, strong personalized recall, 强个性化, 强个性化干预 | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; set `Enable=true` and `Mode="strong"`; preserve existing `UserInterest[]` unless the user asks to change it |
+| weak personalization, weak personalized recall, 弱个性化, 弱个性化干预 | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; set `Enable=true` and `Mode="weak"`; preserve existing `UserInterest[]` unless the user asks to change it |
+| personalized recall, personalization on/off, user-interest recall | Run `search scene update` and modify `Config.PerDatasetConfigs[].PersonalizedRecallConfig`; for concrete mode values and validation details, consult the `PublishSearchSceneV2` API reference before writing the payload |
 | hotness participates in ranking, rank with hotness | Run `search scene update` and modify `Config.PerDatasetConfigs[].EnableRerankWithHot` |
 | enable rerank, disable rerank | Run `search scene update` and modify `Config.PerDatasetConfigs[].RerankConfig.Enable` |
 | rerank topK, rerank count, rerank only top N | Run `search scene update` and modify `Config.PerDatasetConfigs[].RerankConfig.RerankTopK` |
@@ -76,28 +82,35 @@ First, determine the dictionary `Type` from the target config area:
 | QueryCompletionConfig (搜索补全) | `query_completion` | `Config.QueryCompletionConfig.DictIds` |
 | CorrectionConfig (搜索词纠错) | `query_correction_exemption` | `Config.PerDatasetConfigs[].CorrectionConfig.DictIds` |
 
-Then branch based on whether the user provides a CSV/term file or an existing `DictId`:
+Then branch based on whether the user provides a CSV/term file or an existing `DictId`.
 
 Path A - user provides a CSV/term file:
 
 1. Run `dict create --name <name> --type <type>` and capture the returned `DictId`.
 2. Run `dict get --dict-id <id>` to confirm creation.
-3. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
-4. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json` to bind the dictionary to target application scenes. For synonyms and correction dictionaries, include `DatasetId` in each scene entry (`{"AppId":"...","SceneId":"...","DatasetId":"..."}`).
-5. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+3. If the input needs validation, run `dict check-input` and stop on validation errors.
+4. Run `dict write-terms --dict-id <id> --file <file-path>` to import dictionary terms.
+5. Resolve the target `application-id`, `scene-id`, and, for dataset-level settings, `dataset-id` with `search scene get` before building the payload.
+6. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above. This command must publish through `PublishSearchSceneV2`.
+7. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
+
+Do not call `dict bind-scenes` / `BindDictToScenes` in this workflow. That API-level association does not replace publishing the target search scene configuration through `search scene update`.
 
 Path B - user provides an existing `DictId`:
 
-1. Run `dict bind-scenes --dict-id <id> --scenes @scenes.json`.
-2. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above.
+1. Resolve the target `application-id`, `scene-id`, and, for dataset-level settings, `dataset-id` with `search scene get` before building the payload.
+2. Run `search scene update` and write the dictionary ID into the matching V2 `DictIds` field above. This command must publish through `PublishSearchSceneV2`.
+3. Run `search scene get` to verify the dictionary ID is visible in the target scene config.
 
 ## Usage Note
 
 Use this file as a routing layer only. For command execution:
 
 1. identify the target action here,
-2. consult `vs-product-qa` and `vs search scene update --help`,
+2. consult `vs-product-qa`, `vs search scene update --help`, and `../../vs-product-qa/references/api-references/control-plane/scene/PublishSearchSceneV2.md` for enum-like strings and validation constraints,
 3. run the concrete command workflow,
 4. read the scene back after mutation.
 
 Field name case sensitivity: for any config area that references dataset field names (e.g. `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPoolsConfig.Pools[].Filter.field`), field names are case-sensitive. Before writing a field name into config, first look up the exact field name from the dataset schema via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`.
+
+Filter item scope note: `FilterConfig.RuleId` is only for reusing an existing stored `search_filter` rule. For a new item-scope filter, provide `FilterConfig.Config` and optional `Name`; the backend materializes the config into a `search_filter` rule during non-dry-run publish and returns the generated `RuleId` in scene readback.

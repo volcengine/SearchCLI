@@ -52,7 +52,6 @@ SearchCLI とインストール可能な `Viking skills` を組み合わせる�
 
 ## 主な機能
 
-- `vs item profile | plan | apply` による構造化 item のオンボーディング。
 - `vs app`、`vs dataset`、`vs data` によるアプリケーションとデータセットの管理。
 - `vs search run`、`vs recommend run`、`vs chat run` による実行時検証。
 - `vs search tune query-generate | plan | run | report` による初期版のテキスト類似度自動評価とチューニング。
@@ -102,49 +101,20 @@ vs search tune llm-check --live --json
 
 ### 3. 最初のオンボーディングフローを実行
 
-新しいアプリ作成、bind-time の設定レビュー、実行時検証まで必要な場合は、`dataset+app` パスを使います。
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-データセット作成と取り込みだけが必要な場合は、`dataset-only` パスを使います。plan 作成時に `--skip-app` を指定し、`dataset create + ingest` の後で完了します。
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-plan が `dataset-create.json` を出力した場合は、それを優先して使うことで `Schema` と `DataFieldConfig` をまとめて送信できます。完全な create payload がない場合や適さない場合は、`--name <dataset-name> --type item --schema @schema.json` 形式を手動の schema-only フォールバックとして使えます。
+データセットのみが必要な場合（アプリ不要）は、`vs data write` の後で終了してください。
 
-既存 plan から実行する場合でも、`dataset-only` の境界を強制したいときは、`vs item provision` と `vs item apply` の実行時ガードとして `--skip-app` を指定できます。
-
-動画データセットを作成する場合は、デフォルト型に依存せず、必ず `--type video` を明示してください。
-
-`dataset+app` の場合:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-`dataset-only` の場合:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-動画の `dataset-only` フローでは、`DataFieldConfig` も含めるために `dataset-create.json` を優先して使用してください。`--schema @schema.json` だけでは `MissingParameter.DefaultFieldStrategy` が発生する可能性があります。
+ユーザーイベントデータセットの場合は、`--type user_event` を使用し、`--theme` は省略してください。
 
 ## クイックスタート（AI Agent）
 

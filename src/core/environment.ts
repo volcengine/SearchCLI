@@ -14,7 +14,6 @@ export interface EnvironmentEndpoints {
   purchasePageUrl: string;
 }
 
-export const VOLCANO_PURCHASE_CN_BEIJING_DEV_URL = 'https://console.volcengine.com/common-buy/AISearch-DevTest%7C%7C7291580783171539244?ProjectName=default';
 export const VOLCANO_PURCHASE_CN_BEIJING_PROD_URL = 'https://console.volcengine.com/common-buy/REC-SaaS-LLM-SEARCH%7C%7C7291580783171539244'
 const VOLCANO_PURCHASE_CN_BEIJING_PAGE_URL = VOLCANO_PURCHASE_CN_BEIJING_PROD_URL;
 

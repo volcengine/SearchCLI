@@ -5,6 +5,7 @@ import './core/node-bootstrap';
 import { runPlatformDomainFromArgv } from './app/platform-commands';
 import { runProductDomainFromArgv } from './app/product-commands';
 import { runSkillDomainFromArgv } from './app/skill-commands';
+import { runCliVersionPreflight, runVersionCheckCommand } from './app/version-commands';
 import { printRootHelp } from './core/root-help';
 import { VERSION } from './version';
 
@@ -17,10 +18,17 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'version' && argv[1] === 'check') {
+    await runVersionCheckCommand();
+    return;
+  }
+
   if (command === '--version' || command === '-v' || command === 'version') {
     console.log(VERSION);
     return;
   }
+
+  await runCliVersionPreflight();
 
   if (command === 'skill') {
     await runSkillDomainFromArgv(argv.slice(1));

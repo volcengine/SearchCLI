@@ -52,7 +52,6 @@ Dengan SearchCLI dan `Viking skills` yang dapat diinstal, Agents eksternal dapat
 
 ## Kemampuan inti
 
-- `vs item profile | plan | apply` untuk onboarding item terstruktur.
 - `vs app`, `vs dataset`, dan `vs data` untuk manajemen aplikasi dan dataset.
 - `vs search run`, `vs recommend run`, dan `vs chat run` untuk verifikasi runtime.
 - `vs search tune query-generate | plan | run | report` untuk versi awal evaluasi dan tuning kemiripan teks otomatis.
@@ -102,49 +101,20 @@ Jika shell saat ini sudah memiliki `VIKING_LLM_BASE_URL`, `VIKING_LLM_API_KEY`, 
 
 ### 3. Jalankan onboarding flow pertama
 
-Jika pengguna menginginkan app baru plus review konfigurasi saat bind-time dan verifikasi runtime, gunakan jalur `dataset+app`:
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Jika Anda hanya membutuhkan provisioning dataset, gunakan jalur `dataset-only`, buat plan dataset-only dengan `--skip-app`, lalu berhenti setelah dataset create + ingest:
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-Utamakan `dataset-create.json` saat plan menghasilkannya agar pembuatan dataset menjaga `Schema` dan `DataFieldConfig` tetap bersama. Bentuk `--name <dataset-name> --type item --schema @schema.json` tetap menjadi fallback manual schema-only ketika payload create lengkap tidak tersedia atau tidak sesuai.
+Jika Anda hanya membutuhkan dataset (tanpa app), berhenti setelah `vs data write`.
 
-`--skip-app` juga diterima oleh `vs item provision` dan `vs item apply` sebagai guard rail saat eksekusi ketika Anda perlu memaksa batas dataset-only dari plan yang sudah ada.
-
-Jika Anda membutuhkan dataset video, jangan bergantung pada tipe default. Selalu berikan `--type video` secara eksplisit:
-
-Untuk `dataset+app`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-Untuk `dataset-only`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-Untuk provisioning dataset-only video, utamakan `dataset-create.json` agar request menyertakan `DataFieldConfig`; `--schema @schema.json` saja dapat gagal dengan `MissingParameter.DefaultFieldStrategy`.
+Untuk dataset peristiwa pengguna, gunakan `--type user_event` dan hilangkan `--theme`.
 
 ## Mulai cepat (AI Agents)
 

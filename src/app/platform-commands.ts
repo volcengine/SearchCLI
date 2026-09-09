@@ -4,7 +4,12 @@
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
-import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import {
+  hasHelpFlag,
+  isDomainHelpRequest,
+  renderUsageBlock,
+  withOpenApiReferenceHint
+} from '../core/help-utils';
 import { ApiRequestError } from '../core/http';
 import { printOutput } from '../core/output-format';
 import type { ServiceConfigInput } from '../core/service-config';
@@ -893,7 +898,7 @@ export function printPlatformDomainsHelp(): void {
     'vs llm login|import-env|status|logout',
     'vs doctor'
   ];
-  console.log(['PLATFORM COMMANDS', renderUsageBlock(publicLines)].join('\n'));
+  console.log(withOpenApiReferenceHint(['PLATFORM COMMANDS', renderUsageBlock(publicLines)].join('\n')));
 }
 
 function printDomainHelp(domain: string): void {
@@ -920,7 +925,7 @@ function printDomainHelp(domain: string): void {
   vs doctor [--project-name <name>] [--region <region>] [--base-url <url>] [--control-plane-base-url <url>] [--data-plane-base-url <url>] [--ak <id>] [--sk <secret>] [--timeout-ms <ms>] [--profile <name>] [--store auto|keychain|file|ephemeral] [--format <format>] [--jq <selector>] [--output <path>]`
   };
 
-  console.log(helpByDomain[domain] ?? `Unknown domain: ${domain}`);
+  console.log(withOpenApiReferenceHint(helpByDomain[domain] ?? `Unknown domain: ${domain}`));
 }
 
 async function runAuthCli(argv: string[]): Promise<void> {

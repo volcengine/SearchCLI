@@ -9,7 +9,7 @@ export default class RecommendSceneCreate extends Command {
   static override description = 'Create a recommend scene.';
 
   static override examples = [
-    '<%= config.bin %> recommend scene create --application-id 123 --type for_you --name homepage --item-dataset-id 456 --bhv-scene-types scene_a --confirm-entry-binding',
+    '<%= config.bin %> recommend scene create --application-id 123 --type for_you --name homepage --item-dataset-id 456 --user-event-scenes scene_a --confirm-entry-binding',
     '<%= config.bin %> recommend scene create --application-id 123 --data @recommend-scene.json --confirm-entry-binding'
   ];
 
@@ -21,11 +21,16 @@ export default class RecommendSceneCreate extends Command {
     name: Flags.string({ description: 'Recommend scene name.' }),
     description: Flags.string({ description: 'Recommend scene description.' }),
     'item-dataset-id': Flags.string({ description: 'Viking item dataset ID.' }),
-    'recommend-model': Flags.integer({ description: 'Recommend model enum value (0 for Default, 1 for LongSequence).' }),
-    'optimization-target': Flags.integer({ description: 'Recommend optimization target enum value (0 for None, 1 for Ctr).' }),
-    'bhv-scene-types': Flags.string({
-      description: 'Comma-separated behavior scene types. Required unless --data already includes BhvSceneTypes.'
+    'recommend-model': Flags.string({ description: 'Recommend model code: default or long_sequence.' }),
+    'optimization-target': Flags.string({ description: 'Recommend optimization target code, for example ctr.' }),
+    'user-event-scenes': Flags.string({
+      description: 'Comma-separated UserEvent event_scene values. Required unless --data already includes UserEventScenes.'
     }),
+    'bhv-scene-types': Flags.string({
+      description: 'Deprecated alias of --user-event-scenes.'
+    }),
+    'filter-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for FilterConfig.' }),
+    'dry-run': Flags.boolean({ description: 'Validate without creating or publishing the recommend scene.' }),
     'confirm-entry-binding': Flags.boolean({
       description: 'Required for real writes. Confirms the user already chose the target page or module for this recommend scene.'
     }),
@@ -54,7 +59,9 @@ export default class RecommendSceneCreate extends Command {
       itemDatasetId: flags['item-dataset-id'],
       recommendModel: flags['recommend-model'],
       optimizationTarget: flags['optimization-target'],
-      bhvSceneTypes: flags['bhv-scene-types'],
+      userEventScenes: flags['user-event-scenes'] ?? flags['bhv-scene-types'],
+      filterConfig: flags['filter-config'],
+      dryRun: flags['dry-run'],
       confirmEntryBinding: flags['confirm-entry-binding'],
       clickEventTypes: flags['click-event-types'],
       positiveEventTypes: flags['positive-event-types'],

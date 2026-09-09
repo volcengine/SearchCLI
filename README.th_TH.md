@@ -52,7 +52,6 @@ SearchCLI คือ CLI แบบเปิดสำหรับ AI Search on Vol
 
 ## ความสามารถหลัก
 
-- `vs item profile | plan | apply` สำหรับ onboarding item แบบมีโครงสร้าง
 - `vs app`, `vs dataset` และ `vs data` สำหรับจัดการแอปพลิเคชันและ dataset
 - `vs search run`, `vs recommend run` และ `vs chat run` สำหรับตรวจสอบ runtime
 - `vs search tune query-generate | plan | run | report` สำหรับการประเมินและปรับแต่ง text similarity อัตโนมัติในเวอร์ชันแรก
@@ -102,49 +101,20 @@ vs search tune llm-check --live --json
 
 ### 3. รัน onboarding flow แรก
 
-หากผู้ใช้ต้องการสร้าง app ใหม่ พร้อม review การตั้งค่าในช่วง bind-time และตรวจสอบ runtime ให้ใช้เส้นทาง `dataset+app`:
-
 ```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-หากต้องการเฉพาะ dataset provisioning ให้ใช้เส้นทาง `dataset-only` สร้าง dataset-only plan ด้วย `--skip-app` แล้วหยุดหลังจาก dataset create + ingest:
-
-```bash
-vs item profile --file ./items.json --pretty
-vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset import-url --file-name items.jsonl
+curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
+vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
+vs dataset infer-result --task-id <TaskID> --render-schema
 vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+vs data write --dataset-id <DatasetId> --fields @items.jsonl
+vs app create --name <app-name> --industry e_commerce --language zh
+vs app attach-dataset --data @attach.json
 ```
 
-ควรใช้ `dataset-create.json` เมื่อ plan สร้างไฟล์นี้ออกมา เพื่อให้การสร้าง dataset ส่ง `Schema` และ `DataFieldConfig` ไปพร้อมกัน รูปแบบ `--name <dataset-name> --type item --schema @schema.json` ยังคงเป็น fallback แบบ manual schema-only เมื่อไม่มี create payload แบบเต็มหรือไม่เหมาะสม
+หากคุณต้องการเพียง dataset (ไม่ต้อง app) ให้หยุดหลังจาก `vs data write`
 
-`--skip-app` ยังใช้ได้กับ `vs item provision` และ `vs item apply` ในฐานะ execution-time guard rail เมื่อคุณต้องบังคับขอบเขต dataset-only จาก plan ที่มีอยู่
-
-หากต้องการ video dataset อย่าพึ่งพา type เริ่มต้น ให้ส่ง `--type video` อย่างชัดเจนเสมอ:
-
-สำหรับ `dataset+app`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search"
-vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
-vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
-```
-
-สำหรับ `dataset-only`:
-
-```bash
-vs item profile --file ./videos.jsonl --type video --pretty
-vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
-vs dataset create --data @dataset-create.json
-vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
-```
-
-สำหรับ video dataset-only provisioning ควรใช้ `dataset-create.json` เพื่อให้ request มี `DataFieldConfig`; การใช้เพียง `--schema @schema.json` อาจล้มเหลวด้วย `MissingParameter.DefaultFieldStrategy`
+สำหรับ dataset เหตุการณ์ของผู้ใช้ ให้ใช้ `--type user_event` และละ `--theme`
 
 ## เริ่มต้นอย่างรวดเร็ว (AI Agents)
 

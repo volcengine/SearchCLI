@@ -20,13 +20,16 @@ export default class RecommendRuleList extends Command {
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
     types: Flags.string({
       description:
-        'Comma-separated list of rule types to filter. Allowed values: degrade, filter, search_filter, impression, suggest, userInterest, itemCf, forceItem'
+        'Comma-separated list of rule types to filter. Allowed values: degrade, filter, search_filter, impression, suggest, user_interest, item_cf, force_item, boost_bury_cond, cold_start, shuffle, rec_reason'
     }),
     'dataset-id': Flags.string({
       description: 'Dataset ID to filter by. For rules with both behavior and item datasets, this is the behavior dataset ID.'
     }),
     'invert-item-dataset-id': Flags.string({
       description: 'Inverted item dataset ID. For inverted-index rule queries, this is the item dataset ID.'
+    }),
+    'item-dataset-id': Flags.string({
+      description: 'Item dataset ID to filter by.'
     })
   };
 
@@ -46,7 +49,8 @@ export default class RecommendRuleList extends Command {
       applicationId: flags['application-id'],
       types: flags.types,
       datasetId: flags['dataset-id'],
-      invertItemDatasetId: flags['invert-item-dataset-id']
+      invertItemDatasetId: flags['invert-item-dataset-id'],
+      itemDatasetId: flags['item-dataset-id']
     });
   }
 }

@@ -96,6 +96,31 @@ message CustomizedQuestionConfig {
 | `DraftConfig.ChatConfig.SearchSceneID` | string | See service validation | Search scene ID. |
 | `DraftConfig.ChatConfig.FollowUpInfo` | string | See service validation | Follow up info. |
 
+## Field Semantics and Validation Notes
+
+This API writes the complete application online chat config. Preserve existing sibling fields inside `Config.ChatConfig` unless the change intentionally clears them. `ConfigSaveAsDraft=true` saves draft config only; otherwise the config is published and the draft is cleared by service behavior.
+
+### String Enum Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Config.ChatConfig.NetworkSearchMode` | `disabled`, `ondemand`, `always` | Empty is accepted and treated as `disabled`; any other value is invalid. |
+
+### Numeric and Length Constraints
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `Config.ChatConfig.OpeningRemarksConfig.SuggestionLimit` | `3..8` | Default is `4` when read through service behavior. |
+| `Config.ChatConfig.OpeningRemarksConfig.CustomizedQuestionConfig.CustomizedQuestions[]` | at most `100` items | Applies when customized opening suggestions are configured. |
+
+### Reference Constraints
+
+- `Config.ChatConfig.OpeningRemarksConfig` is required in update requests.
+- `Config.ChatConfig.SearchSceneID` may be empty. When non-empty, it must refer to an existing search scene under the same application.
+- When `Config.ChatConfig.OpeningRemarksConfig.EnableRecommend=true`, `Config.ChatConfig.OpeningRemarksConfig.RecommendSceneId` is required and must refer to an existing recommend scene under the same application.
+- `Config.ChatConfig.OpeningRemarksConfig.RecommendItemDatasetId` may be omitted. When provided, it must match the item dataset bound to `RecommendSceneId`; service behavior fills it with the bound item dataset ID.
+- `Config.ChatConfig.RoleAuxiliaryPrompt` is compatibility data derived from `RoleInfo`, `AnswerInfo`, and `FollowUpInfo`; prefer writing the explicit fields.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

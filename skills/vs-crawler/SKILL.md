@@ -21,6 +21,10 @@ Do not use this skill when:
 - The user already has a local file ready to import (use `vs-item-onboarding` directly).
 - The user wants to import from a database (use `vs-item-onboarding` directly with MySQL).
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Fixed Schema
 
 All crawled records MUST conform to this schema. Every record is a flat JSON object written as one line in a JSONL file.

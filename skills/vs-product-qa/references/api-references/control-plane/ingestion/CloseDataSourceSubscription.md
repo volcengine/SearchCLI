@@ -33,7 +33,7 @@ message CloseDataSourceSubscriptionResp {
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `TaskId` | string | See service validation | Task id. |
-| `Status` | string | See service validation | Status. |
+| `Status` | string | See service validation | Status. snake_case value: `finished`. |
 | `Message` | string | See service validation | Message. |
 
 ## Error Codes

@@ -83,6 +83,30 @@ message CustomizedQuestionConfig {
 | `DraftConfig.ChatConfig.SearchSceneID` | string | See service validation | Search scene ID. |
 | `DraftConfig.ChatConfig.FollowUpInfo` | string | See service validation | Follow up info. |
 
+## Field Semantics and Validation Notes
+
+This API returns application online chat config. `Config` is the published config and `DraftConfig` is the draft config when available.
+
+### String Enum Values
+
+| Field | Allowed values | Notes |
+| --- | --- | --- |
+| `Config.ChatConfig.NetworkSearchMode` / `DraftConfig.ChatConfig.NetworkSearchMode` | `disabled`, `ondemand`, `always` | Empty or invalid stored values are normalized by service behavior to `disabled`. |
+
+### Numeric and Length Constraints
+
+| Field | Constraint | Notes |
+| --- | --- | --- |
+| `OpeningRemarksConfig.SuggestionLimit` | `3..8` | Default is `4` when the stored value is empty or invalid. |
+| `OpeningRemarksConfig.CustomizedQuestionConfig.CustomizedQuestions[]` | at most `100` items | Applies when customized opening suggestions are configured. |
+
+### Reference Constraints
+
+- `ChatConfig.SearchSceneID` may be empty. When non-empty, it must refer to an existing search scene under the same application.
+- When `OpeningRemarksConfig.EnableRecommend=true`, `OpeningRemarksConfig.RecommendSceneId` is required and must refer to an existing recommend scene under the same application.
+- `OpeningRemarksConfig.RecommendItemDatasetId` may be omitted. When provided, it must match the item dataset bound to `RecommendSceneId`.
+- `RoleAuxiliaryPrompt` is compatibility data derived from `RoleInfo`, `AnswerInfo`, and `FollowUpInfo`; prefer reading the explicit fields when present.
+
 ## Error Codes
 
 | Error code | Trigger condition | Handling guidance |

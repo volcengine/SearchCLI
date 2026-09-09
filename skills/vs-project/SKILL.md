@@ -14,6 +14,10 @@ commands: project create, project deploy, app list, dataset list, search scene l
 
 Use this skill to create a Viking web project from existing application resources and verify its local preview, or to deploy a generated project to Volcengine IGA Pages.
 
+## Version Check
+
+Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
+
 ## Preconditions
 
 - before doing anything else, run `vs project --help`; this availability check is the only command allowed before consulting `vs-product-qa`
