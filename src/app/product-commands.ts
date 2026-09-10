@@ -420,6 +420,8 @@ export interface SearchSceneUpdateOptions extends ProjectScopedOptions {
   sceneId: string;
   name?: string;
   description?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   config?: string;
   searchConfig?: string;
   queryCompletionConfig?: string;
@@ -501,7 +503,7 @@ export interface RecommendRuleGetOptions extends ProjectScopedOptions {
   dryRun?: boolean;
 }
 
-function buildRecommendSceneItemTypeFilterConfig(options: { itemTypeResult?: ItemTypeResultMode; itemTypeField?: string }): Record<string, unknown> | undefined {
+function buildSceneItemTypeFilterConfig(options: { itemTypeResult?: ItemTypeResultMode; itemTypeField?: string }): Record<string, unknown> | undefined {
   if (!options.itemTypeResult) {
     return undefined;
   }
@@ -521,6 +523,26 @@ function mergeRecommendSceneFilterConfig(filterConfig: unknown, itemTypeFilterCo
   return {
     ...filterConfig,
     ItemTypeFilter: itemTypeFilterConfig
+  };
+}
+
+function applySearchSceneItemTypeFilterConfig(configPayload: unknown, itemTypeFilterConfig: Record<string, unknown>): Record<string, unknown> {
+  const config = isRecord(configPayload) ? configPayload : {};
+  const perDatasetConfigs = Array.isArray(config.PerDatasetConfigs) && config.PerDatasetConfigs.length > 0
+    ? config.PerDatasetConfigs
+    : [{}];
+  return {
+    ...config,
+    PerDatasetConfigs: perDatasetConfigs.map(perDatasetConfig => {
+      const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
+      return {
+        ...current,
+        FilterConfig: {
+          ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+          ItemTypeFilter: itemTypeFilterConfig
+        }
+      };
+    })
   };
 }
 
@@ -1297,14 +1319,18 @@ function validateSearchSceneConfig(config: any): void {
 
 export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOptions): Promise<void> {
   let configPayload = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   
-  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig)) {
+  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig || itemTypeFilterConfig)) {
     configPayload = compactObject({
       PerDatasetConfigs: await loadJsonInput(options.searchConfig),
       QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
       WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
       OverviewConfig: await loadJsonInput(options.overviewConfig)
     });
+  }
+  if (itemTypeFilterConfig) {
+    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig);
   }
 
   if (configPayload) {
@@ -1351,7 +1377,7 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
   const userEventScenes = options.userEventScenes;
-  const itemTypeFilterConfig = buildRecommendSceneItemTypeFilterConfig(options);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   const filterConfig = mergeRecommendSceneFilterConfig(await loadJsonInput(options.filterConfig), itemTypeFilterConfig);
   const payload =
     (await loadJsonInput(options.data)) ??
@@ -1431,7 +1457,7 @@ function extractRecommendSceneV2(response: unknown): Record<string, any> {
 
 async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
   const configPatch = await loadJsonInput(options.config);
-  const itemTypeFilterConfig = buildRecommendSceneItemTypeFilterConfig(options);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   const flagConfigPatch = compactObject({
     MaxResults: options.count,
     FilterRuleId: options.filterRuleId,
@@ -3162,7 +3188,7 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
@@ -3176,6 +3202,8 @@ KEY FLAGS
   --scene-id                 Target search scene ID.
   --config                   Full scene \`Config\` object.
   --search-config            \`Config.PerDatasetConfigs\` array only.
+  --item-type-result         Search item hierarchy when the item dataset has ItemType: variant or parent.
+  --item-type-field          ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
   --overview-config          \`Config.OverviewConfig\` object only.
@@ -4114,6 +4142,8 @@ async function runSearchCli(argv: string[]): Promise<void> {
             sceneId: requiredString(values['scene-id'], '--scene-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
+            itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+            itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
             searchConfig: optionalString(values['search-config']),
             queryCompletionConfig: optionalString(values['query-completion-config']),
