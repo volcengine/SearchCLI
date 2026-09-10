@@ -233,7 +233,8 @@ async function testRootHelp() {
   assert.match(stdout, /SearchCLI/);
   assert.match(stdout, /Detailed parameter constraints and request\/response contracts/);
   assert.match(stdout, /vs skill show --name vs-product-qa/);
-  assert.match(stdout, /\bitem\b/);
+  assert.match(stdout, /dataset infer-schema .*--type multi_modal --theme e_commerce/);
+  assert.doesNotMatch(stdout, /dataset infer-schema .*--type item/);
   assert.doesNotMatch(stdout, /\bproject\b/);
   assert.match(stdout, /\bllm\b/);
   assert.doesNotMatch(stdout, /\bchat-mode\b/);
