@@ -930,7 +930,7 @@ function inferFallbackAttrFields(
     }
 
     if (token === 'title' || token === 'name') add('ImageTitle', field.path);
-    if (token === 'item_type' || token === 'product_type') add('ImageItemType', field.path);
+    if (token === 'item_type') add('ImageItemType', field.path);
     if (token === 'parent_id' || token === 'parent_item_id') add('ImageParentId', field.path);
     if ((token.endsWith('_id') || token === 'id') && token !== 'parent_id' && token !== 'parent_item_id') add('ImagePK', field.path);
     if (looksLikeImageField(field.path, values)) add('ImageURL', field.path);

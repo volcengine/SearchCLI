@@ -28,6 +28,7 @@ export default class SearchSceneUpdate extends Command {
       description: 'Inline JSON, @file path, or JSON file path for Config.WantToSearchConfig.'
     }),
     'overview-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for Config.OverviewConfig.' }),
+    'item-dataset-id': Flags.string({ description: 'Viking item dataset ID whose ItemTypeFilter should be updated.' }),
     'item-type-result': Flags.string({
       description: 'Search item hierarchy when the item dataset has ItemType: variant or parent.',
       options: ['variant', 'parent']
@@ -54,6 +55,7 @@ export default class SearchSceneUpdate extends Command {
       sceneId: flags['scene-id'],
       name: flags.name,
       description: flags.description,
+      itemDatasetId: flags['item-dataset-id'],
       itemTypeResult: flags['item-type-result'] as 'variant' | 'parent' | undefined,
       itemTypeField: flags['item-type-field'],
       config: flags.config,

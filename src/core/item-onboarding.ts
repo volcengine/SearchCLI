@@ -1326,7 +1326,7 @@ function validateParentVariantRows(
 function detectParentVariantFields(fields: ItemFieldProfile[]): { itemTypeField?: string; parentIdField?: string } {
   const fieldPaths = flattenFieldPathsFromProfile(fields);
   return {
-    itemTypeField: fieldPaths.find(path => ['item_type', 'product_type'].includes(lastPathToken(path))),
+    itemTypeField: fieldPaths.find(path => lastPathToken(path) === 'item_type'),
     parentIdField: fieldPaths.find(path => ['parent_id', 'parent_item_id'].includes(lastPathToken(path)))
   };
 }
@@ -1346,7 +1346,7 @@ function getValueAtPath(record: Record<string, unknown>, pathValue: string): unk
 }
 
 function normalizeItemTypeValue(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function buildSchemaArtifact(
@@ -1583,7 +1583,7 @@ function inferFieldDescription(
   inferred: ItemProfileResult['inferred'],
   inferredMeaning?: string
 ): string {
-  if (['item_type', 'product_type'].includes(field.name)) {
+  if (field.name === 'item_type') {
     return 'Item hierarchy type. Allowed values are parent, variant, or empty.';
   }
   if (['parent_id', 'parent_item_id'].includes(field.name)) {

@@ -715,7 +715,7 @@ async function executeItemVerify(options: ItemVerifyCommandOptions): Promise<Rec
         SceneID: searchSceneId,
         Name: asOptionalString(searchSceneUpdateArtifact.Name) ?? searchSceneName,
         Description: asOptionalString(searchSceneUpdateArtifact.Description) ?? searchSceneDescription,
-        Config: isRecord(searchSceneUpdateArtifact.Config) ? searchSceneUpdateArtifact.Config : undefined,
+        Config: buildSearchSceneBootstrapConfig(searchSceneUpdateArtifact.Config, datasetId),
         ProjectName: options.projectName
       })
     );
@@ -1190,6 +1190,47 @@ function validateFieldDescriptionsForApply(payload: Record<string, unknown>): vo
 
 function isNonEmptyRecord(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && Object.keys(value).length > 0;
+}
+
+function buildSearchSceneBootstrapConfig(config: unknown, datasetId: string): Record<string, unknown> | undefined {
+  if (!isRecord(config)) {
+    return undefined;
+  }
+  const itemTypeFilter = extractSearchSceneItemTypeFilter(config);
+  if (!itemTypeFilter) {
+    return config;
+  }
+  return {
+    ...config,
+    SearchConfig: undefined,
+    PerDatasetConfigs: [
+      {
+        DatasetId: datasetId,
+        FilterConfig: {
+          ItemTypeFilter: itemTypeFilter
+        }
+      }
+    ]
+  };
+}
+
+function extractSearchSceneItemTypeFilter(config: Record<string, unknown>): Record<string, unknown> | undefined {
+  const perDatasetConfigs = Array.isArray(config.PerDatasetConfigs) ? config.PerDatasetConfigs : [];
+  for (const entry of perDatasetConfigs) {
+    const filter = isRecord(entry) && isRecord(entry.FilterConfig) && isRecord(entry.FilterConfig.ItemTypeFilter)
+      ? entry.FilterConfig.ItemTypeFilter
+      : undefined;
+    if (filter) return filter;
+  }
+  const searchConfig = isRecord(config.SearchConfig) ? config.SearchConfig : {};
+  const retrieveConfigs = Array.isArray(searchConfig.RetrieveConfigs) ? searchConfig.RetrieveConfigs : [];
+  for (const entry of retrieveConfigs) {
+    const filter = isRecord(entry) && isRecord(entry.FilterConfig) && isRecord(entry.FilterConfig.ItemTypeFilter)
+      ? entry.FilterConfig.ItemTypeFilter
+      : undefined;
+    if (filter) return filter;
+  }
+  return undefined;
 }
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {

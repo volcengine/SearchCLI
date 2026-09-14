@@ -420,6 +420,7 @@ export interface SearchSceneUpdateOptions extends ProjectScopedOptions {
   sceneId: string;
   name?: string;
   description?: string;
+  itemDatasetId?: string;
   itemTypeResult?: ItemTypeResultMode;
   itemTypeField?: string;
   config?: string;
@@ -526,23 +527,39 @@ function mergeRecommendSceneFilterConfig(filterConfig: unknown, itemTypeFilterCo
   };
 }
 
-function applySearchSceneItemTypeFilterConfig(configPayload: unknown, itemTypeFilterConfig: Record<string, unknown>): Record<string, unknown> {
+function applySearchSceneItemTypeFilterConfig(
+  configPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown>,
+  itemDatasetId: string | undefined
+): Record<string, unknown> {
+  if (!itemDatasetId) {
+    throw new Error('Need --item-dataset-id when updating a search scene with --item-type-result.');
+  }
   const config = isRecord(configPayload) ? configPayload : {};
-  const perDatasetConfigs = Array.isArray(config.PerDatasetConfigs) && config.PerDatasetConfigs.length > 0
-    ? config.PerDatasetConfigs
-    : [{}];
+  if (!Array.isArray(config.PerDatasetConfigs)) {
+    throw new Error('Search scene config must contain PerDatasetConfigs when --item-type-result is set.');
+  }
+  let matched = false;
+  const perDatasetConfigs = config.PerDatasetConfigs.map(perDatasetConfig => {
+    const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
+    if (String(current.DatasetId ?? current.DatasetID ?? '') !== itemDatasetId) {
+      return current;
+    }
+    matched = true;
+    return {
+      ...current,
+      FilterConfig: {
+        ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+        ItemTypeFilter: itemTypeFilterConfig
+      }
+    };
+  });
+  if (!matched) {
+    throw new Error(`Search scene config does not contain PerDatasetConfig for item dataset ${itemDatasetId}.`);
+  }
   return {
     ...config,
-    PerDatasetConfigs: perDatasetConfigs.map(perDatasetConfig => {
-      const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
-      return {
-        ...current,
-        FilterConfig: {
-          ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
-          ItemTypeFilter: itemTypeFilterConfig
-        }
-      };
-    })
+    PerDatasetConfigs: perDatasetConfigs
   };
 }
 
@@ -1186,6 +1203,18 @@ export async function runSearchSceneGetCommand(options: SearchSceneGetOptions): 
   await printResult(callOpenApi('GetSearchSceneV2', payload, options));
 }
 
+function extractSearchSceneV2(response: unknown): Record<string, any> {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    throw new Error('GetSearchSceneV2 returned an invalid response.');
+  }
+  const body = response as Record<string, any>;
+  const result = body.Result ?? body.Scene ?? body;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('GetSearchSceneV2 returned an invalid scene payload.');
+  }
+  return result as Record<string, any>;
+}
+
 function validateSearchSceneConfig(config: any): void {
   const validateRelevanceCutoffConfig = (cutoffConfig: any, fieldPath: string): void => {
     if (!cutoffConfig) return;
@@ -1318,19 +1347,35 @@ function validateSearchSceneConfig(config: any): void {
 }
 
 export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOptions): Promise<void> {
+  const dataPayload = await loadJsonInput(options.data);
+  if (dataPayload) {
+    requireNonEmptyObject(dataPayload, 'Need --data, --config, or advanced config options for search scene update.');
+    await printResult(callOpenApi('PublishSearchSceneV2', dataPayload, options));
+    return;
+  }
+
   let configPayload = await loadJsonInput(options.config);
   const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   
   if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig || itemTypeFilterConfig)) {
+    const existingScene = itemTypeFilterConfig && !options.searchConfig
+      ? extractSearchSceneV2(await callOpenApi('GetSearchSceneV2', {
+          ProjectName: options.projectName,
+          ApplicationId: options.applicationId,
+          SceneId: options.sceneId
+        }, options))
+      : undefined;
+    const existingConfig = isRecord(existingScene?.Config) ? existingScene.Config : {};
     configPayload = compactObject({
-      PerDatasetConfigs: await loadJsonInput(options.searchConfig),
-      QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
-      WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
-      OverviewConfig: await loadJsonInput(options.overviewConfig)
+      ...existingConfig,
+      PerDatasetConfigs: (await loadJsonInput(options.searchConfig)) ?? existingConfig.PerDatasetConfigs,
+      QueryCompletionConfig: (await loadJsonInput(options.queryCompletionConfig)) ?? existingConfig.QueryCompletionConfig,
+      WantToSearchConfig: (await loadJsonInput(options.wantToSearchConfig)) ?? existingConfig.WantToSearchConfig,
+      OverviewConfig: (await loadJsonInput(options.overviewConfig)) ?? existingConfig.OverviewConfig
     });
   }
   if (itemTypeFilterConfig) {
-    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig);
+    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig, options.itemDatasetId);
   }
 
   if (configPayload) {
@@ -1338,7 +1383,6 @@ export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOpti
   }
 
   const payload =
-    (await loadJsonInput(options.data)) ??
     compactObject({
       ApplicationId: options.applicationId,
       SceneId: options.sceneId,
@@ -3188,7 +3232,7 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
@@ -3203,6 +3247,7 @@ KEY FLAGS
   --config                   Full scene \`Config\` object.
   --search-config            \`Config.PerDatasetConfigs\` array only.
   --item-type-result         Search item hierarchy when the item dataset has ItemType: variant or parent.
+  --item-dataset-id          Item dataset whose ItemTypeFilter should be updated. Required with --item-type-result.
   --item-type-field          ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
@@ -4142,6 +4187,7 @@ async function runSearchCli(argv: string[]): Promise<void> {
             sceneId: requiredString(values['scene-id'], '--scene-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
+            itemDatasetId: optionalString(values['item-dataset-id']),
             itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
             itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
