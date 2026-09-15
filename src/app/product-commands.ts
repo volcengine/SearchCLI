@@ -1,30 +1,25 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
-import { loadJsonInput, loadJsonOrJsonlInput, loadOptionalStringArray, parseBooleanString } from '../core/json-input';
+import { loadJsonInput, loadOptionalStringArray, parseBooleanString } from '../core/json-input';
 import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-status';
-import { uploadFileWithConsoleSignature } from '../core/console-file-upload';
 import { getConsoleTopAction } from '../core/console-action-catalog';
-import { resolvePurchasePageUrl, type EnvironmentId } from '../core/environment';
-import {
-  hasHelpFlag,
-  isDomainHelpRequest,
-  renderUsageBlock,
-  withOpenApiReferenceHint
-} from '../core/help-utils';
-import { isProjectFeatureEnabled } from '../core/feature-flags';
-import { ApiRequestError, postJson } from '../core/http';
+import { hasHelpFlag, isDomainHelpRequest, renderUsageBlock } from '../core/help-utils';
+import { buildItemTypeFilterConfig, normalizeItemTypeResultMode, type ItemTypeResultMode } from '../core/item-type-filter';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
-import { hasExplicitOutputFormatFlag } from '../core/output-format';
-import { buildInferSchemaConfirm, renderInferSchemaConfirmText } from '../core/infer-schema-confirm';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
+import {
+  describeSearchModeOptions,
+  describeUserDefinedRecallModeOptions,
+  normalizeSearchMode,
+  normalizeUserDefinedRecallMode
+} from '../core/search-mode';
 import {
   isUserEventDatasetType,
   getUserEventBizAttr,
@@ -33,32 +28,20 @@ import {
   USER_EVENT_TYPE_ENUMERATES,
   USER_EVENT_REQUIRED_FIELDS,
 } from '../core/types';
+import {
+  runItemApplyCommand,
+  runItemPlanCommand,
+  runItemProfileCommand,
+  runItemProvisionCommand,
+  runItemReviewCommand,
+  runItemVerifyCommand
+} from './item-commands';
 import { runDataImportShortcutCommand } from './shortcut-commands';
 import {
   runAppDatasetBindWorkflowCommand,
   runAppDiagnoseWorkflowCommand,
   runDatasetIngestWorkflowCommand
 } from './workflow-commands';
-import {
-  runSearchTuneLlmCheckCommand,
-  runSearchTuneApplyCommand,
-  runSearchTuneCompareCommand,
-  runSearchTunePlanCommand,
-  runSearchTuneQueryGenerateCommand,
-  runSearchTuneReportCommand,
-  runSearchTuneRunCommand,
-  runSearchTuneValidateCommand
-} from './search-tuning-commands';
-import {
-  runConnectorExportCommand,
-  runConnectorInitCommand,
-  runConnectorInspectCommand,
-  runConnectorRunCommand,
-  runConnectorStatusCommand,
-  runConnectorStopCommand
-} from './connector-commands';
-import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
-import { runProjectCreateCommand, runProjectDeployCommand } from './project-commands';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -70,11 +53,6 @@ export interface AppCreateOptions extends ServiceCommandOptions {
   industry?: string;
   language?: string;
   color?: string;
-  iconColor?: string;
-  riskCheck?: boolean;
-  dryRun?: boolean;
-  postPaidType?: string;
-  projectName?: string;
 }
 
 export interface AppListOptions extends ServiceCommandOptions {
@@ -121,17 +99,6 @@ export interface DatasetCreateOptions extends ServiceCommandOptions {
   type?: string;
   description?: string;
   schema?: string;
-  schemaJson?: string;
-  industry?: string;
-  language?: string;
-  theme?: string;
-  abnormalImagePolicy?: string;
-  abnormalVideoPolicy?: string;
-  videoAutoDelete?: boolean;
-  dryRun?: boolean;
-  fieldDescMap?: string;
-  postPaidType?: string;
-  projectName?: string;
 }
 
 export interface DatasetListOptions extends ServiceCommandOptions {
@@ -141,17 +108,9 @@ export interface DatasetListOptions extends ServiceCommandOptions {
   full?: boolean;
 }
 
-export interface DataSourceSubscriptionCreateOptions extends ProjectScopedOptions {
-  clientToken?: string;
-  needCreateDataset?: boolean;
-  datasetId?: string;
-  createDatasetConfig?: string;
-  type?: string;
-  dataSourceConfig?: string;
-}
-
-export interface DataSourceSubscriptionTaskOptions extends ProjectScopedOptions {
-  taskId?: string;
+export interface DatasetSchemaGetOptions extends ProjectScopedOptions {
+  id: string;
+  version?: number;
 }
 
 export interface DatasetSchemaCheckOptions extends ProjectScopedOptions {
@@ -201,7 +160,7 @@ export interface DataGetOptions extends ServiceCommandOptions {
 
 export interface DataDeleteOptions extends ServiceCommandOptions {
   datasetId: string;
-  id?: string;
+  ids?: string;
 }
 
 export interface SearchRunOptions extends ServiceCommandOptions {
@@ -280,12 +239,6 @@ export interface AppDatasetConfigGetOptions extends ProjectScopedOptions {
   applicationId: string;
   datasetId: string;
   fieldConfigVersion?: number;
-  full?: boolean;
-}
-
-export interface AppItemDataCountGetOptions extends ProjectScopedOptions {
-  applicationId: string;
-  datasetId: string;
   full?: boolean;
 }
 
@@ -411,6 +364,9 @@ export interface SearchSceneUpdateOptions extends ProjectScopedOptions {
   sceneId: string;
   name?: string;
   description?: string;
+  itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   config?: string;
   searchConfig?: string;
   queryCompletionConfig?: string;
@@ -424,14 +380,14 @@ export interface RecommendSceneCreateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
-  recommendModel?: string;
-  optimizationTarget?: string;
-  userEventScenes?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
+  recommendModel?: number;
+  optimizationTarget?: number;
+  bhvSceneTypes?: string;
   clickEventTypes?: string;
   positiveEventTypes?: string;
   negativeEventTypes?: string;
-  filterConfig?: string;
-  dryRun?: boolean;
   confirmEntryBinding?: boolean;
 }
 
@@ -443,7 +399,6 @@ export interface RecommendSceneListOptions extends ProjectScopedOptions {
 export interface RecommendSceneGetOptions extends ProjectScopedOptions {
   applicationId: string;
   sceneId: string;
-  dryRun?: boolean;
 }
 
 export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
@@ -453,22 +408,16 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
-  userEventScenes?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
+  bhvSceneTypes?: string;
   config?: string;
   count?: number;
-  boostBuryCondConfig?: string;
+  boostBuryConfig?: string;
   shuffleConfig?: string;
   impressionConfig?: string;
   suggestConfig?: string;
   degradeRuleId?: string;
-  filterRuleId?: string;
-  forceItemRuleId?: string;
-  reasonTemplateConfig?: string;
-  coldStartConfig?: string;
-  mergeConfigs?: string;
-  filterConfig?: string;
-  recAssistantConfig?: string;
-  dryRun?: boolean;
   confirmEntryBinding?: boolean;
 }
 
@@ -479,13 +428,126 @@ export interface RecommendRuleListOptions extends ProjectScopedOptions {
   types?: string;
   datasetId?: string;
   invertItemDatasetId?: string;
-  itemDatasetId?: string;
 }
 
 export interface RecommendRuleGetOptions extends ProjectScopedOptions {
   applicationId: string;
   ruleId?: string;
-  dryRun?: boolean;
+}
+
+function buildSceneItemTypeFilterConfig(options: { itemTypeResult?: ItemTypeResultMode; itemTypeField?: string }): Record<string, unknown> | undefined {
+  if (!options.itemTypeResult) {
+    return undefined;
+  }
+  return buildItemTypeFilterConfig(options.itemTypeField ?? 'item_type', normalizeItemTypeResultMode(options.itemTypeResult));
+}
+
+function extractOpenApiResult(response: unknown): Record<string, unknown> {
+  if (!isRecord(response) || !isRecord(response.Result)) {
+    throw new Error('OpenAPI response is missing Result.');
+  }
+  return response.Result;
+}
+
+function extractSearchScene(response: unknown): Record<string, unknown> {
+  const result = extractOpenApiResult(response);
+  if (isRecord(result.Scene)) {
+    return result.Scene;
+  }
+  return result;
+}
+
+function extractRecommendScene(response: unknown): Record<string, unknown> {
+  return extractOpenApiResult(response);
+}
+
+async function getSearchScene(options: SearchSceneGetOptions): Promise<Record<string, unknown>> {
+  const response = await callOpenApi(
+    '/api/v1/GetSearchScene',
+    compactObject({
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
+      ProjectName: options.projectName
+    }),
+    options
+  );
+  return extractSearchScene(response);
+}
+
+async function getRecommendScene(options: RecommendSceneGetOptions): Promise<Record<string, unknown>> {
+  const response = await callOpenApi(
+    '/api/v1/GetRecommendScene',
+    compactObject({
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
+      ProjectName: options.projectName
+    }),
+    options
+  );
+  return extractRecommendScene(response);
+}
+
+function applySearchSceneItemTypeFilterConfig(
+  configPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown>,
+  itemDatasetId: string | undefined
+): Record<string, unknown> {
+  if (!itemDatasetId) {
+    throw new Error('Need --item-dataset-id when updating a search scene with --item-type-result.');
+  }
+  const config = isRecord(configPayload) ? configPayload : {};
+  if (Array.isArray(config.PerDatasetConfigs)) {
+    let matched = false;
+    const perDatasetConfigs = config.PerDatasetConfigs.map(perDatasetConfig => {
+      const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
+      if (String(current.DatasetId ?? current.DatasetID ?? '') !== itemDatasetId) {
+        return current;
+      }
+      matched = true;
+      return {
+        ...current,
+        FilterConfig: {
+          ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+          ItemTypeFilter: itemTypeFilterConfig
+        }
+      };
+    });
+    if (!matched) {
+      throw new Error(`Search scene config does not contain PerDatasetConfig for item dataset ${itemDatasetId}.`);
+    }
+    return {
+      ...config,
+      PerDatasetConfigs: perDatasetConfigs
+    };
+  }
+
+  const searchConfig = isRecord(config.SearchConfig) ? config.SearchConfig : {};
+  const retrieveConfigs = Array.isArray(searchConfig.RetrieveConfigs) ? searchConfig.RetrieveConfigs : [];
+  let matched = false;
+  const updatedRetrieveConfigs = retrieveConfigs.map(retrieveConfig => {
+    const current = isRecord(retrieveConfig) ? retrieveConfig : {};
+    if (String(current.DatasetId ?? current.DatasetID ?? '') !== itemDatasetId) {
+      return current;
+    }
+    matched = true;
+    return {
+      ...current,
+      FilterConfig: {
+        ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+        ItemTypeFilter: itemTypeFilterConfig
+      }
+    };
+  });
+  if (!matched) {
+    throw new Error(`Search scene config does not contain RetrieveConfig for item dataset ${itemDatasetId}.`);
+  }
+  return {
+    ...config,
+    SearchConfig: {
+      ...searchConfig,
+      RetrieveConfigs: updatedRetrieveConfigs
+    }
+  };
 }
 
 export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
@@ -495,51 +557,7 @@ export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
   type?: string;
   description?: string;
   datasetId?: string;
-  itemDatasetId?: string;
   config?: string;
-  dryRun?: boolean;
-}
-
-export interface DictCreateOptions extends ProjectScopedOptions {
-  name?: string;
-  type?: string;
-  description?: string;
-  enableIdempotent?: boolean;
-}
-
-export interface DictGetOptions extends ProjectScopedOptions {
-  dictId?: string;
-}
-
-export interface DictListOptions extends ProjectScopedOptions {
-  dictIds?: string;
-  types?: string;
-}
-
-export interface DictUpdateOptions extends ProjectScopedOptions {
-  dictId?: string;
-  name?: string;
-  description?: string;
-}
-
-export interface DictCheckInputOptions extends ProjectScopedOptions {
-  dictId?: string;
-  language?: string;
-  type?: string;
-  tosBucket?: string;
-  tosKey?: string;
-  entries?: string;
-}
-
-export interface DictBindScenesOptions extends ProjectScopedOptions {
-  dictId?: string;
-  scenes?: string;
-}
-
-export interface DictWriteTermsOptions extends ProjectScopedOptions {
-  dictId?: string;
-  file?: string;
-  entries?: string;
 }
 
 export interface RecommendUserProfileOptions extends ProjectScopedOptions {
@@ -558,54 +576,19 @@ export interface RecommendSuggestOptions extends ProjectScopedOptions {
   suggestConfig?: string;
 }
 
-export interface PurchaseOrderStatusOptions extends ProjectScopedOptions {
-  suppressOutput?: boolean;
-}
-
-export interface PurchaseOrderWaitOptions extends ProjectScopedOptions {
-  maxAttempts?: number;
-  pollIntervalMs?: number;
-}
-
-export interface PurchaseLinkOptions {
-  environmentId?: string;
-}
-
-export interface PurchaseOrderPriceOptions extends ProjectScopedOptions {
-  scene?: string;
-  configurationCode?: string;
-  instanceNo?: string;
-  purchaseMonths?: number;
-  endTime?: number;
-}
-
-export interface PurchaseOrderCreateOptions extends PurchaseOrderPriceOptions {
-  autoRenew?: boolean;
-  clientToken?: string;
-}
-
 export async function runAppCreateCommand(options: AppCreateOptions): Promise<void> {
-  const iconColor = options.iconColor ?? options.color;
-  const postPaidType = parsePostPaidTypeValue(options.postPaidType);
-  const fallbackPayload = compactObject({
-    Name: options.name,
-    Description: options.description,
-    Language: options.language,
-    Icon: iconColor ? { ColorName: iconColor } : undefined,
-    EnableRiskCheck: options.riskCheck === true ? true : undefined,
-    DryRun: options.dryRun === true ? true : undefined,
-    PostPaidType: postPaidType,
-    ProjectName: options.projectName
-  });
-  const payload = normalizeAppCreateV2Payload(
-    (await loadJsonInput(options.data)) ?? fallbackPayload,
+  const payload = normalizeAppCreatePayload(
+    (await loadJsonInput(options.data)) ??
+      compactObject({
+        Name: options.name,
+        Description: options.description,
+        Language: options.language,
+        Icon: options.color ? { ColorName: options.color } : undefined
+      }),
     options.industry
   );
-  if (postPaidType !== undefined && isRecord(payload)) {
-    payload.PostPaidType = postPaidType;
-  }
   requireNonEmptyObject(payload, 'Need --data or --name for app create.');
-  await printResult(callOpenApi('CreateApplicationV2', payload, options));
+  await printResult(callOpenApi('/api/v1/CreateApplication', payload, options));
 }
 
 export async function runAppUpdateCommand(options: AppUpdateOptions): Promise<void> {
@@ -718,27 +701,6 @@ export async function runAppDatasetConfigGetCommand(options: AppDatasetConfigGet
   await printResult(summarizeAppDatasetConfigGetResponse(response, options.applicationId));
 }
 
-export async function runAppItemDataCountCommand(options: AppItemDataCountGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      AppID: options.applicationId,
-      DatasetID: options.datasetId,
-      ProjectName: options.projectName
-    });
-  const response = await callOpenApi('/api/v1/GetAppItemDataCount', payload, options);
-  if (options.full) {
-    await printResult(response);
-    return;
-  }
-
-  if (!isRecord(response)) {
-    throw new Error('GetAppItemDataCount returned an unexpected response shape.');
-  }
-
-  await printResult(summarizeAppItemDataCountResponse(response, options.applicationId, options.datasetId));
-}
-
 export async function runAppDatasetConfigUpdateCommand(options: AppDatasetConfigUpdateOptions): Promise<void> {
   const payload = normalizeAppDataConfigPayload(
     (await loadJsonInput(options.data)) ??
@@ -791,12 +753,6 @@ export async function runAppWaitReadyCommand(options: AppWaitReadyOptions): Prom
       return;
     }
 
-    if (snapshot.phase === 'expired') {
-      throw new Error(
-        `Application ${options.applicationId} has expired; upgrade to a standard/premium plan or re-enable it. Stopped waiting after ${attempts} check(s).`
-      );
-    }
-
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
       break;
@@ -843,55 +799,32 @@ export async function runAppOnlineConfigUpdateCommand(options: AppOnlineConfigUp
 }
 
 export async function runDatasetCreateCommand(options: DatasetCreateOptions): Promise<void> {
-  const schemaInline = options.schemaJson
-    ? await loadJsonInput(options.schemaJson)
-    : await loadJsonInput(options.schema);
-  const fieldDescMap = options.fieldDescMap ? await loadJsonInput(options.fieldDescMap) : undefined;
-  const processConfig = (options.abnormalImagePolicy !== undefined || options.abnormalVideoPolicy !== undefined || options.videoAutoDelete !== undefined)
-    ? compactObject({
-        AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
-        AbnormalVideoDataProcessPolicy: options.abnormalVideoPolicy,
-        VideoAutoDelete: options.videoAutoDelete
+  const payload = normalizeDatasetPayload(
+    (await loadJsonInput(options.data)) ??
+      compactObject({
+        Name: options.name,
+        Type: options.type,
+        Description: options.description,
+        Schema: await loadJsonInput(options.schema)
       })
-    : undefined;
-  const filePayload = await loadJsonInput(options.data);
-  const postPaidType = parsePostPaidTypeValue(options.postPaidType);
+  );
+  if (isRecord(payload) && (payload.Type === 2 || payload.Type === 5)) {
+    throw new Error(`Creating dataset of type ${payload.Type === 2 ? 'query (2)' : 'dataset type 5'} via CLI is not supported.`);
+  }
+  requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
+  validateUserEventSchema(payload);
+  await printResult(callOpenApi('/api/v1/CreateDataset', payload, options));
+}
 
-  let rawPayload: Record<string, unknown>;
-  if (isRecord(filePayload)) {
-    rawPayload = { ...filePayload };
-    if (options.name !== undefined) rawPayload.Name = options.name;
-    if (options.type !== undefined) rawPayload.Type = options.type;
-    if (options.description !== undefined) rawPayload.Description = options.description;
-    if (schemaInline !== undefined) rawPayload.Schema = schemaInline;
-    if (options.industry !== undefined) rawPayload.Industry = options.industry;
-    if (options.language !== undefined) rawPayload.Language = options.language;
-    if (options.theme !== undefined) rawPayload.Theme = options.theme;
-    if (processConfig !== undefined) rawPayload.ProcessConfig = processConfig;
-    if (fieldDescMap !== undefined) rawPayload.FieldDescMap = fieldDescMap;
-    if (postPaidType !== undefined) rawPayload.PostPaidType = postPaidType;
-    if (options.dryRun === true) rawPayload.DryRun = true;
-    if (options.projectName !== undefined) rawPayload.ProjectName = options.projectName;
-  } else {
-    rawPayload = compactObject({
-      Name: options.name,
-      Type: options.type,
-      Description: options.description,
-      Schema: schemaInline,
-      Industry: options.industry,
-      Language: options.language,
-      Theme: options.theme,
-      ProcessConfig: processConfig,
-      FieldDescMap: fieldDescMap,
-      PostPaidType: postPaidType,
-      DryRun: options.dryRun === true ? true : undefined,
+export async function runDatasetSchemaGetCommand(options: DatasetSchemaGetOptions): Promise<void> {
+  const payload =
+    (await loadJsonInput(options.data)) ??
+    compactObject({
+      DatasetID: options.id,
+      Version: options.version,
       ProjectName: options.projectName
     });
-  }
-
-  const payload = normalizeDatasetV2Payload(rawPayload, CREATE_DATASET_TYPES);
-  requireNonEmptyObject(payload, 'Need --data or --name/--type for dataset create.');
-  await printResult(callOpenApi('CreateDatasetV2', payload, options));
+  await printResult(callOpenApi('/api/v1/GetDatasetSchema', payload, options));
 }
 
 export async function runDatasetSchemaCheckCommand(options: DatasetSchemaCheckOptions): Promise<void> {
@@ -970,79 +903,14 @@ export async function runDatasetDeleteCommand(options: ResourceIdOptions): Promi
   await printResult(callOpenApi('/api/v1/DeleteDataset', payload, options));
 }
 
-export async function runDataSourceSubscriptionCreateCommand(
-  options: DataSourceSubscriptionCreateOptions
-): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ClientToken: options.clientToken,
-      NeedCreateDataset: options.needCreateDataset === true ? true : undefined,
-      DatasetId: options.datasetId,
-      CreateDatasetConfig: await loadJsonInput(options.createDatasetConfig),
-      Type: options.type,
-      DataSourceConfig: await loadJsonInput(options.dataSourceConfig),
-      ProjectName: options.projectName
-    });
-  requireNonEmptyObject(payload, 'Need --data or subscription create fields.');
-  await printResult(callOpenApi('CreateDataSourceSubscription', payload, options));
-}
-
-export async function runDataSourceSubscriptionCloseCommand(options: DataSourceSubscriptionTaskOptions): Promise<void> {
-  if (!options.data && !options.taskId) {
-    throw new Error('Need --task-id or --data for dataset subscription close.');
-  }
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      TaskId: options.taskId,
-      ProjectName: options.projectName
-    });
-  requireNonEmptyObject(payload, 'Need --task-id or --data for dataset subscription close.');
-  await printResult(callOpenApi('CloseDataSourceSubscription', payload, options));
-}
-
-export async function runDataSourceSubscriptionGetCommand(options: DataSourceSubscriptionTaskOptions): Promise<void> {
-  if (!options.data && !options.taskId) {
-    throw new Error('Need --task-id or --data for dataset subscription get.');
-  }
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      TaskId: options.taskId,
-      ProjectName: options.projectName
-    });
-  requireNonEmptyObject(payload, 'Need --task-id or --data for dataset subscription get.');
-  await printResult(callOpenApi('GetDataSourceSubscription', payload, options));
-}
-
-export async function runDataSourceSubscriptionListCommand(options: ProjectScopedOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName
-    });
-  await printResult(callOpenApi('ListDataSourceSubscriptions', payload, options));
-}
-
 export async function runDataWriteCommand(options: DataWriteOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      fields: await loadJsonOrJsonlInput(options.fields)
+      fields: await loadJsonInput(options.fields)
     });
   requireNonEmptyObject(payload, 'Need --data or --fields for data write.');
   await printResult(callRuntime(runtime => runtime.dataWrite(options.datasetId, payload), options));
-}
-
-export async function runDataDeleteCommand(options: DataDeleteOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      _ids: options.id ? [options.id] : undefined
-    });
-  requireNonEmptyObject(payload, 'Need --data or --id for data delete.');
-  await printResult(callRuntime(runtime => runtime.dataDelete(options.datasetId, payload), options));
 }
 
 export async function runSearchRunCommand(options: SearchRunOptions): Promise<void> {
@@ -1092,142 +960,119 @@ export async function runSearchRunCommand(options: SearchRunOptions): Promise<vo
 }
 
 export async function runSearchSceneCreateCommand(options: SearchSceneCreateOptions): Promise<void> {
-  if (!options.data && !options.name?.trim()) {
-    throw new Error('Need --data or --name for search scene create.');
-  }
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ApplicationId: options.applicationId,
+      AppID: options.applicationId,
       ProjectName: options.projectName,
       Name: options.name,
       Description: options.description
     });
   requireNonEmptyObject(payload, 'Need --data or --name for search scene create.');
-  await printResult(callOpenApi('CreateSearchSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/CreateSearchScene', payload, options));
 }
 
 export async function runSearchSceneListCommand(options: ProjectScopedOptions & { applicationId: string }): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ApplicationId: options.applicationId,
+      AppID: options.applicationId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('ListSearchScenesV2', payload, options));
+  await printResult(callOpenApi('/api/v1/ListSearchScene', payload, options));
 }
 
 export async function runSearchSceneGetCommand(options: SearchSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId,
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('GetSearchSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/GetSearchScene', payload, options));
+}
+
+function normalizeSearchSceneModeValue(value: unknown, fieldPath: string): number {
+  const normalized = normalizeSearchMode(value);
+  if (normalized === undefined) {
+    throw new Error(`Invalid ${fieldPath}: '${String(value)}'. Allowed values are: ${describeSearchModeOptions()}`);
+  }
+  return normalized;
+}
+
+function normalizeUserDefinedRecallModeValue(value: unknown, fieldPath: string): number {
+  const normalized = normalizeUserDefinedRecallMode(value);
+  if (normalized === undefined) {
+    throw new Error(
+      `Invalid ${fieldPath}: '${String(value)}'. Allowed values are: ${describeUserDefinedRecallModeOptions()}`
+    );
+  }
+  return normalized;
+}
+
+function normalizeRetrieveConfigEnums(rc: any, fieldPath: string): void {
+  if (rc?.Mode !== undefined) {
+    rc.Mode = normalizeSearchSceneModeValue(rc.Mode, `${fieldPath}.Mode`);
+  }
+  if (rc?.UserDefinedRecallMode !== undefined) {
+    rc.UserDefinedRecallMode = normalizeUserDefinedRecallModeValue(
+      rc.UserDefinedRecallMode,
+      `${fieldPath}.UserDefinedRecallMode`
+    );
+  }
+  if (Array.isArray(rc?.ServingControls)) {
+    rc.ServingControls.forEach((control: any, index: number) => {
+      if (control?.RecallWeight?.Mode !== undefined) {
+        control.RecallWeight.Mode = normalizeSearchSceneModeValue(
+          control.RecallWeight.Mode,
+          `${fieldPath}.ServingControls[${index}].RecallWeight.Mode`
+        );
+      }
+      if (control?.RecallWeight?.UserDefinedRecallMode !== undefined) {
+        control.RecallWeight.UserDefinedRecallMode = normalizeUserDefinedRecallModeValue(
+          control.RecallWeight.UserDefinedRecallMode,
+          `${fieldPath}.ServingControls[${index}].RecallWeight.UserDefinedRecallMode`
+        );
+      }
+    });
+  }
 }
 
 function validateSearchSceneConfig(config: any): void {
-  const validateRelevanceCutoffConfig = (cutoffConfig: any, fieldPath: string): void => {
-    if (!cutoffConfig) return;
-
-    const validScoreTypes = ['keyword', 'text_semantic', 'image_semantic', 'final'];
-    const validModes = ['static', 'relative'];
-    const rules = cutoffConfig.Rules;
-
-    if (rules !== undefined && !Array.isArray(rules)) {
-      throw new Error(`${fieldPath}.Rules must be an array.`);
-    }
-
-    const seenScoreTypes = new Set<string>();
-    for (const [idx, rule] of (rules ?? []).entries()) {
-      const rulePath = `${fieldPath}.Rules[${idx}]`;
-      if (!validScoreTypes.includes(rule.ScoreType)) {
-        throw new Error(`${rulePath}.ScoreType must be one of: ${validScoreTypes.join(', ')}`);
-      }
-      if (seenScoreTypes.has(rule.ScoreType)) {
-        throw new Error(`${rulePath}.ScoreType duplicates '${rule.ScoreType}'. Each score type can appear at most once.`);
-      }
-      seenScoreTypes.add(rule.ScoreType);
-      if (!validModes.includes(rule.Mode)) {
-        throw new Error(`${rulePath}.Mode must be one of: ${validModes.join(', ')}`);
-      }
-      const threshold = rule.Threshold ?? 0;
-      if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0) {
-        throw new Error(`${rulePath}.Threshold must be a non-negative number.`);
-      }
-      if (rule.Mode === 'relative' && threshold > 1) {
-        throw new Error(`${rulePath}.Threshold must be <= 1 when Mode is 'relative'.`);
-      }
-      if (rule.Mode === 'static' && ['text_semantic', 'image_semantic'].includes(rule.ScoreType) && threshold > 1) {
-        throw new Error(`${rulePath}.Threshold must be <= 1 when Mode is 'static' and ScoreType is '${rule.ScoreType}'.`);
-      }
-    }
-
-    if (cutoffConfig.Fallback?.Enable) {
-      const minResultCount = cutoffConfig.Fallback.MinResultCount ?? 0;
-      if (!Number.isInteger(minResultCount) || minResultCount <= 0) {
-        throw new Error(`${fieldPath}.Fallback.MinResultCount must be a positive integer when Fallback.Enable is true.`);
-      }
-    }
-  };
-
-  if (config?.PerDatasetConfigs) {
+  // Validate SearchConfig
+  if (config?.SearchConfig?.RetrieveConfigs) {
     const validOperators = [
       'eq', 'ne', 'contains', 'not_contains', 'must', 'must_not', 
       'any_must', 'any_must_not', 'gt', 'gte', 'lt', 'lte', 
       'geo_distance_inner', 'geo_distance_outer', 'time_gt', 
       'time_gte', 'time_lt', 'time_lte'
     ];
-    const validTextModes = ['balanced', 'semantic_priority', 'keyword_priority', 'user_defined'];
-    const validUserDefinedRecallModes = ['keyword_semantic', 'keyword_only', 'semantic_only'];
     
-    for (const rc of config.PerDatasetConfigs) {
-      if (rc.TextSearchConfig?.Mode && !validTextModes.includes(rc.TextSearchConfig.Mode)) {
-        throw new Error(`Invalid TextSearchConfig.Mode: '${rc.TextSearchConfig.Mode}'. Allowed values are: ${validTextModes.join(', ')}`);
-      }
-      if (
-        rc.TextSearchConfig?.UserDefinedRecallMode &&
-        !validUserDefinedRecallModes.includes(rc.TextSearchConfig.UserDefinedRecallMode)
-      ) {
-        throw new Error(
-          `Invalid TextSearchConfig.UserDefinedRecallMode: '${rc.TextSearchConfig.UserDefinedRecallMode}'. Allowed values are: ${validUserDefinedRecallModes.join(', ')}`
-        );
-      }
+    for (const rc of config.SearchConfig.RetrieveConfigs) {
+      normalizeRetrieveConfigEnums(rc, 'SearchConfig.RetrieveConfigs[]');
 
-      if (rc.BoostBuryCondConfig?.Rules) {
-        for (const rule of rc.BoostBuryCondConfig.Rules) {
+      if (rc.BoostBuryConfig?.Rules) {
+        for (const rule of rc.BoostBuryConfig.Rules) {
           if (rule.Operator && !validOperators.includes(rule.Operator)) {
             throw new Error(`Invalid BoostBuryRule Operator: '${rule.Operator}'. Allowed values are: ${validOperators.join(', ')}.\nNote: Make sure the field '${rule.Field}' is configured as a FilterField in the dataset schema, and the operator matches its type (e.g., use 'eq' for strings instead of 'contains' or '==').`);
           }
         }
       }
 
-      if (rc.ImageSearchConfig?.InstructionType) {
+      if (rc.QueryConfig?.InstructionType) {
         const validQueryInstTypes = ['preset_image', 'preset_item', 'custom'];
-        if (!validQueryInstTypes.includes(rc.ImageSearchConfig.InstructionType)) {
-          throw new Error(`Invalid ImageSearchConfig.InstructionType: '${rc.ImageSearchConfig.InstructionType}'. Allowed values are: ${validQueryInstTypes.join(', ')}`);
+        if (!validQueryInstTypes.includes(rc.QueryConfig.InstructionType)) {
+          throw new Error(`Invalid QueryConfig.InstructionType: '${rc.QueryConfig.InstructionType}'. Allowed values are: ${validQueryInstTypes.join(', ')}`);
         }
-        if (rc.ImageSearchConfig.InstructionType === 'custom' && !rc.ImageSearchConfig.ImageInstruction?.trim()) {
-          throw new Error(`ImageSearchConfig.ImageInstruction cannot be empty when InstructionType is 'custom'.`);
+        if (rc.QueryConfig.InstructionType === 'custom' && !rc.QueryConfig.ImageInstruction?.trim()) {
+          throw new Error(`QueryConfig.ImageInstruction cannot be empty when InstructionType is 'custom'.`);
         }
       }
 
-      if (rc.RerankConfig?.RerankDoubaoConfig?.Instruction) {
-        if (rc.RerankConfig.RerankDoubaoConfig.Instruction.length >= 1024) {
+      if (rc.RerankDoubaoConfig?.Instruction) {
+        if (rc.RerankDoubaoConfig.Instruction.length >= 1024) {
           throw new Error(`RerankDoubaoConfig.Instruction length must be less than 1024 characters.`);
-        }
-      }
-
-      validateRelevanceCutoffConfig(rc.RelevanceCutoffConfig, 'RelevanceCutoffConfig');
-
-      if (rc.ServingControlConfig?.ServingControls) {
-        for (const [idx, control] of rc.ServingControlConfig.ServingControls.entries()) {
-          validateRelevanceCutoffConfig(
-            control.RelevanceCutoffConfig,
-            `ServingControlConfig.ServingControls[${idx}].RelevanceCutoffConfig`
-          );
         }
       }
     }
@@ -1260,15 +1105,35 @@ function validateSearchSceneConfig(config: any): void {
 }
 
 export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOptions): Promise<void> {
+  const dataPayload = await loadJsonInput(options.data);
+  if (dataPayload) {
+    requireNonEmptyObject(dataPayload, 'Need --data, --config, or advanced config options for search scene update.');
+    await printResult(callOpenApi('/api/v1/OnlineSearchScene', dataPayload, options));
+    return;
+  }
+
   let configPayload = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   
-  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig)) {
+  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig || itemTypeFilterConfig)) {
+    const existingScene = itemTypeFilterConfig
+      ? await getSearchScene({
+          ...options,
+          applicationId: options.applicationId,
+          sceneId: options.sceneId
+        })
+      : undefined;
+    const existingConfig = isRecord(existingScene?.Config) ? existingScene.Config : {};
     configPayload = compactObject({
-      PerDatasetConfigs: await loadJsonInput(options.searchConfig),
-      QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
-      WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
-      OverviewConfig: await loadJsonInput(options.overviewConfig)
+      ...existingConfig,
+      SearchConfig: (await loadJsonInput(options.searchConfig)) ?? existingConfig.SearchConfig,
+      QueryCompletionConfig: (await loadJsonInput(options.queryCompletionConfig)) ?? existingConfig.QueryCompletionConfig,
+      WantToSearchConfig: (await loadJsonInput(options.wantToSearchConfig)) ?? existingConfig.WantToSearchConfig,
+      OverviewConfig: (await loadJsonInput(options.overviewConfig)) ?? existingConfig.OverviewConfig
     });
+  }
+  if (itemTypeFilterConfig) {
+    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig, options.itemDatasetId);
   }
 
   if (configPayload) {
@@ -1276,28 +1141,27 @@ export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOpti
   }
 
   const payload =
-    (await loadJsonInput(options.data)) ??
     compactObject({
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId,
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
       Name: options.name,
       Description: options.description,
       Config: configPayload,
       ProjectName: options.projectName
     });
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for search scene update.');
-  await printResult(callOpenApi('PublishSearchSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/OnlineSearchScene', payload, options));
 }
 
 export async function runSearchSceneDeleteCommand(options: SearchSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId,
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
       ProjectName: options.projectName
     });
-  await printResult(callOpenApi('DeleteSearchSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/DeleteSearchScene', payload, options));
 }
 
 export async function runRecommendRunCommand(options: RecommendRunOptions): Promise<void> {
@@ -1305,7 +1169,7 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
     (await loadJsonInput(options.data)) ??
     compactObject({
       user: options.userId ? { _user_id: options.userId } : undefined,
-      parent_items: options.parentId ? [{ _id: options.parentId }] : undefined,
+      parent_items: buildRecommendParentItems(options.parentId),
       page_size: options.pageSize ?? 20
     });
   requireNonEmptyObject(payload, 'Need --data or recommend context for recommend run.');
@@ -1314,369 +1178,155 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
-  const userEventScenes = options.userEventScenes;
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
+      AppID: options.applicationId,
       ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
       Type: options.type,
       Name: options.name,
       Description: options.description,
-      ItemDatasetId: options.itemDatasetId,
+      ItemDatasetID: options.itemDatasetId,
       RecommendModel: options.recommendModel,
       RecommendOptimizationTarget: options.optimizationTarget,
-      UserEventScenes: await loadOptionalStringArray(userEventScenes),
+      BhvSceneTypes: await loadOptionalStringArray(options.bhvSceneTypes),
       ClickEventTypes: await loadOptionalStringArray(options.clickEventTypes),
       PositiveEventTypes: await loadOptionalStringArray(options.positiveEventTypes),
       NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes),
-      FilterConfig: await loadJsonInput(options.filterConfig),
-      DryRun: options.dryRun
+      FilterConfig: itemTypeFilterConfig ? { ItemTypeFilter: itemTypeFilterConfig } : undefined
     });
   requireNonEmptyObject(payload, 'Need --data or required scene fields for recommend scene create.');
   requireNonEmptyArrayField(
     payload,
-    'UserEventScenes',
-    'Need --user-event-scenes (at least one behavior scene value) or a --data payload containing UserEventScenes for recommend scene create.'
+    'BhvSceneTypes',
+    'Need --bhv-scene-types (at least one behavior scene type) or a --data payload containing BhvSceneTypes for recommend scene create.'
   );
-  await printResult(callOpenApi('CreateRecommendSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/CreateRecommendScene', payload, options));
 }
 
 export async function runRecommendSceneListCommand(options: RecommendSceneListOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
+      AppID: options.applicationId,
       ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
       Types: await loadOptionalStringArray(options.types)
     });
-  await printResult(callOpenApi('ListRecommendScenesV2', payload, options));
+  await printResult(callOpenApi('/api/v1/ListRecommendScene', payload, options));
 }
 
 export async function runRecommendSceneGetCommand(options: RecommendSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
+      ProjectName: options.projectName
     });
-  await printResult(callOpenApi('GetRecommendSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/GetRecommendScene', payload, options));
 }
 
 function validateRecommendSceneConfig(config: any): void {
-  if (config?.BoostBuryConfig) {
-    throw new Error('Config.BoostBuryConfig was removed in RecommendSceneConfigV2. Use Config.BoostBuryCondConfig instead.');
-  }
-  if (config?.Count !== undefined) {
-    throw new Error('Config.Count was renamed to Config.MaxResults in RecommendSceneConfigV2.');
-  }
-  if (config?.FilterRuleID !== undefined || config?.DegradeRuleID !== undefined || config?.ForceItemRuleID !== undefined) {
-    throw new Error('RecommendSceneConfigV2 uses FilterRuleId, DegradeRuleId, and ForceItemRuleId.');
-  }
-  if (config?.Impression !== undefined || config?.Suggest !== undefined || config?.Shuffle !== undefined || config?.ReasonTemplate !== undefined) {
-    throw new Error('RecommendSceneConfigV2 uses ImpressionConfig, SuggestConfig, ShuffleConfig, and ReasonTemplateConfig.');
-  }
-}
-
-function extractRecommendSceneV2(response: unknown): Record<string, any> {
-  if (!response || typeof response !== 'object' || Array.isArray(response)) {
-    throw new Error('GetRecommendSceneV2 returned an invalid response.');
-  }
-  const body = response as Record<string, any>;
-  const result = body.Result ?? body.Scene ?? body;
-  if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    throw new Error('GetRecommendSceneV2 returned an invalid scene payload.');
-  }
-  return result as Record<string, any>;
-}
-
-async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
-  const configPatch = await loadJsonInput(options.config);
-  const flagConfigPatch = compactObject({
-    MaxResults: options.count,
-    FilterRuleId: options.filterRuleId,
-    DegradeRuleId: options.degradeRuleId,
-    ForceItemRuleId: options.forceItemRuleId,
-    BoostBuryCondConfig: await loadJsonInput(options.boostBuryCondConfig),
-    ShuffleConfig: await loadJsonInput(options.shuffleConfig),
-    ImpressionConfig: await loadJsonInput(options.impressionConfig),
-    SuggestConfig: await loadJsonInput(options.suggestConfig),
-    ReasonTemplateConfig: await loadJsonInput(options.reasonTemplateConfig),
-    ColdStartConfig: await loadJsonInput(options.coldStartConfig),
-    MergeConfigs: await loadJsonInput(options.mergeConfigs),
-    FilterConfig: await loadJsonInput(options.filterConfig),
-    RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
-  });
-  const userEventScenes = await loadOptionalStringArray(options.userEventScenes);
-  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0;
-  const hasTopLevelPatch =
-    options.type !== undefined ||
-    options.name !== undefined ||
-    options.description !== undefined ||
-    options.itemDatasetId !== undefined ||
-    userEventScenes !== undefined ||
-    options.dryRun !== undefined;
-
-  if (!hasConfigPatch && !hasTopLevelPatch) {
-    return {};
-  }
-
-  if (configPatch !== undefined) {
-    if (!configPatch || typeof configPatch !== 'object' || Array.isArray(configPatch)) {
-      throw new Error('--config for recommend scene update must be a RecommendSceneConfigV2 object or first-level object patch.');
+  if (config?.BoostBuryConfig?.Rules) {
+    const validOperators = [
+      'eq', 'ne', 'contains', 'not_contains', 'must', 'must_not', 
+      'any_must', 'any_must_not', 'gt', 'gte', 'lt', 'lte', 
+      'geo_distance_inner', 'geo_distance_outer', 'time_gt', 
+      'time_gte', 'time_lt', 'time_lte'
+    ];
+    
+    for (const rule of config.BoostBuryConfig.Rules) {
+      if (rule.Operator && !validOperators.includes(rule.Operator)) {
+        throw new Error(`Invalid BoostBuryRule Operator: '${rule.Operator}'. Allowed values are: ${validOperators.join(', ')}.\nNote: Make sure the field '${rule.Field}' is configured as a FilterField in the dataset schema, and the operator matches its type (e.g., use 'eq' for strings instead of 'contains' or '==').`);
+      }
     }
-    validateRecommendSceneConfig(configPatch);
   }
-  if (Object.keys(flagConfigPatch).length > 0) {
-    validateRecommendSceneConfig(flagConfigPatch);
-  }
-
-  const current = extractRecommendSceneV2(await callOpenApi('GetRecommendSceneV2', {
-    ProjectName: options.projectName,
-    ApplicationId: options.applicationId,
-    SceneId: options.sceneId
-  }, options));
-  const currentConfig = current.Config;
-  if (!currentConfig || typeof currentConfig !== 'object' || Array.isArray(currentConfig)) {
-    throw new Error('GetRecommendSceneV2 did not return a full Config. Cannot build a full PublishRecommendSceneV2 payload.');
-  }
-
-  const mergedConfig = {
-    ...currentConfig,
-    ...(configPatch as Record<string, unknown> | undefined),
-    ...flagConfigPatch
-  };
-  validateRecommendSceneConfig(mergedConfig);
-
-  return compactObject({
-    ProjectName: options.projectName,
-    ApplicationId: options.applicationId,
-    SceneId: options.sceneId,
-    Type: options.type ?? current.Type,
-    Name: options.name ?? current.Name,
-    Description: options.description ?? current.Description,
-    ItemDatasetId: options.itemDatasetId ?? current.ItemDatasetId,
-    UserEventScenes: userEventScenes ?? current.UserEventScenes,
-    Config: mergedConfig,
-    DryRun: options.dryRun
-  });
 }
 
 export async function runRecommendSceneUpdateCommand(options: RecommendSceneUpdateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene update');
-  const explicitPayload = await loadJsonInput(options.data);
-  const payload = explicitPayload !== undefined
-    ? options.dryRun === true && isRecord(explicitPayload)
-      ? { ...explicitPayload, DryRun: true }
-      : explicitPayload
-    : await buildRecommendScenePublishPayload(options);
+
+  const dataPayload = await loadJsonInput(options.data);
+  if (dataPayload) {
+    requireNonEmptyObject(dataPayload, 'Need --data, --config, or advanced config options for recommend scene update.');
+    await printResult(callOpenApi('/api/v1/OnlineRecommendScene', dataPayload, options));
+    return;
+  }
+  
+  let configPayload = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
+  const hasConfigUpdates =
+    options.count !== undefined ||
+    Boolean(options.boostBuryConfig) ||
+    Boolean(options.shuffleConfig) ||
+    Boolean(options.impressionConfig) ||
+    Boolean(options.suggestConfig) ||
+    Boolean(options.degradeRuleId) ||
+    Boolean(itemTypeFilterConfig);
+  let existingScene: Record<string, unknown> | undefined;
+  
+  if (!configPayload && hasConfigUpdates) {
+    existingScene = await getRecommendScene({
+      ...options,
+      applicationId: options.applicationId,
+      sceneId: options.sceneId
+    });
+    const existingConfig = isRecord(existingScene.Config) ? existingScene.Config : {};
+    configPayload = compactObject({
+      ...existingConfig,
+      Count: options.count ?? existingConfig.Count,
+      DegradeRuleID: options.degradeRuleId ?? existingConfig.DegradeRuleID,
+      BoostBuryConfig: (await loadJsonInput(options.boostBuryConfig)) ?? existingConfig.BoostBuryConfig,
+      Shuffle: (await loadJsonInput(options.shuffleConfig)) ?? existingConfig.Shuffle,
+      Impression: (await loadJsonInput(options.impressionConfig)) ?? existingConfig.Impression,
+      Suggest: (await loadJsonInput(options.suggestConfig)) ?? existingConfig.Suggest
+    });
+  }
+  if (configPayload && itemTypeFilterConfig && isRecord(configPayload)) {
+    existingScene = existingScene ?? await getRecommendScene({
+      ...options,
+      applicationId: options.applicationId,
+      sceneId: options.sceneId
+    });
+    configPayload = {
+      ...configPayload,
+      FilterConfig: {
+        ...(isRecord(configPayload.FilterConfig) ? configPayload.FilterConfig : {}),
+        ItemTypeFilter: itemTypeFilterConfig
+      }
+    };
+  }
+
+  if (configPayload) {
+    validateRecommendSceneConfig(configPayload);
+  }
+
+  const payload =
+    compactObject({
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
+      Type: options.type ?? (typeof existingScene?.Type === 'string' ? existingScene.Type : undefined),
+      Name: options.name ?? (typeof existingScene?.Name === 'string' ? existingScene.Name : undefined),
+      Description: options.description ?? (typeof existingScene?.Description === 'string' ? existingScene.Description : undefined),
+      ItemDatasetID: options.itemDatasetId ?? (typeof existingScene?.ItemDatasetID === 'string' ? existingScene.ItemDatasetID : undefined),
+      BhvSceneTypes: (await loadOptionalStringArray(options.bhvSceneTypes)) ?? (Array.isArray(existingScene?.BhvSceneTypes) ? existingScene.BhvSceneTypes : undefined),
+      Config: configPayload,
+      ProjectName: options.projectName
+    });
   requireNonEmptyObject(payload, 'Need --data, --config, or advanced config options for recommend scene update.');
-  await printResult(callOpenApi('PublishRecommendSceneV2', payload, options));
+  await printResult(callOpenApi('/api/v1/OnlineRecommendScene', payload, options));
 }
 
 export async function runRecommendSceneDeleteCommand(options: RecommendSceneGetOptions): Promise<void> {
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      SceneId: options.sceneId,
-      DryRun: options.dryRun
+      AppID: options.applicationId,
+      SceneID: options.sceneId,
+      ProjectName: options.projectName
     });
-  await printResult(callOpenApi('DeleteRecommendSceneV2', payload, options));
-}
-
-export async function runRecommendRuleListCommand(options: RecommendRuleListOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      Types: await loadOptionalStringArray(options.types),
-      DatasetId: options.datasetId,
-      InvertItemDatasetId: options.invertItemDatasetId,
-      ItemDatasetId: options.itemDatasetId
-    });
-  await printResult(callOpenApi('ListRecommendRulesV2', payload, options));
-}
-
-export async function runRecommendRuleGetCommand(options: RecommendRuleGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      RuleId: options.ruleId
-    });
-  await printResult(callOpenApi('GetRecommendRuleV2', payload, options));
-}
-
-export async function runRecommendRuleUpsertCommand(options: RecommendRuleUpsertOptions): Promise<void> {
-  const configPayload = await loadJsonInput(options.config);
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      RuleId: options.ruleId,
-      Name: options.name,
-      Type: options.type,
-      Description: options.description,
-      DatasetId: options.datasetId,
-      ItemDatasetId: options.itemDatasetId,
-      Config: configPayload,
-      DryRun: options.dryRun
-    });
-  requireNonEmptyObject(payload, 'Need --data or rule fields for recommend rule upsert.');
-  await printResult(callOpenApi('UpsertRecommendRuleV2', payload, options));
-}
-
-export async function runRecommendRuleDeleteCommand(options: RecommendRuleGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      ApplicationId: options.applicationId,
-      RuleId: options.ruleId,
-      DryRun: options.dryRun
-    });
-  await printResult(callOpenApi('DeleteRecommendRuleV2', payload, options));
-}
-
-export async function runDictCreateCommand(options: DictCreateOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      Name: options.name,
-      Type: options.type,
-      Description: options.description,
-      EnableIdempotent: options.enableIdempotent
-    });
-  requireNonEmptyObject(payload, 'Need --data or dict create fields.');
-  await printResult(callOpenApi('/api/v1/CreateDict', payload, options));
-}
-
-export async function runDictUpdateCommand(options: DictUpdateOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictId: options.dictId,
-      Name: options.name,
-      Description: options.description
-    });
-  requireNonEmptyObject(payload, 'Need --data or dict update fields.');
-  await printResult(callOpenApi('/api/v1/UpdateDict', payload, options));
-}
-
-export async function runDictGetCommand(options: DictGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictId: options.dictId
-    });
-  await printResult(callOpenApi('/api/v1/GetDict', payload, options));
-}
-
-export async function runDictDeleteCommand(options: DictGetOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictId: options.dictId
-    });
-  await printResult(callOpenApi('/api/v1/DeleteDict', payload, options));
-}
-
-export async function runDictListCommand(options: DictListOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictIds: await loadOptionalStringArray(options.dictIds),
-      Types: await loadOptionalStringArray(options.types)
-    });
-  await printResult(callOpenApi('/api/v1/ListDicts', payload, options));
-}
-
-export async function runDictCheckInputCommand(options: DictCheckInputOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictId: options.dictId,
-      Language: options.language,
-      Type: options.type,
-      TosBucket: options.tosBucket,
-      TosKey: options.tosKey,
-      Entries: await loadJsonInput(options.entries)
-    });
-  requireNonEmptyObject(payload, 'Need --data or dict input-check fields.');
-  await printResult(callOpenApi('/api/v1/CheckDictInput', payload, options));
-}
-
-export async function runDictBindScenesCommand(options: DictBindScenesOptions): Promise<void> {
-  const payload =
-    (await loadJsonInput(options.data)) ??
-    compactObject({
-      ProjectName: options.projectName,
-      DictId: options.dictId,
-      Scenes: await loadJsonInput(options.scenes)
-    });
-  requireNonEmptyObject(payload, 'Need --data or --dict-id/--scenes for dict bind-scenes.');
-  await printResult(callOpenApi('/api/v1/BindDictToScenes', payload, options));
-}
-
-export async function runDictWriteTermsCommand(options: DictWriteTermsOptions): Promise<void> {
-  if (options.data) {
-    throw new Error('--data is not supported for dict write-terms. Use --file or --entries.');
-  }
-  if (options.file && options.entries) {
-    throw new Error('Use either --file or --entries for dict write-terms, not both.');
-  }
-
-  const dictId = options.dictId;
-  if (!dictId) {
-    throw new Error('--dict-id is required for dict write-terms.');
-  }
-  const dictResponse = await callOpenApi('/api/v1/GetDict', compactObject({
-    ProjectName: options.projectName,
-    DictId: dictId
-  }), options);
-  const dictPayload = extractOpenApiResult(dictResponse);
-  const dictType = optionalString((dictPayload as Record<string, unknown> | undefined)?.Type);
-  if (!dictType) {
-    throw new Error(`Could not resolve dictionary type for ${dictId}.`);
-  }
-
-  let payload: Record<string, unknown>;
-  if (options.file) {
-    const resolvedFilePath = path.resolve(options.file);
-    if (path.extname(resolvedFilePath).toLowerCase() !== '.csv') {
-      throw new Error('--file for dict write-terms only supports .csv files.');
-    }
-    const upload = await uploadFileWithConsoleSignature({
-      ...toServiceConfigInput(options),
-      projectName: options.projectName,
-      filePath: resolvedFilePath
-    });
-    payload = {
-      term_type: dictType,
-      items: [],
-      _data_tos_link: upload.fileKey
-    };
-  } else {
-    payload = {
-      term_type: dictType,
-      items: await loadJsonInput(options.entries)
-    };
-  }
-
-  requireNonEmptyObject(payload, 'Need --file or --entries for dict write-terms.');
-  await printResult(callDataPlane(`/api/v1/dict/${encodeURIComponent(dictId)}/write_terms`, payload, options));
+  await printResult(callOpenApi('/api/v1/DeleteRecommendScene', payload, options));
 }
 
 export async function runChatSearchRunCommand(options: ChatSearchRunOptions): Promise<void> {
@@ -1724,199 +1374,6 @@ export async function runChatSearchRunCommand(options: ChatSearchRunOptions): Pr
   }
   
   await printResult(result);
-}
-
-export async function runPurchaseLinkCommand(options: PurchaseLinkOptions): Promise<void> {
-  const environmentId = parsePurchaseEnvironmentId(options.environmentId);
-  await printResult(resolvePurchasePageUrl(environmentId));
-}
-
-export async function runPurchaseOrderStatusCommand(options: PurchaseOrderStatusOptions): Promise<void> {
-  const result = await getBillingOrder(options);
-  assertBillingOrderHealthy(result);
-  if (!options.suppressOutput) {
-    await printResult({
-      ok: true,
-      orderFound: true,
-      response: result
-    });
-  }
-}
-
-export async function runPurchaseOrderWaitCommand(options: PurchaseOrderWaitOptions): Promise<void> {
-  const maxAttempts = ensurePositiveInt(options.maxAttempts ?? 5, '--max-attempts');
-  const pollIntervalMs = ensurePositiveInt(options.pollIntervalMs ?? 2000, '--poll-interval-ms');
-  let lastNotFoundMessage = '';
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const result = await getBillingOrder(options);
-      assertBillingOrderHealthy(result);
-      await printResult({
-        ok: true,
-        orderFound: true,
-        attempts: attempt,
-        response: result
-      });
-      return;
-    } catch (error) {
-      if (!isBillingOrderNotFoundError(error)) {
-        throw error;
-      }
-      lastNotFoundMessage = error instanceof Error ? error.message : String(error);
-      if (attempt < maxAttempts) {
-        process.stderr.write(
-          `[purchase:order-wait] order not found; retrying in ${pollIntervalMs}ms (${attempt}/${maxAttempts})\n`
-        );
-        await sleep(pollIntervalMs);
-      }
-    }
-  }
-
-  throw new Error(
-    `Billing order was not found after ${maxAttempts} attempts. Ask the user to confirm whether the purchase succeeded, then reopen the purchase page if needed.\n${lastNotFoundMessage}`
-  );
-}
-
-async function getBillingOrder(options: PurchaseOrderStatusOptions): Promise<unknown> {
-  const payload = (await loadJsonInput(options.data)) ?? compactObject({ ProjectName: options.projectName });
-  return callOpenApi('/api/v1/GetBillingOrder', payload, options);
-}
-
-const VIKING_AISEARCH_PRODUCT_CODE = 'REC-SaaS-LLM-SEARCH';
-const BILLING_ORDER_CUSTOM_PARAM_SOURCE = 'ai_search_console';
-const MAX_BILLING_CLIENT_TOKEN_LENGTH = 60;
-
-const BILLING_ORDER_SCENE_CODES: Record<string, number> = {
-  purchase: 1,
-  renew: 2,
-  modify: 3
-};
-
-export async function runPurchaseOrderPriceCommand(options: PurchaseOrderPriceOptions): Promise<void> {
-  const payload = withBillingProductCode(
-    (await loadJsonInput(options.data)) ?? buildBillingOrderPayload(options, false)
-  );
-  await printResult(await callOpenApi('CalculateBillingOrderPrice', payload, options));
-}
-
-export async function runPurchaseOrderCreateCommand(options: PurchaseOrderCreateOptions): Promise<void> {
-  const payload = withBillingProductCode(
-    (await loadJsonInput(options.data)) ?? buildBillingOrderPayload(options, true)
-  );
-  if (isRecord(payload) && !hasNonEmptyString(payload.ClientToken)) {
-    payload.ClientToken = resolveBillingClientToken(options.clientToken);
-  }
-  const response = await callOpenApi('CreateBillingOrderV2', payload, options);
-  await printResult(response);
-  const orderNo = extractOpenApiResult(response)?.OrderNO;
-  if (typeof orderNo === 'string' && orderNo.length > 0) {
-    process.stderr.write(
-      `[purchase:order-create] EPS order created (OrderNO=${orderNo}). Complete payment in the Volcano Engine FastPay cashier, then run \`vs purchase order wait\` to poll service activation.\n`
-    );
-  }
-}
-
-function buildBillingOrderPayload(options: PurchaseOrderCreateOptions, forCreate: boolean): Record<string, unknown> {
-  const sceneInput = (options.scene ?? '').trim();
-  const scene = BILLING_ORDER_SCENE_CODES[sceneInput.toLowerCase()];
-  if (scene === undefined) {
-    throw new Error('Missing or invalid --scene. Use purchase, renew, or modify.');
-  }
-  const configurationCode = options.configurationCode?.trim();
-  if (!configurationCode) {
-    throw new Error('Missing required flag: --configuration-code (e.g. ai_search_standard_monthly).');
-  }
-  const instanceNo = options.instanceNo?.trim();
-  const { purchaseMonths, endTime } = options;
-  if (purchaseMonths !== undefined && endTime !== undefined) {
-    throw new Error('--purchase-months and --end-time are mutually exclusive.');
-  }
-  if (purchaseMonths !== undefined && purchaseMonths <= 0) {
-    throw new Error('--purchase-months must be a positive integer.');
-  }
-  if (endTime !== undefined && endTime <= 0) {
-    throw new Error('--end-time must be a positive Unix timestamp in seconds.');
-  }
-  if (scene === BILLING_ORDER_SCENE_CODES.purchase && instanceNo) {
-    throw new Error('--instance-no must not be set when --scene=purchase.');
-  }
-  if (scene !== BILLING_ORDER_SCENE_CODES.purchase && !instanceNo) {
-    throw new Error(`--instance-no is required when --scene=${sceneInput}.`);
-  }
-  if (scene === BILLING_ORDER_SCENE_CODES.modify && purchaseMonths === undefined && endTime === undefined) {
-    throw new Error('--scene=modify requires --purchase-months or --end-time.');
-  }
-  return compactObject({
-    ProductCode: resolveBillingProductCode(),
-    ConfigurationCode: configurationCode,
-    Scene: scene,
-    InstanceNO: instanceNo,
-    PurchaseMonths: purchaseMonths,
-    EndTime: endTime,
-    AutoRenew: forCreate ? options.autoRenew : undefined,
-    ClientToken: forCreate ? resolveBillingClientToken(options.clientToken) : undefined,
-    CustomParams: forCreate ? { source: BILLING_ORDER_CUSTOM_PARAM_SOURCE } : undefined
-  });
-}
-
-function withBillingProductCode(payload: unknown): unknown {
-  return isRecord(payload) ? { ...payload, ProductCode: resolveBillingProductCode() } : payload;
-}
-
-function resolveBillingProductCode(): string {
-  return process.env.VIKING_AISEARCH_PRODUCT_CODE?.trim() || VIKING_AISEARCH_PRODUCT_CODE;
-}
-
-function resolveBillingClientToken(value?: string): string {
-  const token = (value ?? '').trim();
-  if (token.length > MAX_BILLING_CLIENT_TOKEN_LENGTH) {
-    throw new Error(`Invalid --client-token: must be at most ${MAX_BILLING_CLIENT_TOKEN_LENGTH} characters.`);
-  }
-  return token || randomUUID();
-}
-
-function isBillingOrderNotFoundError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /\b404\b/.test(message) || /ResourceNotFound|NotFound|not found/i.test(message);
-}
-
-function assertBillingOrderHealthy(response: unknown): void {
-  const result = extractOpenApiResult(response);
-  const opened = result?.IsAirSearchRecOpened;
-  const state = Number(result?.InstanceState);
-  if (opened === false || state === 99) {
-    throw new ApiRequestError(
-      'API Error [ResourceNotFound.Instance]: Viking AI Search billing instance was not found or is not enabled.',
-      404,
-      'ResourceNotFound.Instance',
-      'Viking AI Search billing instance was not found or is not enabled.',
-      response
-    );
-  }
-  if (state === 2) {
-    throw new Error('Billing order exists but instance creation failed. Ask the user to revisit the purchase page and confirm the order status.');
-  }
-}
-
-function parsePurchaseEnvironmentId(value: string | undefined): EnvironmentId {
-  const normalized = (value ?? 'volcano-cn-beijing').trim().toLowerCase();
-  if (
-    normalized === 'volcano-cn-beijing' ||
-    normalized === 'volcano-ap-southeast-1' ||
-    normalized === 'byteplus-ap-southeast-1'
-  ) {
-    return normalized;
-  }
-  throw new Error(
-    'Invalid --environment-id. Use volcano-cn-beijing, volcano-ap-southeast-1, or byteplus-ap-southeast-1.'
-  );
-}
-
-function extractOpenApiResult(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined;
-  const candidates = [response.Result, response.result, response];
-  return candidates.find(isRecord);
 }
 
 function printPrettyChatStream(rawStream: string): void {
@@ -2044,20 +1501,6 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
-    case 'connector':
-      if (isDomainHelpRequest(argv)) {
-        printDomainHelp(domain);
-        return true;
-      }
-      await runConnectorCli(argv);
-      return true;
-    case 'dict':
-      if (isDomainHelpRequest(argv)) {
-        printDomainHelp(domain);
-        return true;
-      }
-      await runDictCli(argv);
-      return true;
     case 'search':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -2079,22 +1522,12 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runChatSearchCli(argv);
       return true;
-    case 'purchase':
+    case 'item':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
         return true;
       }
-      await runPurchaseCli(argv);
-      return true;
-    case 'project':
-      if (!isProjectFeatureEnabled()) {
-        return false;
-      }
-      if (isDomainHelpRequest(argv)) {
-        printDomainHelp(domain);
-        return true;
-      }
-      await runProjectCli(argv);
+      await runItemCli(argv);
       return true;
     default:
       return false;
@@ -2103,40 +1536,35 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
 
 export function printProductDomainsHelp(): void {
   const publicLines = [
+    'vs item profile|plan|review|provision|verify|apply',
     'vs app create|get|list|delete|update|diagnose|status|wait-ready',
     'vs app dataset bind',
     'vs app dataset-config get|list|update',
     'vs app online-config get|update',
-    'vs dataset create|get|list|delete|update|ingest|import-url|infer-schema|infer-result|validate-schema',
-    'vs dataset schema check',
-    'vs dataset subscription create|get|list|close',
-    'vs data write|import|delete',
-    'vs connector init|run|status|stop|inspect',
+    'vs dataset create|get|list|delete|update|ingest',
+    'vs dataset schema get|check',
+    'vs data write|import',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
-    'vs chat run',
-    ...(isProjectFeatureEnabled() ? ['vs project create|deploy'] : []),
-    'vs purchase link|order price|create|status|wait'
+    'vs chat run'
   ];
 
-  console.log(withOpenApiReferenceHint(['PRODUCT COMMANDS', renderUsageBlock(publicLines)].join('\n')));
+  console.log(['PRODUCT COMMANDS', renderUsageBlock(publicLines)].join('\n'));
 }
 
 function printDomainHelp(domain: string): void {
   const helpByDomain: Record<string, string> = {
     app: `${renderUsageBlock(
       [
-        'vs app create --name <name> [--description <text>] [--industry <type>] [--language <lang>] [--color <color>] [--icon-color <color>] [--risk-check] [--dry-run] [service flags]',
+        'vs app create --name <name> [--description <text>] [--industry <type>] [--language <lang>] [--color <color>] [service flags]',
         'vs app update --id <application-id> [--name <name> --industry <type> --icon @icon.json --color <color>] [service flags]',
         'vs app get --id <application-id> [service flags]',
         'vs app list [--name <text> --dataset-id <id> --industry <type> --state <state> --full] [service flags]',
         'vs app delete --id <application-id> [--force] [service flags]',
         'vs app diagnose --application-id <id> [--activated-only] [service flags]',
         'vs app status --application-id <id> [--activated-only] [service flags]',
-        'vs app item-data-count --application-id <id> --dataset-id <id> [--full] [service flags]',
         'vs app wait-ready --application-id <id> [--wait-timeout-ms <ms> --poll-interval-ms <ms> --activated-only] [service flags]',
         'vs app dataset bind --application-id <id> --dataset-id <id> [--field-config @config.json --dry-run] [service flags]',
-        'vs app attach-dataset --app-id <id> --dataset-id <id> --data-config @data-config.json [--dry-run] [--project-name <name>] [service flags]',
         'vs app dataset unbind --application-id <id> --dataset-id <id> [service flags]',
         'vs app dataset-config get --application-id <id> --dataset-id <id> [--field-config-version <n> --full] [service flags]',
         'vs app dataset-config list --application-id <id> [--dataset-type <type> --page-number <n> --page-size <n> --activated-only --full] [service flags]',
@@ -2147,149 +1575,94 @@ function printDomainHelp(domain: string): void {
     )}
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     dataset: `${renderUsageBlock(
       [
-        'vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <type>] [--language <lang>] [--theme <text>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <policy>] [--abnormal-video-policy <policy>] [--video-auto-delete] [--dry-run] [service flags]',
+        'vs dataset create --name <name> --type <item|event|behavior|image_text|video|user-event|document> [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset get --id <dataset-id> [--full] [service flags]',
         'vs dataset update --id <dataset-id> [--version <n>] [--description <text>] [--schema @schema.json] [service flags]',
         'vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]',
-        'vs dataset ingest --file ./items.jsonl --type <user_event|multi_modal> [--dataset-name <name>] [--industry <type>] [--language <lang>] [--theme <theme>] [--abnormal-image-policy <policy>] [--abnormal-video-policy <policy>] [--video-auto-delete] [--dry-run] [workflow flags]',
-        'vs dataset import-url --file-name <file> [--project-name <name>] [service flags]',
-        'vs dataset infer-schema --tos-key <key> --type <user_event|multi_modal> [--name <name>] [--industry <type>] [--language <lang>] [--theme <theme>] [--project-name <name>] [service flags]',
-        'vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]',
-        'vs dataset validate-schema --input <path> --dataset-type <multi_modal|user_event>',
-        'vs dataset schema check --type <item|query|video|user-event|doc|document> [--schema @schema.json] [service flags]',
-        'vs dataset subscription create --data @subscription-create.json [service flags]',
-        'vs dataset subscription get --task-id <task-id> [service flags]',
-        'vs dataset subscription list [service flags]',
-        'vs dataset subscription close --task-id <task-id> [service flags]',
+        'vs dataset schema get --id <dataset-id> [--version <n>] [service flags]',
+        'vs dataset schema check --type <item|event|behavior|image_text|video|user-event|document> [--schema @schema.json] [service flags]',
         'vs dataset list [--type <type> --name <text> --application-id <id> --full] [service flags]',
         'vs dataset delete --id <dataset-id> [--force] [service flags]'
       ]
     )}
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     data: `${renderUsageBlock(
       [
         'vs data write --dataset-id <id> --fields @fields.json [service flags]',
-        'vs data import --dataset-id <id> --fields @items.json [service flags]',
-        'vs data delete --dataset-id <id> --id <item-id> [service flags]'
+        'vs data import --dataset-id <id> --fields @items.json [service flags]'
       ]
     )}
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
-    connector: `${renderUsageBlock(
+    item: `${renderUsageBlock(
       [
-        'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
-        'vs connector export --source jsonl --file <path/to/items.jsonl> [--dataset-name <name> --job <job>] [connector flags]',
-        'vs connector init --name <job> --source mysql --dataset-id <id> --source-table <table> --id-field <field> --cursor-field <field> [connector flags]',
-        'vs connector init --name <job> --source jsonl --dataset-id <id> --file <path/to/items.jsonl> [connector flags]',
-        'vs connector run --job <job> [--once] [service flags]',
-        'vs connector run --job <job> --daemon [service flags]',
-        'vs connector status --job <job>',
-        'vs connector stop --job <job>',
-        'vs connector stop --pid <pid>',
-        'vs connector stop --job <job> --pid <pid>',
-        'vs connector inspect --job <job>'
+        'vs item profile --file ./items.json [--type <item|video>] [output flags]',
+        'vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]',
+        'vs item review --plan-dir <dir> [--reviewer <name>] [--review-notes <text>] [output flags]',
+        'vs item provision --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]',
+        'vs item verify --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]',
+        'vs item apply --plan-dir <dir> [--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]'
       ]
     )}
 
-SOURCE ENVIRONMENT
-  mysql        Uses MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE by default. Optional MYSQL_CHARSET overrides the connection charset (default utf8mb4).
-  jsonl        Reads a local JSONL file. No environment variables required.
-  Override prefixes with --env-prefix.
-
-NOTES
-  Use \`connector export\` to turn a source snapshot into a local JSONL bootstrap artifact.
-  The exported records always land at /tmp/viking/connector/<job>/bootstrap/items.jsonl.
-  \`--output\` only redirects the rendered command result; it does not change the bootstrap JSONL path.
-  When a MySQL cursor field is an integer id (for example \`id\`), pass \`--cursor-type number\`.
-  For jsonl sources, the cursor is the file line number; new lines appended to the file are picked up on each poll.
-  Use \`connector init + connector run --daemon\` to keep incremental sync running in the background.
-
-KEY FLAGS
-  --job           Export only. Controls <job> in /tmp/viking/connector/<job>/bootstrap/items.jsonl.
-  --dataset-name  Export only. Used to derive the bootstrap job name when --job is omitted.
-  --name          Init only. Controls the local runtime directory /tmp/viking/connector/<name>/.
-  --dataset-id    Init only. Target dataset that later \`connector run\` writes into.
-  --source-table  Required for mysql export/init.
-  --file          Required for jsonl export/init. Path to the JSONL file.
-  --cursor-field  Checkpoint field used for bootstrap/export progress and later incremental sync (mysql only).
-  --cursor-type   Use \`number\` for integer IDs such as mysql \`id\`; defaults to \`timestamp\` (mysql only).
-  --output        Redirects the rendered command result only; it does not change bootstrap/config file paths.
+DESCRIPTION
+  Understand arbitrary structured item data, generate a reviewable onboarding plan, and apply it to
+  create / ingest / activate a Viking item-search app. Use \`--dry-run\` first when reviewing a plan.
+  Use \`--type item\` for generic图文/卡片/商品类数据，use \`--type video\` for视频内容数据.
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
-    dict: `${renderUsageBlock(
-      [
-        'vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]',
-        'vs dict update --dict-id <id> --name <name> [--description <text>] [service flags]',
-        'vs dict get --dict-id <id> [service flags]',
-        'vs dict list [--dict-ids <id1,id2>] [--types <type1,type2>] [service flags]',
-        'vs dict delete --dict-id <id> [service flags]',
-        'vs dict check-input [--dict-id <id>] [--language <zh|en|ja>] [--type <type>] [--tos-bucket <bucket> --tos-key <key> | --entries @entries.json] [service flags]',
-        'vs dict write-terms --dict-id <id> [--file ./terms.csv | --entries @entries.json] [service flags]',
-        'vs dict bind-scenes --dict-id <id> --scenes @scenes.json [service flags]'
-      ]
-    )}
-
-COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  profile/plan:
+    --type <item|video> --item-type-result <variant|parent> --format --jq --output
+  review:
+    --format --jq --output
+  apply:
+    --base-url --ak --sk --region --timeout-ms --project-name --format --jq --output`,
     search: `${renderUsageBlock(
       [
-        'vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
+        'vs search run --application-id <id> [--scene-id <id>] [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
         'vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]',
         'vs search scene list --application-id <id> [service flags]',
         'vs search scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
-        'vs search scene delete --application-id <id> --scene-id <id> [service flags]',
-        'vs search tune llm-check [--live] [service flags]',
-        'vs search tune validate --queries <file> [--query-count <n>] [service flags]',
-        'vs search tune plan --application-id <id> [--dataset-id <id>] [--queries <file>] [--profile similarity-only] [service flags]',
-        'vs search tune query-generate --application-id <id> [--dataset-id <id>] [--query-count <n>] [--sample-size <n>] [--query-batch-size <n>] [--llm-concurrency <n>] [--retrievable-field-only] [service flags]',
-        'vs search tune run --application-id <id> [--dataset-id <id>] [--queries <file>] [--resume-run-id <id>] [--label-source <llm|source-item|auto>] [--judge-input <text|text-image>] [--profile similarity-only] [--search-concurrency <n>] [--llm-concurrency <n>] [--timeout-ms <ms>] [service flags]',
-        'vs search tune apply --application-id <id> --run-id <id> [--dry-run | --confirm-create-scene] [service flags]',
-        'vs search tune report --run-id <id> [--output-dir <dir>] [service flags]',
-        'vs search tune compare (--run-ids <a,b> | --application-id <id> --dataset-id <id> --scene-ids <a,b> --queries <file>) [service flags]'
+        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
+        'vs search scene delete --application-id <id> --scene-id <id> [service flags]'
       ]
     )}
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output
+  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output
 
 SEARCH SCENE ENUMS
-  PerDatasetConfigs[].TextSearchConfig.Mode
-    balanced
-    semantic_priority
-    keyword_priority
-    user_defined
+  RetrieveConfigs[].Mode
+    Balanced=1
+    SemanticPriority=2
+    KeywordPriority=3
+    UserDefined=4
 
-  PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode
-    keyword_semantic
-    keyword_only
-    semantic_only
+  RetrieveConfigs[].UserDefinedRecallMode
+    KeywordSemantic=0
+    KeywordOnly=1
+    SemanticOnly=2
 
-  When \`Mode=user_defined\`, also set \`UserDefinedRecallMode\` in the same TextSearchConfig.`,
+  When \`Mode=UserDefined(4)\`, also set \`UserDefinedRecallMode\` in the same retrieve config.`,
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
-        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--item-type-result variant|parent] [--item-type-field item_type] [--recommend-model <n>] [--optimization-target <n>] [--bhv-scene-types <types>] [--click-event-types <types>] [--positive-event-types <types>] [--negative-event-types <types>] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
-        'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
-        'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
-        'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
-        'vs recommend rule upsert --application-id <id> [--rule-id <id>] --name <name> --type <degrade|filter|search_filter|force_item> [--description <text>] [--dataset-id <id>] [--item-dataset-id <id>] --config @rule.json [--dry-run] [service flags]',
-        'vs recommend rule delete --application-id <id> --rule-id <id> [--dry-run] [service flags]'
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result variant|parent] [--item-type-field item_type] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene delete --application-id <id> --scene-id <id> [service flags]'
       ]
     )}
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
     chat: `${renderUsageBlock(
       [
         'vs chat run --application-id <id> [--session-id <id>] [--message <text>|--opening-remarks true] [--pretty] [service flags]'
@@ -2297,49 +1670,10 @@ COMMON FLAGS
     )}
 
 COMMON FLAGS
-  --base-url --api-key --ak --sk --region --timeout-ms --data --format --jq --output`,
-    project: `${renderUsageBlock(
-      [
-        'vs project create [project-name] --app-id <id> --features <search,recommend,chat> [--profile <name>] [--search-scene-id <id> --search-dataset-id <id>] [--rec-scene-id <id>] [output flags]',
-        'vs project deploy [--provider=volcengine-iga] [--project-dir <dir>] [--dry-run] [output flags]'
-      ]
-    )}
-
-DESCRIPTION
-  Create a runnable web experience for an existing Viking app.
-  Deploy generated projects to Volcengine IGA Pages; the provider defaults to volcengine-iga.
-  Project create requires one or more explicit features. It reuses VIKING_API_KEY when configured;
-  otherwise it uses AK/SK from the selected or active auth profile.
-
-COMMON FLAGS
-  create: --features --profile --format --jq --output
-  deploy: --provider --project-dir --dry-run --format --jq --output`,
-    purchase: `${renderUsageBlock(
-      [
-        'vs purchase link [--environment-id <environment-id>]',
-        'vs purchase order price --scene <purchase|renew|modify> --configuration-code <code> [--instance-no <no>] [--purchase-months <n> | --end-time <seconds>] [service flags]',
-        'vs purchase order create --scene <purchase|renew|modify> --configuration-code <code> [--instance-no <no>] [--purchase-months <n> | --end-time <seconds>] [--auto-renew] [--client-token <token>] [service flags]',
-        'vs purchase order status [service flags]',
-        'vs purchase order wait [--max-attempts <n>] [--poll-interval-ms <ms>] [service flags]'
-      ]
-    )}
-
-DESCRIPTION
-  Quote and create billing orders through the console OpenAPI, then check whether the onboarding purchase order is visible.
-  order price calls CalculateBillingOrderPrice for a quote without creating an order.
-  order create calls CreateBillingOrderV2 and returns the EPS OrderNO used to complete FastPay payment.
-  Use wait after the user completes payment. Configuration codes: ai_search_free_trial,
-  ai_search_first_month_trial, ai_search_standard_monthly, ai_search_bespoke_premium, ai_search_post_paid.
-  ProductCode is managed internally. Set VIKING_AISEARCH_PRODUCT_CODE only for local billing tests;
-  otherwise REC-SaaS-LLM-SEARCH is used.
-
-COMMON FLAGS
-  link: --environment-id
-  order price/create: --scene --configuration-code --instance-no --purchase-months --end-time --client-token --auto-renew --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output
-  order status/wait: --base-url --api-key --ak --sk --region --timeout-ms --project-name --data --format --jq --output`,
+  --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
   };
 
-  console.log(withOpenApiReferenceHint(helpByDomain[domain] ?? `Unknown domain: ${domain}`));
+  console.log(helpByDomain[domain] ?? `Unknown domain: ${domain}`);
 }
 
 function printDatasetCommandHelp(action: string): void {
@@ -2347,7 +1681,7 @@ function printDatasetCommandHelp(action: string): void {
     create: `Create a Viking dataset.
 
 USAGE
-  vs dataset create --name <name> --type <user_event|multi_modal> [--description <text>] [--schema @schema.json] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--field-desc-map @field-desc-map.json] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--post-paid-type <standard|premium>] [--project-name <name>] [--dry-run] [service flags]
+  vs dataset create --name <name> --type <item|event|behavior|image_text|video|user-event|document> [--description <text>] [--schema @schema.json] [service flags]
   vs dataset create --data @dataset-create.json [service flags]
 
 DESCRIPTION
@@ -2356,394 +1690,42 @@ DESCRIPTION
   manual schema-only path.
 
 KEY FLAGS
-  --data                    Full create payload. Recommended when you already have dataset-create.json.
-  --name                    Dataset name. Required unless --data already provides Name.
-  --type                    Dataset type. Allowed values: user_event|multi_modal. Required unless --data already provides Type.
-  --description             Dataset description when building the payload from flags.
-  --schema                  Schema JSON. Use for schema-only creation; prefer --data when dataset-create.json
-                            is available so DataFieldConfig is also submitted.
-  --schema-json             Inline schema JSON literal (alternative to --schema @file).
-  --industry                Optional industry hint (e_commerce|material|video|news|social_platform|other).
-                            Forwards to CreateDatasetV2.Industry; aliases like \`ecommerce\` are accepted.
-  --language                Optional language hint (zh|en|ko|ja|hi). Forwards to CreateDatasetV2.Language.
-  --theme                   Theme/domain hint. Allowed values: general|e_commerce|content|long_video. Required when --type=multi_modal. Forwards to CreateDatasetV2.Theme.
-  --field-desc-map          JSON map of FieldName → human description. Forwards to FieldDescMap.
-  --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy value (skip|block). skip=drop bad image rows; block=fail the import.
-  --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy value (skip|block). skip=drop bad video rows; block=fail the import.
-  --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
-  --post-paid-type          Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).
-  --project-name            Viking project name when the API requires project scoping.
-  --dry-run                 Validate the payload server-side without persisting the dataset.
+  --data           Full create payload. Recommended when you already have dataset-create.json.
+  --name           Dataset name. Required unless --data already provides Name.
+  --type           Dataset type. Required unless --data already provides Type.
+  --description    Dataset description when building the payload from flags.
+  --schema         Schema JSON. Use for schema-only creation; prefer --data when dataset-create.json
+                   is available so DataFieldConfig is also submitted.
 
 EXAMPLES
-  vs dataset create --name demo-goods --type multi_modal --theme e_commerce --schema @schema.json
-  vs dataset create --name demo-goods --type multi_modal --theme e_commerce --schema @schema.json --industry e_commerce --language zh
+  vs dataset create --name demo-items --type item --schema @schema.json
   vs dataset create --data @dataset-create.json
+  vs item plan --file ./items.json --type item --goal "Build item search" --skip-app
   vs dataset create --data ./.viking/item-plans/<plan>/dataset-create.json`,
-    get: `Get one Viking dataset.
+    ingest: `Import a batch of records into a dataset with a task-oriented workflow command.
 
 USAGE
-  vs dataset get --id <dataset-id> [--full] [service flags]
-
-KEY FLAGS
-  --id      Target dataset ID.
-  --full    Return the raw GetDataset response.
-
-EXAMPLES
-  vs dataset get --id 123
-  vs dataset get --id 123 --full`,
-    list: `List Viking datasets.
-
-USAGE
-  vs dataset list [--type <type>] [--name <text>] [--application-id <id>] [--full] [service flags]
-
-KEY FLAGS
-  --type            Optional dataset type filter.
-  --name            Optional name filter.
-  --application-id  Optional application ID filter.
-  --full            Return the raw ListDatasets response.
-
-EXAMPLES
-  vs dataset list
-  vs dataset list --type item
-  vs dataset list --name catalog --full`,
-    ingest: `Complete file-based V2 dataset onboarding or write explicit rows into an existing dataset.
-
-USAGE
-  vs dataset ingest --dataset-id <id> --fields @items.json [--project-name <name>] [workflow flags]
-  vs dataset ingest --file ./items.jsonl --type <user_event|multi_modal> [--dataset-name <name>] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--abnormal-image-policy <skip|block>] [--abnormal-video-policy <skip|block>] [--video-auto-delete] [--schema-wait-timeout-ms <n>] [--schema-poll-interval-ms <n>] [--project-name <name>] [--dry-run] [workflow flags]
+  vs dataset ingest --dataset-id <id> --fields @items.json [workflow flags]
+  vs dataset ingest --dataset-id <id> --fields ./.viking/item-plans/<plan>/normalized-items.json [workflow flags]
 
 DESCRIPTION
   In a plan-driven dataset-only flow, pair this with \`dataset create --data @dataset-create.json\`
   and pass the generated normalized-items artifact to \`--fields\`.
 
-  The V2 onboarding chain (--file + --type) runs the full pipeline: presigned upload, schema
-  inference polling, and CreateDatasetV2. Use --dry-run to validate without persisting the dataset.
-
-  For source-backed onboarding, first run \`vs connector export ...\` to generate a JSONL bootstrap
-  artifact, then reuse the emitted path with \`vs dataset ingest --file ...\`. Background incremental
-  sync is managed separately through \`vs connector init\` + \`vs connector run --daemon\`.
-
 KEY FLAGS
-  --dataset-id              Target dataset ID (legacy data-write mode).
-  --fields                  JSON array payload. When ingesting from an item plan, prefer normalized-items.json.
-  --file                    Local JSONL/CSV source for V2 chain mode.
-  --type                    Dataset type for V2 chain mode. Accepts user_event|multi_modal;
-                            the same value is reused for CreateDatasetV2.
-  --dataset-name            Optional dataset name for V2 chain mode. Reused for both
-                            AddInferDatasetSchemaTaskV2.Name and CreateDatasetV2.Name.
-  --industry                Optional industry hint forwarded to inference and CreateDatasetV2
-                            (e_commerce|material|video|news|social_platform|other).
-  --language                Optional language hint (zh|en|ko|ja|hi) forwarded to inference and CreateDatasetV2.
-  --theme                   Theme/domain hint for multi_modal datasets (general|e_commerce|content|long_video).
-                            Required when --type=multi_modal. Forwards to AddInferDatasetSchemaTaskV2.Theme and CreateDatasetV2.Theme.
-  --abnormal-image-policy   ProcessConfig.AbnormalImageDataProcessPolicy (skip|block) for multi_modal.
-  --abnormal-video-policy   ProcessConfig.AbnormalVideoDataProcessPolicy (skip|block) for multi_modal.
-  --video-auto-delete       Set ProcessConfig.VideoAutoDelete=true so the backend auto-deletes source videos after processing.
-  --post-paid-type          Post-paid tier for post-paid billing instances: standard|premium. Post-paid instances must set this; omit for non-post-paid (none).
-  --schema-wait-timeout-ms  Upper bound for polling GetInferDatasetSchemaResultV2 (default 120000).
-  --schema-poll-interval-ms Wait between polling attempts in ms (default 2000).
-  --project-name            Viking project name when the API requires project scoping.
-  --dry-run                 Validate the V2 chain without persisting the dataset.
+  --dataset-id     Target dataset ID.
+  --fields         JSON array payload. When ingesting from an item plan, prefer normalized-items.json.
 
 EXAMPLES
   vs dataset ingest --dataset-id 123 --fields @items.json
-  vs dataset ingest --file ./items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --language zh
-  vs dataset ingest --file ./items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --dry-run
-  vs dataset ingest --file ./events.jsonl --type user_event --dataset-name demo-behavior
-  vs connector export --source mysql --source-table products --id-field id --cursor-field updated_at --dataset-name demo-items
-  vs dataset ingest --file /tmp/viking/connector/demo-items/bootstrap/items.jsonl --type multi_modal --theme e_commerce --dataset-name demo-items`,
-    'import-url': `Request a presigned upload URL for V2 dataset onboarding (GetPresignedImportUrlV2).
-
-USAGE
-  vs dataset import-url --file-name <file> [--project-name <name>] [service flags]
-  vs dataset import-url --data @import-url.json [service flags]
-
-DESCRIPTION
-  Returns FileUrl + FileKey. Upload the local file to FileUrl via PUT, then pass FileKey to
-  \`dataset infer-schema --tos-key\`.
-
-KEY FLAGS
-  --file-name      Source file name. Required unless --data already provides FileName.
-  --project-name   Viking project name when the API requires project scoping.
-
-EXAMPLES
-  vs dataset import-url --file-name items.jsonl
-  vs dataset import-url --data @import-url.json`,
-    'infer-schema': `Submit a schema inference task for V2 dataset onboarding (AddInferDatasetSchemaTaskV2).
-
-USAGE
-  vs dataset infer-schema --tos-key <key> --type <user_event|multi_modal> [--name <name>] [--industry <industry>] [--language <lang>] [--theme <general|e_commerce|content|long_video>] [--project-name <name>] [service flags]
-  vs dataset infer-schema --data @infer-schema.json [service flags]
-
-DESCRIPTION
-  Submits the uploaded TOS key for schema inference and returns a TaskID. Poll the task with
-  \`dataset infer-result\` until Status is succeeded.
-
-KEY FLAGS
-  --tos-key        FileKey returned by \`dataset import-url\`. Required unless --data already provides TosKey.
-  --type           Dataset type. Allowed values: user_event|multi_modal. Required unless --data already provides Type.
-  --name           Optional dataset name hint forwarded to AddInferDatasetSchemaTaskV2.Name.
-  --industry       Optional industry hint (e_commerce|material|video|news|social_platform|other).
-                   Aliases like \`ecommerce\` are accepted and normalized to the snake_case wire value.
-  --language       Optional language hint (zh|en|ko|ja|hi).
-  --theme          Theme/domain hint (general|e_commerce|content|long_video). Required when --type=multi_modal. Forwards to AddInferDatasetSchemaTaskV2.Theme.
-  --project-name   Viking project name when the API requires project scoping.
-
-EXAMPLES
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal --theme e_commerce
-  vs dataset infer-schema --tos-key onboarding/items.jsonl --type multi_modal --theme e_commerce --industry e_commerce --language zh`,
-    'infer-result': `Fetch the latest result of a V2 schema inference task (GetInferDatasetSchemaResultV2).
-
-USAGE
-  vs dataset infer-result --task-id <id> [--project-name <name>] [service flags]
-  vs dataset infer-result --data @infer-result.json [service flags]
-
-DESCRIPTION
-  Returns the current Status (pending|processing|succeeded|failed|canceled) along with Schema / FieldDescMap /
-  DataFieldConfig when Status is succeeded. This is a single-shot call; \`dataset ingest\` performs
-  the polling internally.
-
-  To render a human-readable schema confirmation block (fields table, field roles, warnings),
-  save the result to JSON and use \`vs dataset validate-schema --input <path> --dataset-type <type>\`.
-
-KEY FLAGS
-  --task-id        TaskID returned by \`dataset infer-schema\`.
-  --project-name   Viking project name when the API requires project scoping.
-
-EXAMPLES
-  vs dataset infer-result --task-id task_abc123
-  vs dataset infer-result --data @infer-result.json`,
-    'validate-schema': `Validate and render a schema-inference result locally.
-
-USAGE
-  vs dataset validate-schema --input <path/to/infer-result.json> --dataset-type <multi_modal|user_event>
-
-DESCRIPTION
-  Reads a saved infer-result JSON file and renders the deterministic Schema Confirmation block
-  (metadata / field table / field roles / warnings). Supply --dataset-type to toggle validation rules:
-  multi_modal validates primary-key BizAttr, IndexFields, and role references; user_event skips
-  those checks (behavior datasets use a different primary-key mechanism and have no search roles).
-
-KEY FLAGS
-  --input           Path to infer-result JSON file (from \`vs dataset infer-result > file.json\`
-                    or the saved plan artifact). Required.
-  --dataset-type    Dataset type: multi_modal (default) or user_event. Controls which validation
-                    rules and render sections are active.
-
-EXAMPLES
-  vs dataset validate-schema --input ./infer-result.json --dataset-type multi_modal
-  vs dataset validate-schema --input ./.viking/item-plans/my-dataset/infer-result.json --dataset-type user_event`,
-    subscription: `Manage data-source subscription tasks.
-
-USAGE
-  vs dataset subscription create --data @subscription-create.json [service flags]
-  vs dataset subscription create --dataset-id <id> --type mysql --data-source-config @mysql-source.json [--client-token <token>] [service flags]
-  vs dataset subscription get --task-id <task-id> [service flags]
-  vs dataset subscription list [service flags]
-  vs dataset subscription close --task-id <task-id> [service flags]
-
-DESCRIPTION
-  Creates and manages backend data-source subscription tasks. For MySQL credentials and source settings,
-  prefer \`--data @subscription-create.json\` or \`--data-source-config @mysql-source.json\` so secrets do not
-  appear directly in shell history.
-
-KEY FLAGS
-  --data                   Full request payload. Recommended for create because DataSourceConfig may contain credentials.
-  --client-token           Idempotency token for create. Same token requires exactly the same request payload.
-  --need-create-dataset    Let the backend sample the source and create a new multi_modal dataset.
-  --dataset-id             Existing dataset ID when --need-create-dataset is not set.
-  --create-dataset-config  JSON object for creating a new dataset when --need-create-dataset is set.
-  --type                   Data source type. Currently supports mysql.
-  --data-source-config     JSON object for DataSourceConfig. Use @file for credentials.
-  --task-id                Subscription task ID for get/close.
-
-EXAMPLES
-  vs dataset subscription create --data @subscription-create.json
-  vs dataset subscription create --dataset-id ds_xxx --type mysql --data-source-config @mysql-source.json --client-token token-1
-  vs dataset subscription get --task-id task_xxx
-  vs dataset subscription list
-  vs dataset subscription close --task-id task_xxx`
+  vs dataset ingest --dataset-id 123 --fields ./.viking/item-plans/<plan>/normalized-items.json`
   };
 
-  console.log(withOpenApiReferenceHint(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`));
-}
-
-function printDictCommandHelp(action: string): void {
-  const helpByAction: Record<string, string> = {
-    create: `Create a console dictionary.
-
-USAGE
-  vs dict create --name <name> --type <type> [--description <text>] [--enable-idempotent] [service flags]
-  vs dict create --data @dict-create.json [service flags]
-
-KEY FLAGS
-  --name               Dictionary name.
-  --type               Dictionary type. Allowed values: query_recommendation, query_completion,
-                       query_correction_exemption, bidirection_synonyms, unidirection_synonyms.
-  --description        Optional dictionary description.
-  --enable-idempotent  When true, return the existing same-name dictionary instead of failing.
-
-EXAMPLES
-  vs dict create --name query-completion-demo --type query_completion
-  vs dict create --name synonym-demo --type bidirection_synonyms --enable-idempotent`,
-    update: `Update a console dictionary.
-
-USAGE
-  vs dict update --dict-id <id> --name <name> [--description <text>] [service flags]
-  vs dict update --data @dict-update.json [service flags]
-
-KEY FLAGS
-  --dict-id       Target dictionary ID.
-  --name          Required. Backend performs a full update and validates Name again.
-  --description   New description.
-
-EXAMPLES
-  vs dict update --dict-id dict_xxx --name updated-name
-  vs dict update --dict-id dict_xxx --name updated-name --description "new description"`,
-    get: `Get one console dictionary.
-
-USAGE
-  vs dict get --dict-id <id> [service flags]
-  vs dict get --data @dict-get.json [service flags]
-
-KEY FLAGS
-  --dict-id   Target dictionary ID.
-
-EXAMPLES
-  vs dict get --dict-id dict_xxx`,
-    delete: `Delete one console dictionary.
-
-USAGE
-  vs dict delete --dict-id <id> [service flags]
-  vs dict delete --data @dict-delete.json [service flags]
-
-KEY FLAGS
-  --dict-id   Target dictionary ID.
-
-EXAMPLES
-  vs dict delete --dict-id dict_xxx`,
-    list: `List console dictionaries.
-
-USAGE
-  vs dict list [--dict-ids <id1,id2>] [--types <type1,type2>] [service flags]
-  vs dict list --data @dict-list.json [service flags]
-
-KEY FLAGS
-  --dict-ids   Optional dictionary ID filter. Comma-separated or JSON array.
-  --types      Optional type filter. Comma-separated or JSON array.
-
-EXAMPLES
-  vs dict list
-  vs dict list --types query_completion,bidirection_synonyms
-  vs dict list --dict-ids dict_a,dict_b`,
-    'check-input': `Validate dictionary entries before upload or append.
-
-USAGE
-  vs dict check-input [--dict-id <id>] [--language <zh|en|ja>] [--type <type>] [--tos-bucket <bucket> --tos-key <key> | --entries @entries.json] [service flags]
-  vs dict check-input --data @dict-check.json [service flags]
-
-KEY FLAGS
-  --dict-id      Existing dictionary ID. When provided, backend ignores --type and validates
-                 against the existing dictionary type and accumulated entry count.
-  --language     Allowed values: zh, en, ja.
-  --type         Dictionary type when validating entries before creation.
-  --entries      Inline JSON / @file / JSON file path for Entries[]. Example:
-                 [{"Fields":["nike","耐克"]}]
-  --tos-bucket   TOS bucket when validating by uploaded source file.
-  --tos-key      TOS key when validating by uploaded source file.
-
-EXAMPLES
-  vs dict check-input --language zh --type bidirection_synonyms --entries @entries.json
-  vs dict check-input --dict-id dict_xxx --entries @more-entries.json`,
-    'bind-scenes': `Bind a dictionary to search scenes.
-
-USAGE
-  vs dict bind-scenes --dict-id <id> --scenes @scenes.json [service flags]
-  vs dict bind-scenes --data @dict-bind-scenes.json [service flags]
-
-KEY FLAGS
-  --dict-id   Dictionary ID.
-  --scenes    Inline JSON / @file / JSON file path for Scenes[]. Example:
-              [{"AppId":"app_xxx","SceneId":"scene_xxx","DatasetId":"dataset_xxx"}]
-
-EXAMPLES
-  vs dict bind-scenes --dict-id dict_xxx --scenes @scenes.json`,
-    'write-terms': `Write or update dictionary terms from a CSV file or inline write-items.
-
-USAGE
-  vs dict write-terms --dict-id <id> [--file ./terms.csv | --entries @entries.json] [service flags]
-
-KEY FLAGS
-  --dict-id      Target dictionary ID.
-  --file         Local \`.csv\` source file path only.
-                 The CLI obtains the upload signature, uploads the file, and submits the
-                 write_terms request internally using file-import payload fields.
-  --entries      Inline JSON / @file / JSON file path for \`items[]\`. Example:
-                 [{"_last_data":{},"_current_data":{"query":"nike","query_count":10}}]
-
-EXAMPLES
-  vs dict write-terms --dict-id dict_xxx --file ./terms.csv
-  vs dict write-terms --dict-id dict_xxx --entries @entries.json`
-  };
-
-  console.log(withOpenApiReferenceHint(helpByAction[action] ?? `Unknown dict subcommand: ${action}`));
+  console.log(helpByAction[action] ?? `Unknown dataset subcommand: ${action}`);
 }
 
 function printAppCommandHelp(action: string, subAction?: string): void {
   const helpByAction: Record<string, string> = {
-    create: `Create a Viking application.
-
-USAGE
-  vs app create --name <name> [--description <text>] [--industry <industry>] [--language <lang>] [--color <color>] [--icon-color <color>] [--risk-check] [--post-paid-type <standard|premium>] [--project-name <name>] [--dry-run] [service flags]
-  vs app create --data @app-create.json [service flags]
-
-DESCRIPTION
-  Creates an application. The CLI normalizes industry aliases (e.g. \`ecommerce\` → \`e_commerce\`)
-  before forwarding the payload.
-
-KEY FLAGS
-  --data           Full create payload. Use when you already have app-create.json.
-  --name           Application name. Required unless --data already provides Name.
-  --description    Optional application description.
-  --industry       Optional industry hint (e_commerce|material|video|news|social_platform|other).
-                   Aliases like \`ecommerce\` are accepted and normalized to the snake_case wire value.
-  --language       Optional language hint (zh|en|ko|ja|hi). Forwards to CreateApplicationV2.Language.
-  --color          Icon color shorthand (cyan|blue|purple|pink). Forwards to Icon.ColorName.
-  --icon-color     Explicit alias for --color when both are present.
-  --risk-check     Enable platform risk-check on the application (EnableRiskCheck=true).
-  --post-paid-type Post-paid tier for post-paid billing instances: standard|premium. Omit for non-post-paid (none) instances.
-  --project-name   Viking project name when the API requires project scoping.
-  --dry-run        Server-side dry run; returns DryRunOperation without persisting the app.
-
-EXAMPLES
-  vs app create --name catalog-search --industry e_commerce --language zh --color cyan
-  vs app create --name catalog-search --industry e_commerce --risk-check --dry-run
-  vs app create --data @app-create.json`,
-    'item-data-count': `Get the effective item data count for an item/video dataset under an application.
-
-USAGE
-  vs app item-data-count --application-id <id> --dataset-id <id> [--full] [service flags]
-
-DESCRIPTION
-  Reports the effective (valid) and total record counts for an item/video dataset as seen by an
-  application, via /api/v1/GetAppItemDataCount. Use this to answer "how much effective data does
-  this application have" for item/video datasets.
-  User behavior datasets (user_event) do not require data-volume statistics and should be omitted
-  from product-level data volume summaries. Document datasets are not counted by this command; use
-  application dataset config metadata for document counts.
-  The compact output surfaces validCnt/totalCnt (and image/duration counts for video); pass \`--full\`
-  for the raw response payload.
-
-KEY FLAGS
-  --application-id  Target application ID.
-  --dataset-id      Target item/video dataset ID. Do not pass user_event datasets.
-  --project-name    Viking project name when the API requires project scoping.
-  --full            Return the raw GetAppItemDataCount response.
-
-EXAMPLES
-  vs app item-data-count --application-id 123 --dataset-id 456
-  vs app item-data-count --application-id 123 --dataset-id 456 --full`,
     'dataset:bind': `Bind a dataset to an application with an explicit bind-time field config.
 
 USAGE
@@ -2833,32 +1815,138 @@ EXAMPLES
   vs app dataset-config update --application-id 123 --dataset-id 456 --field-config @field-config.json
   vs app dataset-config update --application-id 123 --dataset-id 456 --field-config ./.viking/item-plans/<plan>/field-config.json --dry-run
   vs app dataset-config update --application-id 123 --dataset-id 456 --schema-version 2 --field-config-version 5 --field-config @field-config.json`,
-    'attach-dataset:': `Attach a dataset to an application with a reviewed DataConfig (V2 AttachDatasetToApplicationV2).
-
-USAGE
-  vs app attach-dataset --app-id <id> --dataset-id <id> --data-config @data-config.json [--dry-run] [service flags]
-  vs app attach-dataset --data @attach.json [service flags]
-
-DESCRIPTION
-  Replaces the legacy \`app dataset bind\` flow. The DataConfig payload should include IndexFields,
-  FilterFields, SuggestFields, ChatFields, FilterFieldsMap, and FieldDescMap so the application has
-  a complete reviewed schema-to-config mapping when the attach succeeds.
-
-KEY FLAGS
-  --app-id          Target application ID (alias: --application-id).
-  --dataset-id      Target dataset ID.
-  --data-config     Reviewed DataConfig JSON (@file or inline).
-  --dry-run         Validate without persisting the attach.
-  --project-name    Viking project name when the API requires project scoping.
-
-EXAMPLES
-  vs app attach-dataset --app-id app_123 --dataset-id ds_456 --data-config @data-config.json
-  vs app attach-dataset --app-id app_123 --dataset-id ds_456 --data-config @data-config.json --dry-run
-  vs app attach-dataset --data @attach.json`,
   };
 
-  const key = `${action}:${subAction ?? ''}`;
-  console.log(withOpenApiReferenceHint(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
+  console.log(helpByAction[`${action}:${subAction ?? ''}`] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
+}
+
+function printItemCommandHelp(action: string): void {
+  const helpByAction: Record<string, string> = {
+    plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
+
+USAGE
+  vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app [output flags]
+
+DESCRIPTION
+  Use this command to generate the plan artifacts an agent or operator will review before provisioning.
+  For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
+  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow.
+
+KEY FLAGS
+  --file               Source JSON array, JSONL, or CSV file.
+  --type               Dataset type: item or video. Pass it explicitly for video data.
+  --item-type-result   Generated item hierarchy filter for search/recommend configs. Defaults to variant.
+  --goal               Business goal carried into generated reports and payload descriptions.
+  --output-dir         Custom directory for plan artifacts.
+  --dataset-name       Override the generated dataset name.
+  --application-name   Override the generated application name.
+  --skip-app           Generate a dataset-only plan without app creation artifacts.
+
+EXAMPLES
+  vs item plan --file ./items.json --output-dir ./.viking/item-plan
+  vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app`,
+    apply: `Compatibility wrapper around item provision / verify.
+
+USAGE
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase verify [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase all --confirm-review [workflow flags]
+
+DESCRIPTION
+  Defaults to \`phase=provision\` unless \`--run-trials\` or \`--phase all\` is passed. Use
+  \`--confirm-review\` for a real apply after schema and bind-time field config review. Use
+  \`--skip-app\` to stop at dataset provisioning when you need to preserve the dataset-only boundary.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --phase                           Execution phase: provision, verify, or all.
+  --confirm-review                  Required for a real apply path.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Skip app creation and app-level setup.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --run-trials                      Legacy alias for \`--phase all\`.
+  --confirm-recommend-entry-binding Confirm the recommend scene target page/module before bootstrap.
+  --recommend-bhv-scene-types       Comma-separated behavior scene types for recommend bootstrap.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase verify
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase all --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    provision: `Provision item onboarding resources up to dataset binding and activation start.
+
+USAGE
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --interactive-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --dry-run [workflow flags]
+
+DESCRIPTION
+  Stage-one provisioning command. It creates or reuses the dataset and, unless \`--skip-app\` is passed,
+  continues through app creation and dataset binding. It does not wait for runtime readiness or run
+  search/chat verification.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --confirm-review                  Required for real provisioning after review is complete.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Stop after dataset provisioning and skip app-level binding.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --interactive-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --dry-run
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    verify: `Wait until provisioned item data becomes searchable, then run runtime verification.
+
+USAGE
+  vs item verify --plan-dir ./.viking/item-plans/<plan> [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --search-query "wireless headphones" [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --skip-chat [workflow flags]
+
+DESCRIPTION
+  Use this after provisioning to wait for indexing and run search/chat smoke checks. You can override
+  the generated search query or chat message, skip individual runtime checks, or bootstrap recommend
+  verification when the required recommend flags are present.
+
+KEY FLAGS
+  --plan-dir             Directory containing plan.json and provision artifacts.
+  --wait-indexed         Wait for dataset/app searchability before runtime checks.
+  --search-query         Override the generated search smoke query.
+  --chat-message         Override the generated chat smoke message.
+  --skip-search          Skip runtime search smoke.
+  --skip-chat            Skip runtime chat smoke.
+  --dry-run              Print planned verify actions without calling Viking APIs.
+
+EXAMPLES
+  vs item verify --plan-dir ./.viking/item-plans/demo
+  vs item verify --plan-dir ./.viking/item-plans/demo --search-query "wireless headphones"
+  vs item verify --plan-dir ./.viking/item-plans/demo --skip-chat`,
+    review: `Render the current schema and bind-time field-config summary for a plan.
+
+USAGE
+  vs item review --plan-dir ./.viking/item-plans/<plan> [output flags]
+  vs item review --plan-dir ./.viking/item-plans/<plan> --reviewer alice --review-notes "Reviewed with PM" [output flags]
+
+DESCRIPTION
+  Use this to inspect the current review state and write \`review-confirmation.json\` from the plan's
+  current artifacts. This is a review record command; it does not provision or verify runtime behavior.
+
+KEY FLAGS
+  --plan-dir      Directory containing plan.json and review-confirmation.json.
+  --reviewer      Reviewer name to record.
+  --review-notes  Optional notes to persist in review-confirmation.json.
+
+EXAMPLES
+  vs item review --plan-dir ./.viking/item-plans/demo
+  vs item review --plan-dir ./.viking/item-plans/demo --reviewer alice --review-notes "Reviewed with PM"`,
+  };
+
+  console.log(helpByAction[action] ?? `Unknown item subcommand: ${action}`);
 }
 
 function printSearchCommandHelp(action: string, subAction?: string): void {
@@ -2866,21 +1954,21 @@ function printSearchCommandHelp(action: string, subAction?: string): void {
     run: `Run a search request against an application scene.
 
 USAGE
-  vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]
+  vs search run --application-id <id> [--scene-id <id>] [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]
 
 DESCRIPTION
-  Sends a normal runtime search request against an explicit search scene. When the application is bound
-  to exactly one dataset, \`--dataset-id\` is usually optional.
+  Sends a runtime search request. When the application is bound to exactly one dataset, \`--dataset-id\`
+  is usually optional. Pass \`--scene-id\` to target a non-default search scene.
 
 KEY FLAGS
   --application-id  Target application ID.
-  --scene-id        Search scene ID.
+  --scene-id        Optional search scene ID.
   --dataset-id      Optional dataset override for the request.
   --query           Search query text.
   --page-size       Optional result page size.
 
 EXAMPLES
-  vs search run --application-id 123 --scene-id default-search --query "wireless headphones"
+  vs search run --application-id 123 --query "wireless headphones"
   vs search run --application-id 123 --scene-id default-search --query "running shoes" --page-size 5`,
     'scene:create': `Create a search scene for an application.
 
@@ -2889,8 +1977,8 @@ USAGE
   vs search scene create --application-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
-  Creates a new search scene under the target application. Use \`--name\` and \`--description\`
-  for the simple path, or pass \`--data\` when you need full control over the create payload.
+  Creates a new search scene under the target application. Use \`--name\` and \`--description\` for the
+  simple path, or pass \`--data\` when you need full control over the create payload.
 
 KEY FLAGS
   --application-id  Target application ID.
@@ -2938,7 +2026,7 @@ KEY FLAGS
 EXAMPLES
   vs search scene get --application-id 123 --scene-id abc
   vs search scene get --application-id 123 --scene-id abc --format json
-  vs search scene get --application-id 123 --scene-id abc --jq '.Result.Config'`,
+  vs search scene get --application-id 123 --scene-id abc --jq '.Result.Scene.Config'`,
     'scene:delete': `Delete a search scene from an application.
 
 USAGE
@@ -2962,12 +2050,12 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
-  Updates and publishes a search scene. Prefer inspecting the current scene with \`vs search scene get\`
-  first, then update only the intended parts. Use \`--config\` when you already
+  Updates a published search scene through \`OnlineSearchScene\`. Prefer inspecting the current scene with
+  \`vs search scene get\` first, then update only the intended parts. Use \`--config\` when you already
   have a complete \`Config\` object; use \`--search-config\` and companion flags when you only want to
   replace selected config sections.
 
@@ -2975,239 +2063,44 @@ KEY FLAGS
   --application-id           Target application ID.
   --scene-id                 Target search scene ID.
   --config                   Full scene \`Config\` object.
-  --search-config            \`Config.PerDatasetConfigs\` array only.
+  --search-config            \`Config.SearchConfig\` object only.
+  --item-type-result         Search item hierarchy when the item dataset has ItemType: variant or parent.
+  --item-dataset-id          Item dataset whose ItemTypeFilter should be updated. Required with --item-type-result.
+  --item-type-field          ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
   --overview-config          \`Config.OverviewConfig\` object only.
   --data                     Full request payload. Use this when you need to control top-level fields directly.
 
 SEARCH MODE ENUMS
-  PerDatasetConfigs[].TextSearchConfig.Mode
-    balanced
-    semantic_priority
-    keyword_priority
-    user_defined
+  RetrieveConfigs[].Mode
+    Balanced=1
+    SemanticPriority=2
+    KeywordPriority=3
+    UserDefined=4
 
-  PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode
-    keyword_semantic
-    keyword_only
-    semantic_only
+  RetrieveConfigs[].UserDefinedRecallMode
+    KeywordSemantic=0
+    KeywordOnly=1
+    SemanticOnly=2
 
-  When \`Mode=user_defined\`, also set \`UserDefinedRecallMode\` in the same TextSearchConfig.
+  When \`RetrieveConfigs[].Mode=UserDefined(4)\`, also set \`RetrieveConfigs[].UserDefinedRecallMode\`
+  in the same retrieve config.
 
 EXAMPLES
   vs search scene get --application-id 123 --scene-id abc --format json > scene.json
   vs search scene update --application-id 123 --scene-id abc --config @scene.json
   vs search scene update --application-id 123 --scene-id abc --search-config @search.json
-  vs search scene update --application-id 123 --scene-id abc --data @payload.json`,
-    tune: `Evaluate and tune text search similarity.
-
-USAGE
-  vs search tune llm-check [--live] [service flags]
-  vs search tune validate --queries <file> [--query-count <n>] [service flags]
-  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--query-count <n>] [--retrievable-field-only] [service flags]
-  vs search tune plan --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [service flags]
-  vs search tune run --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [service flags]
-  vs search tune report --run-id <id> [--output-dir <dir>] [service flags]
-  vs search tune compare (--run-ids <a,b> | --application-id <id> --dataset-id <id> --scene-ids <a,b> --queries <file>) [service flags]
-  vs search tune apply --application-id <id> --run-id <id> [--dry-run | --confirm-create-scene] [service flags]
-
-DESCRIPTION
-  First-version tuning covers text-query similarity only. It fixes mode=UserDefined and excludes
-  rerank, personalization, hotness, boost/bury rules, sort rules, serving controls, and business rules.`,
-    'tune:llm-check': `Check the LLM configuration used by search tuning.
-
-USAGE
-  vs search tune llm-check [--live] [service flags]
-
-DESCRIPTION
-  Verifies that VIKING_LLM_BASE_URL, VIKING_LLM_API_KEY or VIKING_LLM_AK/SK, and VIKING_LLM_MODEL
-  resolve to a usable LLM configuration. Pass --live to send a small test request.
-
-EXAMPLES
-  vs search tune llm-check
-  vs search tune llm-check --live --json`,
-    'tune:validate': `Validate a search tuning query set.
-
-USAGE
-  vs search tune validate --queries <file> [--query-count <n>] [service flags]
-
-DESCRIPTION
-  Checks JSON, JSONL, or CSV query sets locally without calling search or LLM services. Reports
-  parse/schema errors, duplicate ids, duplicate query text, sourceItemIds coverage, query type
-  distribution, and the recommended label source for a tuning run.
-
-KEY FLAGS
-  --queries      Query set file to validate.
-  --query-count  Maximum number of queries to inspect.
-
-EXAMPLES
-  vs search tune validate --queries ./queries.jsonl
-  vs search tune validate --queries ./queries.jsonl --query-count 100 --json`,
-    'tune:plan': `Plan first-version automated search evaluation and similarity tuning.
-
-USAGE
-  vs search tune plan --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [--optimizer <matrix|spa>] [--profile similarity-only] [service flags]
-
-DESCRIPTION
-  Prints the fixed scope, query source, candidate strategy count, cost estimate, and strategy coverage.
-  This command does not call search or LLM services. First-version tuning fixes mode=UserDefined and excludes rerank.
-
-KEY FLAGS
-  --application-id  Target application ID.
-  --dataset-id      Dataset ID.
-  --scene-id        Search scene ID used as the runtime search entry.
-  --queries         JSON, JSONL, or CSV query set. If omitted, the plan assumes CLI-generated queries.
-  --query-count     Maximum query count. Defaults to all queries from --queries, or 100 generated queries when --queries is omitted.
-  --top-k           Results judged per query and strategy. Default: 20.
-  --max-strategies  Maximum candidate strategies. Default: 30.
-  --optimizer       Candidate strategy optimizer: matrix or spa. Default: matrix.
-
-EXAMPLES
-  vs search tune plan --application-id 123 --dataset-id 456 --queries ./queries.jsonl
-  vs search tune plan --application-id 123 --dataset-id 456 --query-count 100 --top-k 20 --max-strategies 30 --optimizer spa`,
-    'tune:query-generate': `Generate a reusable synthetic query set for search tuning.
-
-USAGE
-  vs search tune query-generate --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--query-count <n>] [--min-query-count <n>] [--sample-size <n>] [--query-batch-size <n>] [--llm-concurrency <n>] [--retrievable-field-only] [--output-dir <dir>] [service flags]
-
-DESCRIPTION
-  Uses paged dataset samples and the configured CLI LLM to generate a JSONL query set in multiple
-  batches. Review the returned sample queries, warnings, and shortfall before passing the query file
-  to \`search tune plan\` and \`search tune run\`.
-
-KEY FLAGS
-  --application-id  Target application ID.
-  --dataset-id      Dataset ID. If omitted, the CLI tries to infer a unique search dataset.
-  --scene-id        Search scene ID used when inspecting application context.
-  --query-count     Maximum query count. Default: 100.
-  --min-query-count Minimum acceptable query count. Defaults to query-count for <=10, otherwise max(10, ceil(query-count * 0.8)).
-  --sample-size     Dataset sample items to load across pages. Default: 200.
-  --query-batch-size Queries requested from each LLM generation call. Default: 10.
-  --llm-concurrency Concurrent LLM generation calls. Default: 100.
-  --retrievable-field-only Generate queries from text IndexFields only; ImageIndexFields are excluded.
-  --output-dir      Artifact root. Default: .viking/search-tuning.
-
-EXAMPLES
-  vs search tune query-generate --application-id 123 --dataset-id 456 --query-count 100 --sample-size 200 --query-batch-size 10 --llm-concurrency 100
-  vs search tune query-generate --application-id 123 --dataset-id 456 --output-dir ./.viking/search-tuning`,
-    'tune:run': `Run first-version automated search evaluation and similarity tuning.
-
-USAGE
-  vs search tune run --application-id <id> [--dataset-id <id>] [--scene-id <id>] [--queries <file>] [--resume-run-id <id>] [--optimizer <matrix|spa>] [--label-source <llm|source-item|auto>] [--judge-input <text|text-image>] [--profile similarity-only] [--search-concurrency <n>] [--llm-concurrency <n>] [--timeout-ms <ms>] [service flags]
-
-DESCRIPTION
-  Runs text-query similarity tuning with CLI-managed LLM query generation and pointwise relevance judging.
-  The first version disables personalization in requests and evaluates user-defined recall strategies only.
-  While running, it writes run-state.json, rankings.jsonl, labels-used.jsonl, partial-metrics.json,
-  and performance-summary.json under the run artifact directory so interrupted runs can be inspected
-  and resumed.
-
-KEY FLAGS
-  --application-id  Target application ID.
-  --dataset-id      Dataset ID. If omitted, the CLI tries to infer a unique search dataset.
-  --scene-id        Search scene ID used as the runtime search entry.
-  --queries         JSON, JSONL, or CSV query set. If omitted, the CLI generates queries from sample items.
-  --query-count     Maximum query count. Defaults to all queries from --queries, or 100 generated queries when --queries is omitted.
-  --top-k           Results judged per query and strategy. Default: 20.
-  --max-strategies  Maximum candidate strategies. Default: 30.
-  --optimizer       Candidate strategy optimizer: matrix or spa. Default: matrix.
-  --label-source    Relevance label source: llm, source-item, or auto. Default: llm.
-  --judge-input     LLM judge input mode: text or text-image. Default: text.
-  --max-judge-images  Max item images per LLM judge request for text-image. Default: 1.
-  --search-concurrency  Concurrent search requests. Default: 18.
-  --llm-concurrency     Concurrent LLM relevance judgements. Default: 100.
-  --llm-retries         Retries per failed LLM judgement. Default: 1.
-  --max-label-failure-rate  Allowed failed label ratio before aborting. Default: 0.01.
-  --verbose         Print per-query/per-label progress lines.
-  --timeout-ms      Request timeout. Default: 120000 for LLM-backed tuning.
-  --resume-run-id   Resume an incomplete run from its existing artifact directory.
-  --output-dir      Artifact root. Default: .viking/search-tuning.
-
-EXAMPLES
-  vs search tune run --application-id 123 --dataset-id 456 --profile similarity-only
-  vs search tune run --application-id 123 --dataset-id 456 --queries ./queries.jsonl --top-k 20 --max-strategies 30 --optimizer spa --search-concurrency 18 --llm-concurrency 100
-  vs search tune run --application-id 123 --dataset-id 456 --queries ./queries.jsonl --label-source llm --judge-input text-image --max-judge-images 1
-  vs search tune run --application-id 123 --dataset-id 456 --queries ./queries.jsonl --label-source source-item`,
-    'tune:apply': `Create a new search scene from a completed tuning report recommendation.
-
-USAGE
-  vs search tune apply --application-id <id> --run-id <id> [--scene-name <name>] [--scene-description <text>] [--dry-run | --confirm-create-scene] [service flags]
-
-DESCRIPTION
-  Loads a completed tuning report, converts the recommended SearchDynamic into Config.PerDatasetConfigs[0],
-  creates a new search scene, publishes it, and reads it back.
-  Request-only params such as query_keyword_match_percent cannot be persisted in scene config and are returned
-  as unappliedRequestParams. Use --dry-run first to inspect payloads.
-
-KEY FLAGS
-  --application-id         Target application ID.
-  --run-id                 Completed tuning run ID.
-  --scene-name             Optional new scene name.
-  --scene-description      Optional new scene description.
-  --dry-run                Print payloads without creating a scene.
-  --confirm-create-scene   Required for real scene creation.
-  --output-dir             Artifact root. Default: .viking/search-tuning.
-
-EXAMPLES
-  vs search tune apply --application-id 123 --run-id run_2026-05-12T00-00-00Z --dry-run
-  vs search tune apply --application-id 123 --run-id run_2026-05-12T00-00-00Z --confirm-create-scene`,
-    'tune:report': `Read a previous search tuning report.
-
-USAGE
-  vs search tune report --run-id <id> [--output-dir <dir>] [service flags]
-
-EXAMPLES
-  vs search tune report --run-id run_2026-05-12T00-00-00Z`,
-    'tune:compare': `Compare completed tuning runs or existing search scenes.
-
-USAGE
-  vs search tune compare --run-ids <run_a,run_b> [--baseline-run-id <run>] [--output-dir <dir>] [service flags]
-  vs search tune compare --application-id <id> --dataset-id <id> --scene-ids <scene_a,scene_b> --queries <file> [--baseline-scene-id <scene>] [--top-k <n>] [--search-concurrency <n>] [service flags]
-
-DESCRIPTION
-  Offline mode compares completed tuning reports by recommended strategy metrics. Online scene mode
-  sends the same query set to multiple scenes and evaluates them with source-item silver labels.
-  Scene mode requires every query to include sourceItemIds.
-
-KEY FLAGS
-  --run-ids              Comma-separated completed tuning run IDs.
-  --scene-ids            Comma-separated search scene IDs.
-  --application-id       Target application ID. Required with --scene-ids.
-  --dataset-id           Dataset ID. Required with --scene-ids.
-  --queries              Query set file. Required with --scene-ids.
-  --baseline-run-id      Baseline run for delta metrics. Defaults to the first --run-ids value.
-  --baseline-scene-id    Baseline scene for delta metrics. Defaults to the first --scene-ids value.
-  --search-concurrency   Concurrent online search requests for scene mode. Default: 18.
-
-EXAMPLES
-  vs search tune compare --run-ids run_a,run_b
-  vs search tune compare --application-id 123 --dataset-id 456 --scene-ids scene_a,scene_b --queries ./queries.jsonl`
+  vs search scene update --application-id 123 --scene-id abc --data @payload.json`
   };
 
-  console.log(withOpenApiReferenceHint(helpByAction[`${action}:${subAction ?? ''}`] ?? helpByAction[action] ?? `Unknown search subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
+  console.log(helpByAction[`${action}:${subAction ?? ''}`] ?? helpByAction[action] ?? `Unknown search subcommand: ${[action, subAction].filter(Boolean).join(' ')}`);
 }
 
 async function runAppCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if ((action === 'dataset' || action === 'dataset-config') && hasHelpFlag(argv.slice(2))) {
     printAppCommandHelp(action, argv[1]);
-    return;
-  }
-  if (action === 'attach-dataset' && hasHelpFlag(argv.slice(1))) {
-    printAppCommandHelp(action);
-    return;
-  }
-  if (action === 'create' && hasHelpFlag(argv.slice(1))) {
-    printAppCommandHelp(action);
-    return;
-  }
-  if (action === 'item-data-count' && hasHelpFlag(argv.slice(1))) {
-    printAppCommandHelp(action);
-    return;
-  }
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('app');
     return;
   }
   const values = parseStandaloneOptions(argv.slice(1));
@@ -3221,22 +2114,7 @@ async function runAppCli(argv: string[]): Promise<void> {
         description: optionalString(values.description),
         industry: optionalString(values.industry),
         language: optionalString(values.language),
-        color: optionalString(values.color),
-        iconColor: optionalString(values['icon-color']),
-        riskCheck: optionalBoolean(values['risk-check']),
-        dryRun: optionalBoolean(values['dry-run']),
-        postPaidType: optionalString(values['post-paid-type']),
-        projectName: optionalString(values['project-name'])
-      });
-      return;
-    case 'attach-dataset':
-      await runAppAttachDatasetCommand({
-        ...serviceOptions,
-        applicationId: optionalString(values['app-id']) ?? optionalString(values['application-id']),
-        datasetId: optionalString(values['dataset-id']),
-        dataConfig: optionalString(values['data-config']),
-        dryRun: optionalBoolean(values['dry-run']),
-        projectName: optionalString(values['project-name'])
+        color: optionalString(values.color)
       });
       return;
     case 'update':
@@ -3281,14 +2159,6 @@ async function runAppCli(argv: string[]): Promise<void> {
         ...projectOptions,
         applicationId: requiredString(values['application-id'], '--application-id'),
         activatedOnly: optionalBoolean(values['activated-only'])
-      });
-      return;
-    case 'item-data-count':
-      await runAppItemDataCountCommand({
-        ...projectOptions,
-        applicationId: requiredString(values['application-id'], '--application-id'),
-        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
-        full: optionalBoolean(values.full)
       });
       return;
     case 'wait-ready':
@@ -3413,50 +2283,7 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         name: optionalString(values.name),
         type: optionalString(values.type),
         description: optionalString(values.description),
-        schema: optionalString(values.schema),
-        schemaJson: optionalString(values['schema-json']),
-        industry: optionalString(values.industry),
-        language: optionalString(values.language),
-        theme: optionalString(values.theme),
-        abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
-        abnormalVideoPolicy: optionalString(values['abnormal-video-policy']),
-        videoAutoDelete: optionalBoolean(values['video-auto-delete']),
-        dryRun: optionalBoolean(values['dry-run']),
-        fieldDescMap: optionalString(values['field-desc-map']),
-        postPaidType: optionalString(values['post-paid-type']),
-        projectName: optionalString(values['project-name'])
-      });
-      return;
-    case 'import-url':
-      await runDatasetImportUrlCommand({
-        ...serviceOptions,
-        fileName: optionalString(values['file-name']),
-        projectName: optionalString(values['project-name'])
-      });
-      return;
-    case 'infer-schema':
-      await runDatasetInferSchemaCommand({
-        ...serviceOptions,
-        tosKey: optionalString(values['tos-key']),
-        type: optionalString(values.type),
-        name: optionalString(values.name),
-        industry: optionalString(values.industry),
-        language: optionalString(values.language),
-        theme: optionalString(values.theme),
-        projectName: optionalString(values['project-name'])
-      });
-      return;
-    case 'infer-result':
-      await runDatasetInferResultCommand({
-        ...serviceOptions,
-        taskId: optionalString(values['task-id']),
-        projectName: optionalString(values['project-name'])
-      });
-      return;
-    case 'validate-schema':
-      await runDatasetValidateSchemaCommand({
-        input: optionalString(values.input),
-        datasetType: optionalString(values['dataset-type']) ?? 'multi_modal'
+        schema: optionalString(values.schema)
       });
       return;
     case 'get':
@@ -3464,6 +2291,14 @@ async function runDatasetCli(argv: string[]): Promise<void> {
       return;
     case 'schema': {
       const subAction = argv[1];
+      if (subAction === 'get') {
+        await runDatasetSchemaGetCommand({
+          ...projectOptions,
+          id: requiredString(values.id, '--id'),
+          version: parseOptionalInt(optionalString(values.version))
+        });
+        return;
+      }
       if (subAction === 'check') {
         await runDatasetSchemaCheckCommand({
           ...projectOptions,
@@ -3486,22 +2321,8 @@ async function runDatasetCli(argv: string[]): Promise<void> {
     case 'ingest':
       await runDatasetIngestWorkflowCommand({
         ...serviceOptions,
-        file: optionalString(values.file),
-        type: optionalString(values.type),
-        datasetName: optionalString(values['dataset-name']),
-        industry: optionalString(values.industry),
-        language: optionalString(values.language),
-        theme: optionalString(values.theme),
-        abnormalImagePolicy: optionalString(values['abnormal-image-policy']),
-        abnormalVideoPolicy: optionalString(values['abnormal-video-policy']),
-        videoAutoDelete: optionalBoolean(values['video-auto-delete']),
-        postPaidType: optionalString(values['post-paid-type']),
-        schemaWaitTimeoutMs: parseOptionalInt(optionalString(values['schema-wait-timeout-ms'])),
-        schemaPollIntervalMs: parseOptionalInt(optionalString(values['schema-poll-interval-ms'])),
-        dryRun: optionalBoolean(values['dry-run']),
-        datasetId: optionalString(values['dataset-id']),
-        fields: optionalString(values.fields),
-        projectName: optionalString(values['project-name'])
+        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
+        fields: optionalString(values.fields)
       });
       return;
     case 'list':
@@ -3513,40 +2334,6 @@ async function runDatasetCli(argv: string[]): Promise<void> {
         full: optionalBoolean(values.full)
       });
       return;
-    case 'subscription': {
-      const subAction = argv[1];
-      if (subAction === 'create') {
-        await runDataSourceSubscriptionCreateCommand({
-          ...projectOptions,
-          clientToken: optionalString(values['client-token']),
-          needCreateDataset: optionalBoolean(values['need-create-dataset']),
-          datasetId: optionalString(values['dataset-id']),
-          createDatasetConfig: optionalString(values['create-dataset-config']),
-          type: optionalString(values.type),
-          dataSourceConfig: optionalString(values['data-source-config'])
-        });
-        return;
-      }
-      if (subAction === 'close') {
-        await runDataSourceSubscriptionCloseCommand({
-          ...projectOptions,
-          taskId: optionalString(values['task-id'])
-        });
-        return;
-      }
-      if (subAction === 'get') {
-        await runDataSourceSubscriptionGetCommand({
-          ...projectOptions,
-          taskId: optionalString(values['task-id'])
-        });
-        return;
-      }
-      if (subAction === 'list') {
-        await runDataSourceSubscriptionListCommand(projectOptions);
-        return;
-      }
-      throw new Error(`Unknown dataset subscription subcommand: ${subAction}`);
-    }
     case 'delete':
       await runDatasetDeleteCommand({ 
         ...serviceOptions, 
@@ -3561,10 +2348,6 @@ async function runDatasetCli(argv: string[]): Promise<void> {
 
 async function runDataCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('data');
-    return;
-  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const datasetId = requiredString(values['dataset-id'], '--dataset-id');
@@ -3575,172 +2358,124 @@ async function runDataCli(argv: string[]): Promise<void> {
     case 'import':
       await runDataImportShortcutCommand({ ...serviceOptions, datasetId, fields: optionalString(values.fields) });
       return;
-    case 'delete':
-      await runDataDeleteCommand({ ...serviceOptions, datasetId, id: optionalString(values.id) });
-      return;
     default:
       throw new Error(`Unknown data subcommand: ${action}`);
   }
 }
 
-async function runConnectorCli(argv: string[]): Promise<void> {
+async function runItemCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('connector');
+  if (hasHelpFlag(argv.slice(1)) && ['plan', 'apply', 'provision', 'verify', 'review'].includes(action)) {
+    printItemCommandHelp(action);
     return;
   }
   const values = parseStandaloneOptions(argv.slice(1));
-  const serviceOptions = toStandaloneServiceOptions(values);
 
   switch (action) {
-    case 'export':
-      await runConnectorExportCommand({
-        source: requiredString(values.source, '--source') as ConnectorSourceType,
-        job: optionalString(values.job),
+    case 'profile':
+      await runItemProfileCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video'
+      });
+      return;
+    case 'plan':
+      await runItemPlanCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video',
+        itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+        goal: optionalString(values.goal),
+        outputDir: optionalString(values['output-dir']),
         datasetName: optionalString(values['dataset-name']),
-        envPrefix: optionalString(values['env-prefix']),
-        idField: optionalString(values['id-field']),
-        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
-        cursorField: optionalString(values['cursor-field']),
-        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
-        initialCursor: optionalString(values['initial-cursor']),
-        table: optionalString(values['source-table']),
-        where: optionalString(values.where),
-        database: optionalString(values.database),
-        collection: optionalString(values.collection),
-        stream: optionalString(values.stream),
-        file: optionalString(values.file),
-        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
-        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+        applicationName: optionalString(values['application-name']),
+        projectName: optionalString(values['project-name']),
+        skipApp: optionalBoolean(values['skip-app'])
       });
       return;
-    case 'init':
-      await runConnectorInitCommand({
-        name: requiredString(values.name, '--name'),
-        source: requiredString(values.source, '--source') as ConnectorSourceType,
-        datasetId: requiredString(values['dataset-id'], '--dataset-id'),
-        envPrefix: optionalString(values['env-prefix']),
-        idField: optionalString(values['id-field']),
-        fields: optionalString(values.fields) ?? optionalString(values['source-fields']),
-        cursorField: optionalString(values['cursor-field']),
-        cursorType: optionalString(values['cursor-type']) as ConnectorCursorType | undefined,
-        initialCursor: optionalString(values['initial-cursor']),
-        table: optionalString(values['source-table']),
-        where: optionalString(values.where),
-        database: optionalString(values.database),
-        collection: optionalString(values.collection),
-        stream: optionalString(values.stream),
-        file: optionalString(values.file),
-        batchSize: parseOptionalInt(optionalString(values['batch-size'])),
-        intervalMs: parseOptionalInt(optionalString(values['interval-ms']))
+    case 'apply':
+      await runItemApplyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        phase: optionalString(values.phase) as 'provision' | 'verify' | 'all' | undefined,
+        waitReady: optionalBoolean(values['wait-ready']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        runTrials: optionalBoolean(values['run-trials']),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        force: optionalBoolean(values.force),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
       });
       return;
-    case 'run':
-      await runConnectorRunCommand({
-        ...serviceOptions,
-        job: requiredString(values.job, '--job'),
-        once: optionalBoolean(values.once),
-        daemon: optionalBoolean(values.daemon),
-        worker: optionalBoolean(values.worker)
+    case 'provision':
+      await runItemProvisionCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        skipApp: optionalBoolean(values['skip-app']),
+        waitReady: optionalBoolean(values['wait-ready']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        force: optionalBoolean(values.force),
+        dryRun: optionalBoolean(values['dry-run'])
       });
       return;
-    case 'status':
-      await runConnectorStatusCommand(requiredString(values.job, '--job'));
-      return;
-    case 'stop':
-      await runConnectorStopCommand(
-        optionalString(values.job),
-        parseOptionalInt(optionalString(values.pid))
-      );
-      return;
-    case 'inspect':
-      await runConnectorInspectCommand(requiredString(values.job, '--job'));
-      return;
-    default:
-      throw new Error(`Unknown connector subcommand: ${action}`);
-  }
-}
-
-async function runDictCli(argv: string[]): Promise<void> {
-  const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDictCommandHelp(action);
-    return;
-  }
-  const values = parseStandaloneOptions(argv.slice(1));
-  const options = toProjectScopedOptions(values);
-
-  switch (action) {
-    case 'create':
-      await runDictCreateCommand({
-        ...options,
-        name: optionalString(values.name),
-        type: optionalString(values.type),
-        description: optionalString(values.description),
-        enableIdempotent: optionalBoolean(values['enable-idempotent'])
+    case 'verify':
+      await runItemVerifyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        waitIndexed: optionalBoolean(values['wait-indexed']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        skipSearch: optionalBoolean(values['skip-search']),
+        skipChat: optionalBoolean(values['skip-chat']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
       });
       return;
-    case 'update':
-      await runDictUpdateCommand({
-        ...options,
-        dictId: requiredString(values['dict-id'], '--dict-id'),
-        name: requiredString(values.name, '--name'),
-        description: optionalString(values.description)
-      });
-      return;
-    case 'get':
-      await runDictGetCommand({
-        ...options,
-        dictId: requiredString(values['dict-id'], '--dict-id')
-      });
-      return;
-    case 'delete':
-      await runDictDeleteCommand({
-        ...options,
-        dictId: requiredString(values['dict-id'], '--dict-id')
-      });
-      return;
-    case 'list':
-      await runDictListCommand({
-        ...options,
-        dictIds: optionalString(values['dict-ids']),
-        types: optionalString(values.types)
-      });
-      return;
-    case 'check-input':
-      await runDictCheckInputCommand({
-        ...options,
-        dictId: optionalString(values['dict-id']),
-        language: optionalString(values.language),
-        type: optionalString(values.type),
-        tosBucket: optionalString(values['tos-bucket']),
-        tosKey: optionalString(values['tos-key']),
-        entries: optionalString(values.entries)
-      });
-      return;
-    case 'bind-scenes':
-      await runDictBindScenesCommand({
-        ...options,
-        dictId: requiredString(values['dict-id'], '--dict-id'),
-        scenes: requiredString(values.scenes, '--scenes')
-      });
-      return;
-    case 'write-terms':
-      if (optionalString(values.data)) {
-        throw new Error('--data is not supported for dict write-terms. Use --file or --entries.');
-      }
-      if (optionalString(values['tos-bucket']) || optionalString(values['tos-key'])) {
-        throw new Error('--tos-bucket/--tos-key are not supported for dict write-terms. Use --file instead.');
-      }
-      await runDictWriteTermsCommand({
-        ...options,
-        dictId: requiredString(values['dict-id'], '--dict-id'),
-        file: optionalString(values.file),
-        entries: optionalString(values.entries)
+    case 'review':
+      await runItemReviewCommand({
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        reviewer: optionalString(values.reviewer),
+        notes: optionalString(values['review-notes'])
       });
       return;
     default:
-      throw new Error(`Unknown dict subcommand: ${action}`);
+      throw new Error(`Unknown item subcommand: ${action}`);
   }
 }
 
@@ -3754,20 +2489,16 @@ async function runSearchCli(argv: string[]): Promise<void> {
     printSearchCommandHelp(action, argv[1]);
     return;
   }
-  if (action === 'tune' && hasHelpFlag(argv.slice(1))) {
-    const subAction = argv[1];
-    printSearchCommandHelp(action, subAction === '--help' || subAction === '-h' ? undefined : subAction);
-    return;
-  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
+  const applicationId = requiredString(values['application-id'], '--application-id');
   switch (action) {
     case 'run':
       await runSearchRunCommand({
         ...serviceOptions,
-        applicationId: requiredString(values['application-id'], '--application-id'),
-        sceneId: requiredString(values['scene-id'], '--scene-id'),
+        applicationId,
+        sceneId: optionalString(values['scene-id']),
         datasetId: optionalString(values['dataset-id']),
         query: optionalString(values.query),
         pageSize: parseOptionalInt(optionalString(values['page-size']))
@@ -3779,28 +2510,31 @@ async function runSearchCli(argv: string[]): Promise<void> {
         case 'create':
           await runSearchSceneCreateCommand({
             ...projectOptions,
-            applicationId: requiredString(values['application-id'], '--application-id'),
+            applicationId,
             name: optionalString(values.name),
             description: optionalString(values.description)
           });
           return;
         case 'list':
-          await runSearchSceneListCommand({ ...projectOptions, applicationId: requiredString(values['application-id'], '--application-id') });
+          await runSearchSceneListCommand({ ...projectOptions, applicationId });
           return;
         case 'get':
           await runSearchSceneGetCommand({
             ...projectOptions,
-            applicationId: requiredString(values['application-id'], '--application-id'),
+            applicationId,
             sceneId: requiredString(values['scene-id'], '--scene-id')
           });
           return;
         case 'update':
           await runSearchSceneUpdateCommand({
             ...projectOptions,
-            applicationId: requiredString(values['application-id'], '--application-id'),
+            applicationId,
             sceneId: requiredString(values['scene-id'], '--scene-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
+            itemDatasetId: optionalString(values['item-dataset-id']),
+            itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+            itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
             searchConfig: optionalString(values['search-config']),
             queryCompletionConfig: optionalString(values['query-completion-config']),
@@ -3811,126 +2545,12 @@ async function runSearchCli(argv: string[]): Promise<void> {
         case 'delete':
           await runSearchSceneDeleteCommand({
             ...projectOptions,
-            applicationId: requiredString(values['application-id'], '--application-id'),
+            applicationId,
             sceneId: requiredString(values['scene-id'], '--scene-id')
           });
           return;
         default:
           throw new Error(`Unknown search scene subcommand: ${subAction}`);
-      }
-    }
-    case 'tune': {
-      const subAction = argv[1];
-      switch (subAction) {
-        case 'llm-check':
-          await runSearchTuneLlmCheckCommand({
-            ...serviceOptions,
-            live: optionalBoolean(values.live)
-          });
-          return;
-        case 'validate':
-          await runSearchTuneValidateCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            queries: requiredString(values.queries, '--queries'),
-            queryCount: parseOptionalInt(optionalString(values['query-count']))
-          });
-          return;
-        case 'plan':
-          await runSearchTunePlanCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            applicationId: requiredString(values['application-id'], '--application-id'),
-            datasetId: optionalString(values['dataset-id']),
-            sceneId: optionalString(values['scene-id']),
-            profile: optionalString(values.profile),
-            queries: optionalString(values.queries),
-            queryCount: parseOptionalInt(optionalString(values['query-count'])),
-            topK: parseOptionalInt(optionalString(values['top-k'])),
-            maxStrategies: parseOptionalInt(optionalString(values['max-strategies'])),
-            optimizer: parseTuningOptimizer(optionalString(values.optimizer))
-          });
-          return;
-        case 'query-generate':
-          await runSearchTuneQueryGenerateCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            applicationId: requiredString(values['application-id'], '--application-id'),
-            datasetId: optionalString(values['dataset-id']),
-            sceneId: optionalString(values['scene-id']),
-            queryCount: parseOptionalInt(optionalString(values['query-count'])),
-            minQueryCount: parseOptionalInt(optionalString(values['min-query-count'])),
-            sampleSize: parseOptionalInt(optionalString(values['sample-size'])),
-            queryBatchSize: parseOptionalInt(optionalString(values['query-batch-size'])),
-            llmConcurrency: parseOptionalInt(optionalString(values['llm-concurrency'])),
-            retrievableFieldOnly: optionalBoolean(values['retrievable-field-only']),
-            outputDir: optionalString(values['output-dir'])
-          });
-          return;
-        case 'run':
-          await runSearchTuneRunCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            applicationId: requiredString(values['application-id'], '--application-id'),
-            datasetId: optionalString(values['dataset-id']),
-            sceneId: optionalString(values['scene-id']),
-            profile: optionalString(values.profile),
-            queries: optionalString(values.queries),
-            queryCount: parseOptionalInt(optionalString(values['query-count'])),
-            topK: parseOptionalInt(optionalString(values['top-k'])),
-            maxStrategies: parseOptionalInt(optionalString(values['max-strategies'])),
-            optimizer: parseTuningOptimizer(optionalString(values.optimizer)),
-            searchConcurrency: parseOptionalInt(optionalString(values['search-concurrency'])),
-            llmConcurrency: parseOptionalInt(optionalString(values['llm-concurrency'])),
-            labelSource: parseTuningLabelSource(optionalString(values['label-source'])),
-            judgeInput: parseTuningJudgeInput(optionalString(values['judge-input'])),
-            maxJudgeImages: parseOptionalInt(optionalString(values['max-judge-images'])),
-            llmRetries: parseOptionalInt(optionalString(values['llm-retries'])),
-            maxLabelFailureRate: parseOptionalNumber(optionalString(values['max-label-failure-rate'])),
-            verbose: optionalBoolean(values.verbose),
-            outputDir: optionalString(values['output-dir']),
-            resumeRunId: optionalString(values['resume-run-id'])
-          });
-          return;
-        case 'apply':
-          await runSearchTuneApplyCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            applicationId: requiredString(values['application-id'], '--application-id'),
-            runId: requiredString(values['run-id'], '--run-id'),
-            outputDir: optionalString(values['output-dir']),
-            sceneName: optionalString(values['scene-name']),
-            sceneDescription: optionalString(values['scene-description']),
-            dryRun: optionalBoolean(values['dry-run']),
-            confirmCreateScene: optionalBoolean(values['confirm-create-scene'])
-          });
-          return;
-        case 'report':
-          await runSearchTuneReportCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            runId: requiredString(values['run-id'], '--run-id'),
-            outputDir: optionalString(values['output-dir'])
-          });
-          return;
-        case 'compare':
-          await runSearchTuneCompareCommand({
-            ...serviceOptions,
-            projectName: optionalString(values['project-name']),
-            applicationId: optionalString(values['application-id']),
-            datasetId: optionalString(values['dataset-id']),
-            runIds: splitCommaList(optionalString(values['run-ids'])),
-            sceneIds: splitCommaList(optionalString(values['scene-ids'])),
-            queries: optionalString(values.queries),
-            topK: parseOptionalInt(optionalString(values['top-k'])),
-            searchConcurrency: parseOptionalInt(optionalString(values['search-concurrency'])),
-            baselineRunId: optionalString(values['baseline-run-id']),
-            baselineSceneId: optionalString(values['baseline-scene-id']),
-            outputDir: optionalString(values['output-dir'])
-          });
-          return;
-        default:
-          throw new Error(`Unknown search tune subcommand: ${subAction}`);
       }
     }
     default:
@@ -3940,10 +2560,6 @@ async function runSearchCli(argv: string[]): Promise<void> {
 
 async function runRecommendCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (isDomainHelpRequest(argv) || hasHelpFlag(argv)) {
-    printDomainHelp('recommend');
-    return;
-  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   const projectOptions = toProjectScopedOptions(values);
@@ -3971,11 +2587,11 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
-          recommendModel: optionalString(values['recommend-model']),
-          optimizationTarget: optionalString(values['optimization-target']),
-          userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
-          filterConfig: optionalString(values['filter-config']),
-          dryRun: optionalBoolean(values['dry-run']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
+          recommendModel: parseOptionalInt(optionalString(values['recommend-model'])),
+          optimizationTarget: parseOptionalInt(optionalString(values['optimization-target'])),
+          bhvSceneTypes: optionalString(values['bhv-scene-types']),
           confirmEntryBinding: optionalBoolean(values['confirm-entry-binding']),
           clickEventTypes: optionalString(values['click-event-types']),
           positiveEventTypes: optionalString(values['positive-event-types']),
@@ -4005,22 +2621,16 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
-          userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
+          bhvSceneTypes: optionalString(values['bhv-scene-types']),
           config: optionalString(values.config),
           count: parseOptionalInt(optionalString(values.count)),
-          filterRuleId: optionalString(values['filter-rule-id']),
-          degradeRuleId: optionalString(values['degrade-rule-id']),
-          forceItemRuleId: optionalString(values['force-item-rule-id']),
-          boostBuryCondConfig: optionalString(values['boost-bury-cond-config']),
+          boostBuryConfig: optionalString(values['boost-bury-config']),
           shuffleConfig: optionalString(values['shuffle-config']),
           impressionConfig: optionalString(values['impression-config']),
           suggestConfig: optionalString(values['suggest-config']),
-          reasonTemplateConfig: optionalString(values['reason-template-config']),
-          coldStartConfig: optionalString(values['cold-start-config']),
-          mergeConfigs: optionalString(values['merge-configs']),
-          filterConfig: optionalString(values['filter-config']),
-          recAssistantConfig: optionalString(values['rec-assistant-config']),
-          dryRun: optionalBoolean(values['dry-run']),
+          degradeRuleId: optionalString(values['degrade-rule-id']),
           confirmEntryBinding: optionalBoolean(values['confirm-entry-binding'])
         });
         return;
@@ -4028,60 +2638,11 @@ async function runRecommendCli(argv: string[]): Promise<void> {
         await runRecommendSceneDeleteCommand({
           ...projectOptions,
           applicationId,
-          sceneId: requiredString(values['scene-id'], '--scene-id'),
-          dryRun: optionalBoolean(values['dry-run'])
+          sceneId: requiredString(values['scene-id'], '--scene-id')
         });
         return;
       default:
         throw new Error(`Unknown recommend scene subcommand: ${subAction}`);
-    }
-  }
-
-  if (action === 'rule') {
-    const subAction = argv[1];
-    switch (subAction) {
-      case 'list':
-        await runRecommendRuleListCommand({
-          ...projectOptions,
-          applicationId,
-          types: optionalString(values.types),
-          datasetId: optionalString(values['dataset-id']),
-          invertItemDatasetId: optionalString(values['invert-item-dataset-id']),
-          itemDatasetId: optionalString(values['item-dataset-id']),
-          projectName: optionalString(values['project-name'])
-        });
-        return;
-      case 'get':
-        await runRecommendRuleGetCommand({
-          ...projectOptions,
-          applicationId,
-          ruleId: requiredString(values['rule-id'], '--rule-id')
-        });
-        return;
-      case 'upsert':
-        await runRecommendRuleUpsertCommand({
-          ...projectOptions,
-          applicationId,
-          ruleId: optionalString(values['rule-id']),
-          name: optionalString(values.name),
-          type: optionalString(values.type),
-          description: optionalString(values.description),
-          datasetId: optionalString(values['dataset-id']),
-          itemDatasetId: optionalString(values['item-dataset-id']),
-          config: optionalString(values.config),
-          dryRun: optionalBoolean(values['dry-run'])
-        });
-        return;
-      case 'delete':
-        await runRecommendRuleDeleteCommand({
-          ...projectOptions,
-          applicationId,
-          ruleId: requiredString(values['rule-id'], '--rule-id'),
-          dryRun: optionalBoolean(values['dry-run'])
-        });
-        return;
-      default:
-        throw new Error(`Unknown recommend rule subcommand: ${subAction}`);
     }
   }
 
@@ -4090,10 +2651,6 @@ async function runRecommendCli(argv: string[]): Promise<void> {
 
 async function runChatSearchCli(argv: string[]): Promise<void> {
   const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('chat');
-    return;
-  }
   const values = parseStandaloneOptions(argv.slice(1));
   const serviceOptions = toStandaloneServiceOptions(values);
   if (action !== 'run') {
@@ -4111,129 +2668,8 @@ async function runChatSearchCli(argv: string[]): Promise<void> {
   });
 }
 
-async function runProjectCli(argv: string[]): Promise<void> {
-  const action = argv[0];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('project');
-    return;
-  }
-
-  switch (action) {
-    case 'create': {
-      rejectProjectCreateCredentialFlags(argv.slice(1));
-      const parsed = parseStandaloneArguments(argv.slice(1));
-      const values = parsed.values;
-      await runProjectCreateCommand({
-        projectName: optionalString(parsed.positionals[0]),
-        appId: requiredString(values['app-id'], '--app-id'),
-        features: optionalString(values.features),
-        profile: optionalString(values.profile),
-        searchSceneId: optionalString(values['search-scene-id']),
-        searchDatasetId: optionalString(values['search-dataset-id']),
-        recSceneId: optionalString(values['rec-scene-id'])
-      });
-      return;
-    }
-    case 'deploy': {
-      const values = parseStandaloneOptions(argv.slice(1));
-      await runProjectDeployCommand({
-        projectDir: optionalString(values['project-dir']),
-        dryRun: optionalBoolean(values['dry-run']),
-        provider: optionalString(values.provider)
-      });
-      return;
-    }
-    default:
-      throw new Error(`Unknown project subcommand: ${action}`);
-  }
-}
-
-function rejectProjectCreateCredentialFlags(argv: string[]): void {
-  const removedFlags = ['--api-key', '--ak', '--sk', '--region'];
-  const usedFlag = removedFlags.find(flag =>
-    argv.some(value => value === flag || value.startsWith(`${flag}=`))
-  );
-  if (!usedFlag) return;
-  throw new Error(
-    `vs project create no longer accepts ${usedFlag}. Set VIKING_API_KEY or use \`vs auth login\` / \`vs auth import-env\`, then select credentials with --profile.`,
-  );
-}
-
-async function runPurchaseCli(argv: string[]): Promise<void> {
-  const action = argv[0];
-  const subAction = argv[1];
-  if (hasHelpFlag(argv.slice(1))) {
-    printDomainHelp('purchase');
-    return;
-  }
-  if (action === 'link') {
-    const values = parseStandaloneOptions(argv.slice(1));
-    await runPurchaseLinkCommand({
-      environmentId: optionalString(values['environment-id'])
-    });
-    return;
-  }
-  if (action !== 'order') {
-    throw new Error(`Unknown purchase subcommand: ${action}`);
-  }
-
-  rejectUnsupportedPurchaseOrderFlags(argv.slice(2));
-  const values = parseStandaloneOptions(argv.slice(2));
-  const projectOptions = toProjectScopedOptions(values);
-  switch (subAction) {
-    case 'price':
-      await runPurchaseOrderPriceCommand({
-        ...projectOptions,
-        scene: optionalString(values.scene),
-        configurationCode: optionalString(values['configuration-code']),
-        instanceNo: optionalString(values['instance-no']),
-        purchaseMonths: parseOptionalInt(optionalString(values['purchase-months'])),
-        endTime: parseOptionalInt(optionalString(values['end-time']))
-      });
-      return;
-    case 'create':
-      await runPurchaseOrderCreateCommand({
-        ...projectOptions,
-        scene: optionalString(values.scene),
-        configurationCode: optionalString(values['configuration-code']),
-        instanceNo: optionalString(values['instance-no']),
-        purchaseMonths: parseOptionalInt(optionalString(values['purchase-months'])),
-        endTime: parseOptionalInt(optionalString(values['end-time'])),
-        autoRenew: optionalBoolean(values['auto-renew']),
-        clientToken: optionalString(values['client-token'])
-      });
-      return;
-    case 'status':
-      await runPurchaseOrderStatusCommand(projectOptions);
-      return;
-    case 'wait':
-      await runPurchaseOrderWaitCommand({
-        ...projectOptions,
-        maxAttempts: parseOptionalInt(optionalString(values['max-attempts'])),
-        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms']))
-      });
-      return;
-    default:
-      throw new Error(`Unknown purchase order subcommand: ${subAction}`);
-  }
-}
-
-function rejectUnsupportedPurchaseOrderFlags(argv: string[]): void {
-  if (argv.some(value => value === '--product-code' || value.startsWith('--product-code='))) {
-    throw new Error('--product-code is not supported. ProductCode is managed internally.');
-  }
-}
-
-type StandaloneOptionValue = string | boolean | string[] | undefined;
-type StandaloneValues = Record<string, StandaloneOptionValue>;
-
-function parseStandaloneOptions(argv: string[]): StandaloneValues {
-  const { values } = parseStandaloneArguments(argv);
-  return values;
-}
-
-function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; positionals: string[] } {
-  const { values, positionals } = parseArgs({
+function parseStandaloneOptions(argv: string[]) {
+  const { values } = parseArgs({
     args: argv,
     allowPositionals: true,
     strict: false,
@@ -4249,43 +2685,16 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       output: { type: 'string', short: 'o' },
       'output-dir': { type: 'string' },
       'base-url': { type: 'string' },
-      'control-plane-base-url': { type: 'string' },
-      'data-plane-base-url': { type: 'string' },
-      'api-key': { type: 'string' },
       ak: { type: 'string' },
       sk: { type: 'string' },
       region: { type: 'string' },
       'timeout-ms': { type: 'string' },
       data: { type: 'string' },
-      live: { type: 'boolean' },
       file: { type: 'string' },
       goal: { type: 'string' },
-      profile: { type: 'string' },
       id: { type: 'string' },
-      job: { type: 'string' },
       'plan-dir': { type: 'string' },
-      'project-dir': { type: 'string' },
-      provider: { type: 'string' },
       name: { type: 'string' },
-      source: { type: 'string' },
-      mode: { type: 'string' },
-      'env-prefix': { type: 'string' },
-      'id-field': { type: 'string' },
-      'cursor-field': { type: 'string' },
-      'cursor-type': { type: 'string' },
-      'initial-cursor': { type: 'string' },
-      'source-table': { type: 'string' },
-      'source-fields': { type: 'string' },
-      where: { type: 'string' },
-      database: { type: 'string' },
-      collection: { type: 'string' },
-      stream: { type: 'string' },
-      'batch-size': { type: 'string' },
-      'interval-ms': { type: 'string' },
-      once: { type: 'boolean' },
-      daemon: { type: 'boolean' },
-      worker: { type: 'boolean' },
-      pid: { type: 'string' },
       'application-name': { type: 'string' },
       'dataset-name': { type: 'string' },
       description: { type: 'string' },
@@ -4298,24 +2707,9 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'field-config': { type: 'string' },
       'online-config': { type: 'string' },
       'dataset-id': { type: 'string' },
-      'client-token': { type: 'string' },
-      'configuration-code': { type: 'string' },
-      'instance-no': { type: 'string' },
-      'purchase-months': { type: 'string' },
-      'end-time': { type: 'string' },
-      scene: { type: 'string' },
-      'auto-renew': { type: 'boolean' },
-      'need-create-dataset': { type: 'boolean' },
-      'create-dataset-config': { type: 'string' },
-      'data-source-config': { type: 'string' },
       fields: { type: 'string' },
       full: { type: 'boolean' },
-      'app-id': { type: 'string' },
       'application-id': { type: 'string' },
-      features: { type: 'string' },
-      'search-scene-id': { type: 'string' },
-      'search-dataset-id': { type: 'string' },
-      'rec-scene-id': { type: 'string' },
       'scene-id': { type: 'string' },
       'project-name': { type: 'string' },
       'dry-run': { type: 'boolean' },
@@ -4324,31 +2718,6 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       version: { type: 'string' },
       config: { type: 'string' },
       query: { type: 'string' },
-      queries: { type: 'string' },
-      'query-count': { type: 'string' },
-      'min-query-count': { type: 'string' },
-      'sample-size': { type: 'string' },
-      'query-batch-size': { type: 'string' },
-      'top-k': { type: 'string' },
-      'max-strategies': { type: 'string' },
-      optimizer: { type: 'string' },
-      'search-concurrency': { type: 'string' },
-      'llm-concurrency': { type: 'string' },
-      'label-source': { type: 'string' },
-      'judge-input': { type: 'string' },
-      'max-judge-images': { type: 'string' },
-      'llm-retries': { type: 'string' },
-      'max-label-failure-rate': { type: 'string' },
-      verbose: { type: 'boolean' },
-      'run-id': { type: 'string' },
-      'run-ids': { type: 'string' },
-      'resume-run-id': { type: 'string' },
-      'scene-ids': { type: 'string' },
-      'baseline-run-id': { type: 'string' },
-      'baseline-scene-id': { type: 'string' },
-      'scene-name': { type: 'string' },
-      'scene-description': { type: 'string' },
-      'confirm-create-scene': { type: 'boolean' },
       'search-query': { type: 'string' },
       'chat-message': { type: 'string' },
       'page-size': { type: 'string' },
@@ -4359,16 +2728,12 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'opening-remarks': { type: 'string' },
       'item-dataset-id': { type: 'string' },
       'dataset-type': { type: 'string' },
-      input: { type: 'string', short: 'i' },
       'page-number': { type: 'string' },
       'activated-only': { type: 'boolean' },
       'wait-ready': { type: 'boolean' },
       'wait-indexed': { type: 'boolean' },
       'run-trials': { type: 'boolean' },
       'skip-app': { type: 'boolean' },
-      'schema-source': { type: 'string' },
-      'schema-wait-timeout-ms': { type: 'string' },
-      'schema-poll-interval-ms': { type: 'string' },
       'confirm-review': { type: 'boolean' },
       'interactive-review': { type: 'boolean' },
       'confirm-recommend-entry-binding': { type: 'boolean' },
@@ -4378,9 +2743,9 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       force: { type: 'boolean' },
       'wait-timeout-ms': { type: 'string' },
       'poll-interval-ms': { type: 'string' },
-      'max-attempts': { type: 'string' },
-      'environment-id': { type: 'string' },
       phase: { type: 'string' },
+      'item-type-result': { type: 'string' },
+      'item-type-field': { type: 'string' },
       'skip-search': { type: 'boolean' },
       'skip-chat': { type: 'boolean' },
       types: { type: 'string' },
@@ -4391,61 +2756,32 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'recommend-bhv-scene-types': { type: 'string' },
       'recommend-user-id': { type: 'string' },
       'recommend-parent-id': { type: 'string' },
-      'user-event-scenes': { type: 'string' },
+      'recommend-parent-ids': { type: 'string' },
       'bhv-scene-types': { type: 'string' },
       'click-event-types': { type: 'string' },
       'positive-event-types': { type: 'string' },
       'negative-event-types': { type: 'string' },
       count: { type: 'string' },
-      'filter-rule-id': { type: 'string' },
-      'force-item-rule-id': { type: 'string' },
-      'boost-bury-cond-config': { type: 'string' },
+      'boost-bury-config': { type: 'string' },
       'shuffle-config': { type: 'string' },
       'impression-config': { type: 'string' },
       'suggest-config': { type: 'string' },
       'degrade-rule-id': { type: 'string' },
-      'reason-template-config': { type: 'string' },
-      'cold-start-config': { type: 'string' },
-      'merge-configs': { type: 'string' },
-      'filter-config': { type: 'string' },
-      'rec-assistant-config': { type: 'string' },
-      'rule-id': { type: 'string' },
-      'dict-id': { type: 'string' },
-      'dict-ids': { type: 'string' },
-      'invert-item-dataset-id': { type: 'string' },
-      'enable-idempotent': { type: 'boolean' },
-      'tos-bucket': { type: 'string' },
-      'tos-key': { type: 'string' },
-      entries: { type: 'string' },
-      scenes: { type: 'string' },
       'search-config': { type: 'string' },
       'query-completion-config': { type: 'string' },
       'want-to-search-config': { type: 'string' },
       'overview-config': { type: 'string' },
-      'file-name': { type: 'string' },
-      'task-id': { type: 'string' },
-      'schema-json': { type: 'string' },
-      'field-desc-map': { type: 'string' },
-      'abnormal-image-policy': { type: 'string' },
-      'abnormal-video-policy': { type: 'string' },
-      'video-auto-delete': { type: 'boolean' },
-      'data-config': { type: 'string' },
-      'icon-color': { type: 'string' },
-      'risk-check': { type: 'boolean' },
-      theme: { type: 'string' },
-      'post-paid-type': { type: 'string' },
     }
   });
 
-  return { values: values as StandaloneValues, positionals };
+  return values;
 }
+
+type StandaloneValues = ReturnType<typeof parseStandaloneOptions>;
 
 function toStandaloneServiceOptions(values: StandaloneValues): ServiceCommandOptions {
   return compactObject({
     baseUrl: optionalString(values['base-url']),
-    controlPlaneBaseUrl: optionalString(values['control-plane-base-url']),
-    dataPlaneBaseUrl: optionalString(values['data-plane-base-url']),
-    apiKey: optionalString(values['api-key']),
     accessKeyId: optionalString(values.ak),
     secretKey: optionalString(values.sk),
     projectName: optionalString(values['project-name']),
@@ -4464,43 +2800,7 @@ function toProjectScopedOptions(values: StandaloneValues): ProjectScopedOptions 
 
 async function callOpenApi(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
   const config = resolveServiceConfig(toServiceConfigInput(options));
-  try {
-    return await new VikingOpenApiClient(config).post(pathname, withProjectName(payload, config.projectName));
-  } catch (error) {
-    throw translateQuotaExceededError(error);
-  }
-}
-
-const QUOTA_EXCEEDED_API_CODES = new Set([
-  'quotaexceeded',
-  'limitexceeded',
-  'quotaexceeded.application',
-  'quotaexceeded.dataset'
-]);
-
-// Post-paid free-tier instances enforce real quota limits (e.g. app/dataset
-// counts). Translate the raw quota error into an actionable hint so users know
-// to upgrade to a standard/premium plan.
-function translateQuotaExceededError(error: unknown): unknown {
-  if (!(error instanceof ApiRequestError)) return error;
-  const code = error.apiCode?.toLowerCase();
-  const looksLikeQuota =
-    (code !== undefined && QUOTA_EXCEEDED_API_CODES.has(code)) ||
-    (code !== undefined && (code.includes('quotaexceeded') || code.includes('limitexceeded')));
-  if (!looksLikeQuota) return error;
-  const detail = error.apiMessage ?? error.message;
-  return new ApiRequestError(
-    `API Error [${error.apiCode}]: ${detail} Quota exceeded — the post-paid free tier limits application/dataset counts. Upgrade to a standard/premium plan or remove unused resources, then retry.`,
-    error.statusCode,
-    error.apiCode,
-    error.apiMessage,
-    error.responseBody
-  );
-}
-
-async function callDataPlane(pathname: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
-  const config = resolveServiceConfig(toServiceConfigInput(options));
-  return postJson(config, pathname, payload);
+  return new VikingOpenApiClient(config).post(pathname, payload);
 }
 
 async function callConsoleTopAction(action: string, payload: unknown, options: ServiceCommandOptions): Promise<unknown> {
@@ -4515,7 +2815,8 @@ async function callRuntime(
   callback: (client: VikingRuntimeApiClient) => Promise<unknown>,
   options: ServiceCommandOptions
 ): Promise<unknown> {
-  const config = resolveServiceConfig(toServiceConfigInput(options));
+  const input = toServiceConfigInput(options);
+  const config = resolveServiceConfig(input);
   const client = new VikingRuntimeApiClient(config);
   return callback(client);
 }
@@ -4523,15 +2824,11 @@ async function callRuntime(
 function toServiceConfigInput(options: ServiceCommandOptions): ServiceConfigInput {
   return {
     baseUrl: options.baseUrl,
-    controlPlaneBaseUrl: options.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: options.dataPlaneBaseUrl,
-    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: (options as ProjectScopedOptions).projectName,
     region: options.region,
-    timeoutMs: options.timeoutMs,
-    debug: options.debug
+    timeoutMs: options.timeoutMs
   };
 }
 
@@ -4544,6 +2841,8 @@ const DATASET_TYPE_ALIASES: Record<string, number> = {
   query: 2,
   video: 3,
   'user-event': 4,
+  behavior: 4,
+  event: 4,
   doc: 5,
   document: 6
 };
@@ -4590,8 +2889,7 @@ const DATASET_STATE_LABELS: Record<number, string> = {
   2: 'pending',
   3: 'ready',
   4: 'deleting',
-  5: 'deleted',
-  6: 'expired'
+  5: 'deleted'
 };
 
 const DATASET_TYPE_LABELS: Record<number, string> = {
@@ -4623,8 +2921,7 @@ const APP_STATE_LABELS: Record<number, string> = {
   1: 'AppReady',
   2: 'AppDeleting',
   3: 'AppDeleted',
-  4: 'AppNotReady',
-  5: 'AppExpired'
+  4: 'AppNotReady'
 };
 
 const APP_DATA_CONFIG_STATE_LABELS: Record<number, string> = {
@@ -4667,326 +2964,6 @@ function normalizeAppCreatePayload(payload: unknown, industry?: string): unknown
     ...payload,
     Industry: explicitIndustry ?? payloadIndustry ?? DEFAULT_APPLICATION_INDUSTRY
   };
-}
-
-const APPLICATION_INDUSTRY_V2_ALIASES: Record<string, string> = {
-  none: '',
-  ecommerce: 'e_commerce',
-  'e-commerce': 'e_commerce',
-  material: 'material',
-  video: 'video',
-  news: 'news',
-  social: 'social_platform',
-  'social-platform': 'social_platform',
-  'social-platforms': 'social_platform',
-  socialplatform: 'social_platform',
-  other: 'other'
-};
-
-const APPLICATION_INDUSTRY_CODE_TO_V2: Record<number, string> = {
-  0: '',
-  1: 'e_commerce',
-  2: 'material',
-  3: 'video',
-  4: 'news',
-  5: 'social_platform',
-  20: 'other'
-};
-
-function parseApplicationIndustryV2(value: string, source: string): string {
-  const normalized = value.trim().toLowerCase().replace(/[_\s]+/g, '-');
-  if (Object.prototype.hasOwnProperty.call(APPLICATION_INDUSTRY_V2_ALIASES, normalized)) {
-    return APPLICATION_INDUSTRY_V2_ALIASES[normalized];
-  }
-  const valid = new Set(Object.values(APPLICATION_INDUSTRY_V2_ALIASES));
-  if (valid.has(value.trim())) return value.trim();
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isInteger(parsed) && APPLICATION_INDUSTRY_CODE_TO_V2[parsed] !== undefined) {
-    return APPLICATION_INDUSTRY_CODE_TO_V2[parsed];
-  }
-  throw new Error(
-    `Invalid ${source} value: ${value}. Use none|ecommerce|material|video|news|social-platform|other.`
-  );
-}
-
-export function parseApplicationIndustryV2Value(value: unknown): string | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value === 'number') {
-    const mapped = APPLICATION_INDUSTRY_CODE_TO_V2[value];
-    if (mapped) return mapped;
-    throw new Error(`Invalid Industry numeric value in payload: ${value}`);
-  }
-  if (typeof value === 'string') return parseApplicationIndustryV2(value, 'Industry');
-  throw new Error(`Invalid Industry value type in payload: ${typeof value}`);
-}
-
-function normalizeAppCreateV2Payload(payload: unknown, industry?: string): unknown {
-  if (!isRecord(payload)) return payload;
-  const explicit = industry ? parseApplicationIndustryV2(industry, '--industry') : undefined;
-  const inferred = parseApplicationIndustryV2Value(payload.Industry);
-  return compactObject({
-    ...payload,
-    Industry: explicit ?? inferred ?? 'ECommerce'
-  });
-}
-
-const DATASET_TYPE_V2_ALIASES: Record<string, string> = {
-  'user-event': 'user_event',
-  user_event: 'user_event',
-  'multi-modal': 'multi_modal',
-  multi_modal: 'multi_modal',
-  multimodal: 'multi_modal'
-};
-
-const DATASET_TYPE_CODE_TO_V2: Record<number, string> = {
-  4: 'user_event',
-  7: 'multi_modal'
-};
-
-export const INFER_SCHEMA_DATASET_TYPES = ['user_event', 'multi_modal'] as const;
-export const CREATE_DATASET_TYPES = ['user_event', 'multi_modal'] as const;
-
-const DATASET_THEME_ALIASES: Record<string, string> = {
-  general: 'general',
-  common: 'general',
-  default: 'general',
-  'e-commerce': 'e_commerce',
-  ecommerce: 'e_commerce',
-  e_commerce: 'e_commerce',
-  content: 'content',
-  'long-video': 'long_video',
-  long_video: 'long_video',
-  longvideo: 'long_video'
-};
-
-const SUPPORTED_DATASET_THEMES = ['general', 'e_commerce', 'content', 'long_video'] as const;
-
-export function parseDatasetThemeValue(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (normalized === '') return 'general';
-  const resolved = DATASET_THEME_ALIASES[normalized];
-  if (resolved) return resolved;
-  if ((SUPPORTED_DATASET_THEMES as readonly string[]).includes(normalized)) return normalized;
-  throw new Error(
-    `Invalid dataset Theme value: ${value}. Supported values: ${SUPPORTED_DATASET_THEMES.join('|')}.`
-  );
-}
-
-export function parseDatasetTypeV2Value(value: unknown, allowed?: readonly string[]): string {
-  let resolved: string | undefined;
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
-    if (DATASET_TYPE_V2_ALIASES[normalized]) {
-      resolved = DATASET_TYPE_V2_ALIASES[normalized];
-    } else {
-      const valid = new Set(Object.values(DATASET_TYPE_V2_ALIASES));
-      if (valid.has(value.trim())) resolved = value.trim();
-    }
-  }
-  if (resolved === undefined && typeof value === 'number' && DATASET_TYPE_CODE_TO_V2[value]) {
-    resolved = DATASET_TYPE_CODE_TO_V2[value];
-  }
-  if (resolved === undefined) {
-    const allowedList = allowed ? allowed.join('|') : 'user_event|multi_modal';
-    throw new Error(`Invalid dataset Type value: ${String(value)}. Use ${allowedList}.`);
-  }
-  if (allowed && !allowed.includes(resolved)) {
-    throw new Error(
-      `Dataset Type "${resolved}" is not allowed here. Use ${allowed.join('|')}.`
-    );
-  }
-  return resolved;
-}
-
-const SUPPORTED_POST_PAID_TYPES = ['none', 'standard', 'premium'] as const;
-
-// Parses the --post-paid-type flag. Console PostPaidType is a string enum
-// (none/standard/premium); post-paid instances must send standard or premium,
-// while non-post-paid can omit the field entirely (undefined => not sent).
-export function parsePostPaidTypeValue(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string') {
-    throw new Error(`Invalid --post-paid-type value: ${String(value)}. Supported values: standard|premium (or none).`);
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === '') return undefined;
-  if (!(SUPPORTED_POST_PAID_TYPES as readonly string[]).includes(normalized)) {
-    throw new Error(`Invalid --post-paid-type value: ${value}. Supported values: standard|premium (or none).`);
-  }
-  return normalized;
-}
-
-function normalizeDatasetV2Payload(payload: unknown, allowed?: readonly string[]): unknown {
-  if (!isRecord(payload)) return payload;
-  const normalized: Record<string, unknown> = { ...payload };
-  if (payload.Type !== undefined) {
-    normalized.Type = parseDatasetTypeV2Value(payload.Type, allowed);
-  }
-  if (payload.Schema !== undefined) {
-    normalized.Schema = normalizeDatasetSchemaFieldsV2(payload.Schema);
-  }
-  if (payload.Industry !== undefined && typeof payload.Industry === 'string') {
-    normalized.Industry = payload.Industry.trim();
-  }
-  if (payload.Theme !== undefined) {
-    normalized.Theme = parseDatasetThemeValue(payload.Theme);
-  }
-  return normalized;
-}
-
-function normalizeDatasetSchemaFieldsV2(value: unknown): unknown {
-  if (!Array.isArray(value)) return value;
-  return value.map(entry => {
-    if (!isRecord(entry)) return entry;
-    const normalized: Record<string, unknown> = { ...entry };
-    const fieldName = optionalString(entry.Name) ?? optionalString(entry.FieldName);
-    const fieldType = entry.Type ?? entry.FieldType;
-    delete normalized.FieldName;
-    delete normalized.FieldType;
-    if (fieldName) normalized.Name = fieldName;
-    if (fieldType !== undefined) {
-      if (typeof fieldType === 'number') {
-        normalized.Type = datasetFieldTypeNumberToString(fieldType);
-      } else if (typeof fieldType === 'string') {
-        normalized.Type = fieldType.trim();
-      }
-    }
-    const subFields = entry.Fields ?? entry.SubFields ?? entry.fields ?? entry.subFields;
-    if (Array.isArray(subFields)) {
-      normalized.Fields = normalizeDatasetSchemaFieldsV2(subFields);
-      delete normalized.SubFields;
-      delete normalized.fields;
-      delete normalized.subFields;
-    }
-    return normalized;
-  });
-}
-
-const DATASET_FIELD_TYPE_NUM_TO_STRING: Record<number, string> = {
-  1: 'string',
-  2: 'int32',
-  3: 'int64',
-  4: 'float',
-  5: 'bool',
-  6: 'array<string>',
-  7: 'array<int32>',
-  8: 'array<int64>',
-  9: 'array<float>',
-  10: 'array<bool>',
-  11: 'object',
-  12: 'array<object>'
-};
-
-function datasetFieldTypeNumberToString(value: number): string {
-  return DATASET_FIELD_TYPE_NUM_TO_STRING[value] ?? String(value);
-}
-
-export interface DatasetImportUrlOptions extends ServiceCommandOptions {
-  fileName?: string;
-  projectName?: string;
-}
-
-export async function runDatasetImportUrlCommand(options: DatasetImportUrlOptions): Promise<void> {
-  const payload = (await loadJsonInput(options.data)) ?? compactObject({
-    FileName: options.fileName,
-    ProjectName: options.projectName
-  });
-  requireNonEmptyObject(payload, 'Need --file-name (or --data) for dataset import-url.');
-  await printResult(callOpenApi('GetPresignedImportUrlV2', payload, options));
-}
-
-export interface DatasetInferSchemaOptions extends ServiceCommandOptions {
-  tosKey?: string;
-  type?: string;
-  name?: string;
-  industry?: string;
-  language?: string;
-  theme?: string;
-  projectName?: string;
-}
-
-export async function runDatasetInferSchemaCommand(options: DatasetInferSchemaOptions): Promise<void> {
-  const fallbackPayload = compactObject({
-    TosKey: options.tosKey,
-    Type: options.type ? parseDatasetTypeV2Value(options.type, INFER_SCHEMA_DATASET_TYPES) : undefined,
-    Name: options.name,
-    Industry: options.industry ? parseApplicationIndustryV2Value(options.industry) : undefined,
-    Language: options.language,
-    Theme: options.theme,
-    ProjectName: options.projectName
-  });
-  const rawPayload = (await loadJsonInput(options.data)) ?? fallbackPayload;
-  const payload = normalizeDatasetV2Payload(rawPayload, INFER_SCHEMA_DATASET_TYPES);
-  requireNonEmptyObject(payload, 'Need --tos-key and --type (or --data) for dataset infer-schema.');
-  await printResult(callOpenApi('AddInferDatasetSchemaTaskV2', payload, options));
-}
-
-export interface DatasetInferResultOptions extends ServiceCommandOptions {
-  taskId?: string;
-  projectName?: string;
-}
-
-export async function runDatasetInferResultCommand(options: DatasetInferResultOptions): Promise<void> {
-  const fallbackPayload = compactObject({
-    TaskID: options.taskId,
-    ProjectName: options.projectName
-  });
-  const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
-  requireNonEmptyObject(payload, 'Need --task-id (or --data) for dataset infer-result.');
-  const response = await callOpenApi('GetInferDatasetSchemaResultV2', payload, options);
-  await printResult(response);
-}
-
-export interface DatasetValidateSchemaOptions {
-  input?: string;
-  datasetType: string;
-}
-
-export async function runDatasetValidateSchemaCommand(options: DatasetValidateSchemaOptions): Promise<void> {
-  const input = options.input;
-  if (!input) {
-    throw new Error('--input is required: path to an infer-result JSON file.');
-  }
-  const raw = await loadJsonInput(input);
-  if (!raw || typeof raw !== 'object') {
-    throw new Error(`Invalid infer-result JSON at ${input}.`);
-  }
-  const datasetType = options.datasetType?.toLowerCase() || 'multi_modal';
-  if (datasetType !== 'multi_modal' && datasetType !== 'user_event') {
-    throw new Error(`Invalid --dataset-type: ${options.datasetType}. Use multi_modal or user_event.`);
-  }
-  const confirm = buildInferSchemaConfirm(raw, datasetType);
-  if (hasExplicitOutputFormatFlag()) {
-    await printResult(confirm);
-    return;
-  }
-  process.stdout.write(`${renderInferSchemaConfirmText(confirm)}\n`);
-}
-
-export interface AppAttachDatasetOptions extends ServiceCommandOptions {
-  applicationId?: string;
-  datasetId?: string;
-  dataConfig?: string;
-  dataConfigJson?: string;
-  dryRun?: boolean;
-  projectName?: string;
-}
-
-export async function runAppAttachDatasetCommand(options: AppAttachDatasetOptions): Promise<void> {
-  const dataConfig = options.dataConfigJson
-    ? await loadJsonInput(options.dataConfigJson)
-    : await loadJsonInput(options.dataConfig);
-  const fallbackPayload = compactObject({
-    ApplicationId: options.applicationId,
-    DatasetId: options.datasetId,
-    DataConfig: dataConfig,
-    DryRun: options.dryRun === true ? true : undefined,
-    ProjectName: options.projectName
-  });
-  const payload = (await loadJsonInput(options.data)) ?? fallbackPayload;
-  requireNonEmptyObject(payload, 'Need --app-id and --dataset-id (or --data) for app attach-dataset.');
-  await printResult(callOpenApi('AttachDatasetToApplicationV2', payload, options));
 }
 
 function normalizeAppUpdatePayload(payload: unknown, industry?: string): unknown {
@@ -5168,7 +3145,7 @@ function summarizeDatasetRecord(dataset: Record<string, unknown>): Record<string
     filterFields: asStringArray(dataFieldConfig?.FilterFields),
     suggestFields: asStringArray(dataFieldConfig?.SuggestFields),
     imageIndexFields: asStringArray(dataFieldConfig?.ImageIndexFields),
-    fields: summarizeDatasetFields(asObjectArray(dataset.Schema), dataFieldConfig, isRecord(dataset.FieldDescMap) ? dataset.FieldDescMap : undefined),
+    fields: summarizeDatasetFields(asObjectArray(dataset.Schema), dataFieldConfig),
     updatedAt: dataset.UpdatedAt,
     createdAt: dataset.CreatedAt
   });
@@ -5200,27 +3177,6 @@ function summarizeAppDatasetConfigGetResponse(response: Record<string, unknown>,
       applicationId,
       datasetConfig: summarizeAppDatasetConfig(config, true)
     }
-  };
-}
-
-function summarizeAppItemDataCountResponse(
-  response: Record<string, unknown>,
-  applicationId: string,
-  datasetId: string
-): Record<string, unknown> {
-  const result = isRecord(response.Result) ? response.Result : response;
-  return {
-    ResponseMetadata: response.ResponseMetadata,
-    Result: compactObject({
-      applicationId,
-      datasetId,
-      totalCnt: result.TotalCnt,
-      validCnt: result.ValidCnt,
-      imageNumTotal: result.ImageNumTotal,
-      validImageNum: result.ValidImageNum,
-      durationTotal: result.DurationTotal,
-      validDuration: result.ValidDuration
-    })
   };
 }
 
@@ -5281,8 +3237,8 @@ function summarizeAppOnlineConfigResponse(response: Record<string, unknown>, app
   };
 }
 
-function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?: Record<string, unknown>, fieldDescMap?: Record<string, unknown>): Array<Record<string, unknown>> {
-  const fieldDescriptions = isRecord(fieldDescMap) ? fieldDescMap : undefined;
+function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?: Record<string, unknown>): Array<Record<string, unknown>> {
+  const fieldDescriptions = isRecord(config?.FieldDescMap) ? config.FieldDescMap : undefined;
   const indexFields = new Set(asStringArray(config?.IndexFields));
   const filterFields = new Set(asStringArray(config?.FilterFields));
   const suggestFields = new Set(asStringArray(config?.SuggestFields));
@@ -5291,7 +3247,7 @@ function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?:
   return schema.map(field => {
     const name = String(field.Name ?? '');
     const roles = [];
-    if (readBoolean(field, ['Metadata', 'IsPrimaryKey'])) roles.push('primary_key');
+    if (readBoolean(field, ['Metadata', 'IsPK'])) roles.push('primary_key');
     if (indexFields.has(name)) roles.push('index');
     if (filterFields.has(name)) roles.push('filter');
     if (suggestFields.has(name)) roles.push('suggest');
@@ -5306,7 +3262,7 @@ function summarizeDatasetFields(schema: Array<Record<string, unknown>>, config?:
       typeCode: toInteger(field.Type),
       description,
       meaning: hasNonEmptyString(field.Meaning) ? String(field.Meaning) : undefined,
-      primaryKey: readBoolean(field, ['Metadata', 'IsPrimaryKey']) || undefined,
+      primaryKey: readBoolean(field, ['Metadata', 'IsPK']) || undefined,
       required: typeof field.Required === 'boolean' ? field.Required : undefined,
       readOnly: readBoolean(field, ['Metadata', 'IsReadOnly']) || undefined,
       bizAttrCode: bizAttrCode && bizAttrCode > 0 ? bizAttrCode : undefined,
@@ -5398,18 +3354,12 @@ function compactObject<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
 }
 
-function withProjectName(payload: unknown, projectName: string): unknown {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return payload;
-  }
-  const currentProjectName = (payload as Record<string, unknown>).ProjectName;
-  if (typeof currentProjectName === 'string' && currentProjectName.trim().length > 0) {
-    return payload;
-  }
-  return {
-    ...(payload as Record<string, unknown>),
-    ProjectName: projectName
-  };
+function buildRecommendParentItems(parentId: string | undefined): Array<{ _id: string }> | undefined {
+  const ids = (parentId ? [parentId] : [])
+    .map(value => value.trim())
+    .filter(Boolean);
+  const unique = [...new Set(ids)];
+  return unique.length > 0 ? unique.map(_id => ({ _id })) : undefined;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -5452,10 +3402,12 @@ function requireNonEmptyObject(value: unknown, message: string): void {
 
 export function validateFieldDescriptions(payload: unknown): void {
   if (!isRecord(payload)) return;
-  const fieldDescMap = isRecord(payload.FieldDescMap) ? payload.FieldDescMap : undefined;
+  const fieldConfig = isRecord(payload.DataFieldConfig) ? payload.DataFieldConfig : isRecord(payload.DataConfig) ? payload.DataConfig : undefined;
+  if (!fieldConfig) return;
+  const fieldDescMap = isRecord(fieldConfig.FieldDescMap) ? fieldConfig.FieldDescMap : undefined;
   if (!fieldDescMap || Object.keys(fieldDescMap).length === 0) {
     throw new Error(
-      'FieldDescMap must contain at least one field description. ' +
+      'DataFieldConfig.FieldDescMap must contain at least one field description. ' +
       'Add field descriptions to improve search quality and data discoverability.'
     );
   }
@@ -5650,39 +3602,6 @@ function parseOptionalInt(value?: string): number | undefined {
   return parsed;
 }
 
-function parseOptionalNumber(value?: string): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid number value: ${value}`);
-  }
-  return parsed;
-}
-
-function parseTuningLabelSource(value?: string): 'llm' | 'source-item' | 'auto' | undefined {
-  if (!value) return undefined;
-  if (value === 'llm' || value === 'source-item' || value === 'auto') {
-    return value;
-  }
-  throw new Error(`Invalid --label-source value: ${value}`);
-}
-
-function parseTuningJudgeInput(value?: string): 'text' | 'text-image' | undefined {
-  if (!value) return undefined;
-  if (value === 'text' || value === 'text-image') {
-    return value;
-  }
-  throw new Error(`Invalid --judge-input value: ${value}`);
-}
-
-function parseTuningOptimizer(value?: string): 'matrix' | 'spa' | undefined {
-  if (!value) return undefined;
-  if (value === 'matrix' || value === 'spa') {
-    return value;
-  }
-  throw new Error(`Invalid --optimizer value: ${value}`);
-}
-
 function parseDatasetTypeValue(value: unknown): number {
   if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
     return value;
@@ -5702,7 +3621,7 @@ function parseDatasetTypeValue(value: unknown): number {
   }
 
   throw new Error(
-    `Invalid dataset Type value: ${String(value)}. Use item|query|video|user-event|doc|document or a positive integer enum.`
+    `Invalid dataset Type value: ${String(value)}. Use item|query|video|user-event|behavior|document|image_text or a positive integer enum.`
   );
 }
 

@@ -40,19 +40,10 @@ export const outputFormatFlags = {
 
 const connectionFlags = {
   'base-url': Flags.string({
-    description: 'API base URL (legacy single-URL form). Auto-derives the matching control/data plane. Defaults to VIKING_BASE_URL.'
-  }),
-  'control-plane-base-url': Flags.string({
-    description: 'OpenAPI control-plane base URL (e.g. aisearch.cn-beijing.volcengineapi.com). Defaults to VIKING_CONTROL_PLANE_BASE_URL.'
-  }),
-  'data-plane-base-url': Flags.string({
-    description: 'Runtime data-plane base URL (e.g. aisearch.cn-beijing.volces.com). Defaults to VIKING_DATA_PLANE_BASE_URL.'
+    description: 'API base URL. Defaults to VIKING_BASE_URL.'
   }),
   'project-name': Flags.string({
     description: 'Viking project name. Defaults to VIKING_PROJECT_NAME or default.'
-  }),
-  'api-key': Flags.string({
-    description: 'Viking runtime API key. Overrides VIKING_API_KEY.'
   }),
   ak: Flags.string({
     description: 'Viking Access Key ID. Overrides auth store and VIKING_AK.'
@@ -65,9 +56,6 @@ const connectionFlags = {
   }),
   'timeout-ms': Flags.integer({
     default: 15000
-  }),
-  debug: Flags.boolean({
-    description: 'Enable debug logging. Prints HTTP requests, responses, and internal state to stderr.'
   })
 } as const;
 
@@ -82,46 +70,3 @@ export const serviceFlags = {
     description: 'Inline JSON, @file path, or JSON file path.'
   })
 } as const;
-
-export interface ServiceConnectionFlags {
-  'base-url'?: string;
-  'control-plane-base-url'?: string;
-  'data-plane-base-url'?: string;
-  'project-name'?: string;
-  'api-key'?: string;
-  ak?: string;
-  sk?: string;
-  region?: string;
-  'timeout-ms'?: number;
-  debug?: boolean;
-}
-
-export interface ServiceConnectionOptions {
-  baseUrl?: string;
-  controlPlaneBaseUrl?: string;
-  dataPlaneBaseUrl?: string;
-  projectName?: string;
-  apiKey?: string;
-  accessKeyId?: string;
-  secretKey?: string;
-  region?: string;
-  timeoutMs?: number;
-  debug?: boolean;
-}
-
-export function extractServiceConnectionOptions(
-  flags: ServiceConnectionFlags
-): ServiceConnectionOptions {
-  return {
-    baseUrl: flags['base-url'],
-    controlPlaneBaseUrl: flags['control-plane-base-url'],
-    dataPlaneBaseUrl: flags['data-plane-base-url'],
-    projectName: flags['project-name'],
-    apiKey: flags['api-key'],
-    accessKeyId: flags.ak,
-    secretKey: flags.sk,
-    region: flags.region,
-    timeoutMs: flags['timeout-ms'],
-    debug: flags.debug
-  };
-}

@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { fetchAppStatusSnapshot, type AppStatusSnapshot } from '../core/app-status';
-import { loadJsonInput, loadJsonOrJsonlInput, parseBooleanString } from '../core/json-input';
+import { loadJsonInput, parseBooleanString } from '../core/json-input';
 import { formatOutput, hasExplicitOutputFormatFlag, printOutput } from '../core/output-format';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
@@ -26,6 +26,7 @@ export interface RecommendShortcutRunOptions extends ShortcutServiceOptions {
   sceneId: string;
   userId?: string;
   parentId?: string;
+  parentIds?: string[];
   pageSize?: number;
 }
 
@@ -84,7 +85,7 @@ export async function runRecommendShortcutRunCommand(options: RecommendShortcutR
     (await loadJsonInput(options.data)) ??
     compactObject({
       user: options.userId ? { _user_id: options.userId } : undefined,
-      parent_items: options.parentId ? [{ _id: options.parentId }] : undefined,
+      parent_items: buildRecommendParentItems(options.parentId, options.parentIds),
       page_size: options.pageSize ?? 20
     });
   requireNonEmptyObject(payload, 'Need --data or recommend context for recommend run.');
@@ -95,6 +96,7 @@ export async function runRecommendShortcutRunCommand(options: RecommendShortcutR
     ['scene', options.sceneId],
     ['user_id', options.userId],
     ['parent_id', options.parentId],
+    ['parent_ids', options.parentIds?.join(',')],
     ['page_size', String(extractNumber(payload, 'page_size') ?? options.pageSize ?? 20)]
   ]);
   await printJson(result);
@@ -143,7 +145,7 @@ export async function runDataImportShortcutCommand(options: DataImportShortcutOp
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      fields: await loadJsonOrJsonlInput(options.fields)
+      fields: await loadJsonInput(options.fields)
     });
   requireNonEmptyObject(payload, 'Need --fields or --data for data import.');
 
@@ -164,15 +166,11 @@ function createRuntimeClient(options: ShortcutServiceOptions): VikingRuntimeApiC
 function toServiceConfigInput(options: ShortcutServiceOptions): ServiceConfigInput {
   return {
     baseUrl: options.baseUrl,
-    controlPlaneBaseUrl: options.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: options.dataPlaneBaseUrl,
-    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
     region: options.region,
-    timeoutMs: options.timeoutMs,
-    debug: options.debug
+    timeoutMs: options.timeoutMs
   };
 }
 
@@ -199,6 +197,14 @@ function printShortcutHeader(title: string, rows: Array<[string, string | undefi
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
+}
+
+function buildRecommendParentItems(parentId: string | undefined, parentIds: string[] | undefined): Array<{ _id: string }> | undefined {
+  const ids = [...(parentId ? [parentId] : []), ...(parentIds ?? [])]
+    .map(value => value.trim())
+    .filter(Boolean);
+  const unique = [...new Set(ids)];
+  return unique.length > 0 ? unique.map(_id => ({ _id })) : undefined;
 }
 
 function requireNonEmptyObject(value: unknown, message: string): void {

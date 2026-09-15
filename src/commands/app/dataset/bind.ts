@@ -7,7 +7,7 @@ import { serviceFlags } from '../../../command-support/service-flags';
 
 export default class AppDatasetBind extends Command {
   static override description =
-    "DEPRECATED alias for 'vs app attach-dataset'. Bind a dataset to an application with an explicit bind-time field config. Backtrack flags are accepted for back-compat but ignored under V2; for item/video datasets, prefer a reviewed field-config.json that already contains IndexFields, FilterFields, SuggestFields, and media field groups when needed.";
+    'Bind a dataset to an application with an explicit bind-time field config. This command does not infer missing fields; for item/video datasets, prefer a reviewed field-config.json that already contains IndexFields, FilterFields, SuggestFields, and media field groups when needed.';
 
   static override examples = [
     '<%= config.bin %> app dataset bind --application-id 123 --dataset-id 456 --field-config @field-config.json',
@@ -42,11 +42,8 @@ export default class AppDatasetBind extends Command {
     const { flags } = await this.parse(AppDatasetBind);
     await runAppDatasetBindWorkflowCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

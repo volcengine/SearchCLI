@@ -1,13 +1,55 @@
-## Security and privacy
+# Security Policy
 
-If you discover potential security issues in the project, or believe you may have found a security issue, please notify the ByteDance security team through our [security center](https://security.bytedance.com/src/) or [vulnerability reporting email](mailto:src@bytedance.com). Please do not create public GitHub Issues.
+If you believe you have found a security issue in SearchCLI, report it
+privately.
 
-We will assess the vulnerability based on the Common Vulnerability Scoring System (CVSS 3.1). The security team will keep you updated on key progress and may request further information or guidance from you. You are welcome to contact us via the email or website mentioned above to ask questions or discuss disclosure matters.
+## Reporting
 
-To protect the security of our customers, ByteDance requests that you do not publish or share information regarding the vulnerability in any public forum, nor publish or share data involving users, until the vulnerability has been remediated and our users have been notified. Please understand that the time required for remediation depends on the severity of the vulnerability and the scope of the impact.
+Do not open a public issue with exploit details.
 
-Individuals, companies, and security teams may wish to publish security advisories on their own websites or other forums. Please contact us via the email or website mentioned above prior to publication to discuss the information that can be disclosed and to coordinate the disclosure timeline.
+Notify ByteDance Security through one of these channels:
 
-## Bug Bounty Reward
+- [ByteDance Security Center](https://security.bytedance.com/src)
+- [sec@bytedance.com](mailto:sec@bytedance.com)
 
-[For the policy of bug bounty reward](https://bytedance.larkoffice.com/docx/ZstQd7bbooDctqxBCAmcFasOngd), if you have any questions about the rules, please contact [https://src.bytedance.com/home](https://src.bytedance.com/home) for consultation.
+If the repository hosting platform later enables private vulnerability
+reporting, you may also use that route.
+
+## What To Include
+
+Please include:
+
+1. A clear title
+2. Affected command, skill, or file path
+3. Reproduction steps
+4. Impact
+5. Environment details
+6. Suggested mitigation, if known
+
+## Sensitive Material
+
+Never include:
+
+- Volcengine AK/SK
+- tokens, cookies, or session secrets
+- customer data
+- private dataset contents
+
+Use redacted examples whenever possible.
+
+## Scope Notes
+
+This repository is a CLI and installable skill bundle for Viking AI Search on
+Volcengine.
+
+Useful reports typically involve:
+
+- credential handling
+- unsafe command execution
+- path traversal or arbitrary file write/read
+- packaging or install-time trust issues
+- skill-install safety issues
+
+Reports that only restate documented operator behavior, or require a user to
+intentionally paste secrets into chat against the documented guidance, are
+generally not security vulnerabilities.

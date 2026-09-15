@@ -4,17 +4,13 @@
 import { z } from 'zod';
 import type { RuntimeConfig } from './types';
 import { resolveCliDefaults } from './user-config';
-import { setDebugMode } from './debug-logger';
 
 const runtimeConfigSchema = z.object({
-  controlPlaneBaseUrl: z.string().url(),
-  dataPlaneBaseUrl: z.string().url(),
-  dataPlaneHost: z.string().min(1).optional(),
+  baseUrl: z.string().url(),
   service: z.string().min(1),
   applicationId: z.string().min(1),
   datasetId: z.string().min(1),
   sceneId: z.string().optional(),
-  apiKey: z.string().optional(),
   accessKeyId: z.string().optional(),
   secretKey: z.string().optional(),
   region: z.string().min(1),
@@ -27,20 +23,15 @@ const runtimeConfigSchema = z.object({
   llmSecretKey: z.string().optional(),
   llmRegion: z.string().optional(),
   llmService: z.string().optional(),
-  llmModel: z.string().optional(),
-  debug: z.boolean()
+  llmModel: z.string().optional()
 });
 
 export interface RuntimeConfigInput {
   baseUrl?: string;
-  controlPlaneBaseUrl?: string;
-  dataPlaneBaseUrl?: string;
-  dataPlaneHost?: string;
   service?: string;
   applicationId?: string;
   datasetId?: string;
   sceneId?: string;
-  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   region?: string;
@@ -54,16 +45,12 @@ export interface RuntimeConfigInput {
   llmRegion?: string;
   llmService?: string;
   llmModel?: string;
-  debug?: boolean;
 }
 
 export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
   const defaults = resolveCliDefaults({
     baseUrl: input.baseUrl,
-    controlPlaneBaseUrl: input.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: input.dataPlaneBaseUrl,
     service: input.service,
-    apiKey: input.apiKey,
     accessKeyId: input.accessKeyId,
     secretKey: input.secretKey,
     region: input.region,
@@ -79,15 +66,12 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     llmModel: input.llmModel
   });
 
-  const resolved = runtimeConfigSchema.parse({
-    controlPlaneBaseUrl: defaults.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: defaults.dataPlaneBaseUrl,
-    dataPlaneHost: input.dataPlaneHost ?? defaults.dataPlaneHost,
+  return runtimeConfigSchema.parse({
+    baseUrl: defaults.baseUrl,
     service: defaults.service,
     applicationId: input.applicationId ?? process.env.VIKING_APPLICATION_ID,
     datasetId: input.datasetId ?? process.env.VIKING_DATASET_ID,
     sceneId: input.sceneId ?? process.env.VIKING_SCENE_ID,
-    apiKey: defaults.apiKey,
     accessKeyId: defaults.accessKeyId,
     secretKey: defaults.secretKey,
     region: defaults.region,
@@ -100,13 +84,6 @@ export function resolveRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     llmSecretKey: defaults.llmSecretKey,
     llmRegion: defaults.llmRegion,
     llmService: defaults.llmService,
-    llmModel: defaults.llmModel,
-    debug: input.debug ?? false
+    llmModel: defaults.llmModel
   });
-
-  if (resolved.debug) {
-    setDebugMode(true);
-  }
-
-  return resolved;
 }

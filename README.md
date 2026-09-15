@@ -4,31 +4,17 @@
 
 # SearchCLI
 
-English | [简体中文](README.zh_CN.md) | [日本語](README.ja_JP.md) | [Deutsch](README.de_DE.md) | [한국어](README.ko_KR.md) | [Français](README.fr_FR.md) | [Русский](README.ru_RU.md) | [Italiano](README.it_IT.md) | [Español](README.es_ES.md) | [Português](README.pt_BR.md) | [Türkçe](README.tr_TR.md) | [ไทย](README.th_TH.md) | [Bahasa Indonesia](README.id_ID.md)
+English | [中文README](README.zh_CN.md)
 
 Connect stable, tunable search, recommendation, and conversational retrieval to your agent system or business system.
 
-[Community](#community) · [Quick Start](#quick-start-human-users) · [AI Agent Setup](#quick-start-ai-agents) · [Full Agent Guide](docs/agent-quick-start.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Quick Start](#quick-start-human-users) · [AI Agent Setup](#quick-start-ai-agents) · [Full Agent Guide](docs/agent-quick-start.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 SearchCLI is the open CLI for AI Search on Volcengine.
 
 If your agent system or business system needs stable, tunable information distribution services, SearchCLI gives you a practical path to integrate production-grade search, recommendation, and conversational retrieval into real workflows.
 
 With SearchCLI and its installable `Viking skills`, external agents can onboard data, build and validate search and recommendation flows, run conversational retrieval, tune strategy configuration, inspect bad cases, and iterate on retrieval quality in a stable, reviewable way.
-
-## Community
-
-<p align="center">
-  <strong>Join the SearchCLI WeChat user group</strong><br />
-  Scan the QR code below with WeChat to connect with users and maintainers.<br />
-  <sub>The QR code is refreshed periodically. If it has expired, check back for the latest version.</sub>
-</p>
-
-<p align="center">
-  <a href="docs/assets/wechat-group-qr.jpg">
-    <img src="docs/assets/wechat-group-qr.jpg" alt="SearchCLI WeChat user group QR code" width="320" />
-  </a>
-</p>
 
 ## What SearchCLI Is
 
@@ -52,9 +38,9 @@ With SearchCLI and its installable `Viking skills`, external agents can onboard 
 
 ## Core Capabilities
 
-- `vs dataset`, `vs app`, and `vs data` for application and dataset management.
+- `vs item profile | plan | apply` for structured item onboarding.
+- `vs app`, `vs dataset`, and `vs data` for application and dataset management.
 - `vs search run`, `vs recommend run`, and `vs chat run` for runtime verification.
-- `vs search tune query-generate | plan | run | report` for first-version automated text-similarity evaluation and tuning.
 - Installable `Viking skills` so external agents can use the same workflows.
 
 ## Requirements
@@ -68,8 +54,8 @@ With SearchCLI and its installable `Viking skills`, external agents can onboard 
 ### 1. Install
 
 ```bash
-git clone git@github.com:volcengine/SearchCLI.git vs
-cd vs
+git clone <public-repo-url> viking_cli
+cd viking_cli
 bash ./scripts/install.sh
 ```
 
@@ -89,34 +75,51 @@ Otherwise, run interactive login in a real terminal:
 vs auth login
 ```
 
-If you will use search tuning query generation or LLM relevance judging, configure an OpenAI-compatible LLM API without placing the API key in plain config:
-
-```bash
-vs llm login
-vs llm status --json
-vs search tune llm-check --live --json
-```
-
-If the current shell already has `VIKING_LLM_BASE_URL`, `VIKING_LLM_API_KEY`, and `VIKING_LLM_MODEL`, use `vs llm import-env` instead. The API key is stored in the local secure credential store; base URL and model are stored as non-secret config.
-
 ### 3. Run the First Onboarding Flow
 
-Onboard a JSONL file into a fresh app using the V2 backend-driven schema inference flow:
+If the user wants a new app plus bind-time config review and runtime verification, use the `dataset+app` path:
 
 ```bash
-vs dataset import-url --file-name items.jsonl
-curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
-vs dataset infer-schema --tos-key <FileKey> --type multi_modal --theme e_commerce --language zh --name <dataset-name>
-vs dataset infer-result --task-id <TaskID> --render-schema
-vs dataset create --data @dataset-create.json
-vs data write --dataset-id <DatasetId> --fields @items.jsonl
-vs app create --name <app-name> --industry e_commerce --language zh
-vs app attach-dataset --data @attach.json
+vs item profile --file ./items.json --pretty
+vs item plan --file ./items.json --goal "Build item search"
+vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
+vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
 ```
 
-If you only need a dataset (no app), stop after `vs data write`.
+If you only need dataset provisioning, use the `dataset-only` path, generate a dataset-only plan with `--skip-app`, and stop after dataset create + ingest:
 
-For user-event datasets, use `--type user_event` and omit `--theme`.
+```bash
+vs item profile --file ./items.json --pretty
+vs item plan --file ./items.json --goal "Build item search" --skip-app
+vs dataset create --data @dataset-create.json
+vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+```
+
+Prefer `dataset-create.json` when the plan emitted it so dataset creation keeps `Schema` and `DataFieldConfig` together. The `--name <dataset-name> --type item --schema @schema.json` form remains the manual schema-only fallback when a full create payload is unavailable or unsuitable.
+
+`--skip-app` is also accepted by `vs item provision` and `vs item apply` as an execution-time guard rail when you need to enforce the dataset-only boundary from an existing plan.
+
+If you need a video dataset, do not rely on the default type. Always pass `--type video` explicitly:
+
+For `dataset+app`:
+
+```bash
+vs item profile --file ./videos.jsonl --type video --pretty
+vs item plan --file ./videos.jsonl --type video --goal "Build video search"
+vs item apply --plan-dir ./.viking/item-plans/<plan> --dry-run
+vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
+```
+
+For `dataset-only`:
+
+```bash
+vs item profile --file ./videos.jsonl --type video --pretty
+vs item plan --file ./videos.jsonl --type video --goal "Build video search" --skip-app
+vs dataset create --data @dataset-create.json
+vs dataset ingest --dataset-id <dataset-id> --fields @<normalized-items-artifact>
+```
+
+For video dataset-only provisioning, prefer `dataset-create.json` so the create request includes `DataFieldConfig`; `--schema @schema.json` alone can fail with `MissingParameter.DefaultFieldStrategy`.
 
 ## Quick Start (AI Agents)
 
@@ -125,15 +128,15 @@ If an external agent needs to operate AI Search through this repository:
 ### 1. Install SearchCLI
 
 ```bash
-git clone git@github.com:volcengine/SearchCLI.git vs
-cd vs
+git clone <public-repo-url> viking_cli
+cd viking_cli
 bash ./scripts/install.sh
 ```
 
 ### 2. Install Viking skills
 
 ```bash
-npx skills add "git@github.com:volcengine/SearchCLI.git" -y -g
+npx skills add "<public-repo-url>" -y -g
 ```
 
 The default public skill bundle is:
@@ -141,7 +144,6 @@ The default public skill bundle is:
 - `vs-shared`
 - `vs-item-onboarding`
 - `vs-search`
-- `vs-search-tuning`
 - `vs-chat`
 - `vs-recommend`
 
@@ -164,7 +166,6 @@ vs auth login
 ```bash
 vs --help
 vs auth status --json
-vs llm status --json
 vs doctor --json
 vs skill list
 ```
@@ -172,7 +173,6 @@ vs skill list
 ## Public Command Groups
 
 - `vs auth`
-- `vs llm`
 - `vs doctor`
 - `vs skill`
 - `vs item`
@@ -219,9 +219,11 @@ External contributors must complete the Contributor License Agreement (CLA) befo
 
 Please check [Code of Conduct](CODE_OF_CONDUCT.md) for more details.
 
-## Security and privacy
-This project takes security seriously. 
-For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md)
+## Security
+
+If you discover a potential security issue in this project, or think you may have discovered a security issue, we ask that you notify Bytedance Security via our [security center](https://security.bytedance.com/src) or [vulnerability reporting email](mailto:sec@bytedance.com).
+
+Please do **not** create a public GitHub issue.
 
 ## License
 

@@ -14,10 +14,6 @@ commands: chat run, app status, app diagnose
 
 Use this skill for conversational search requests, session continuity, multi-turn checks, retrieval verification, and response inspection.
 
-## Version Check
-
-Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
-
 ## Preconditions
 
 - an `application-id` is available
@@ -47,7 +43,5 @@ Before starting this skill workflow, run `vs version check --json`. Continue onl
 
 ## Constraints
 
-- Before executing any concrete `vs ...` command in this chat workflow, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - `vs chat ...` is the conversational search runtime surface
 - When debugging parsing issues, inspect the raw JSON response first instead of adding an extra line-oriented parser
-- If a command failure or user follow-up turns into a product concept, capability, API field, console UI path, purchase, billing, or general troubleshooting question outside this chat workflow, temporarily hand off to `vs-product-qa`; return to this workflow only after the grounded product answer is complete.

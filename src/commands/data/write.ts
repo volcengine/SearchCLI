@@ -17,7 +17,7 @@ export default class DataWrite extends Command {
     ...serviceFlags,
     'dataset-id': Flags.string({ required: true }),
     fields: Flags.string({
-      description: 'Inline JSON, @file path, or JSON/JSONL file path for the fields array. JSONL (one record per line) is accepted and converted to an array automatically.'
+      description: 'Inline JSON, @file path, or JSON file path for the fields array.'
     })
   };
 
@@ -25,11 +25,8 @@ export default class DataWrite extends Command {
     const { flags } = await this.parse(DataWrite);
     await runDataWriteCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

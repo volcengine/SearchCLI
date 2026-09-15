@@ -9,7 +9,6 @@ import { z } from 'zod';
 import {
   DEFAULT_CREDENTIAL_PROFILE,
   getCredentialStoreStatus,
-  loadLlmApiCredentialsSync,
   loadServiceCredentialsSync,
   resolveCredentialStoreMode,
   credentialStoreModeSchema,
@@ -17,11 +16,9 @@ import {
   type CredentialStoreMode
 } from './credential-store';
 import { ensureDir, writeJson } from './files';
-import {
-  resolveEndpointsOrThrow,
-  type EnvironmentId
-} from './environment';
 
+const DEFAULT_BASE_URL = 'https://aisearch.cn-beijing.volces.com';
+const DEFAULT_REGION = 'cn-beijing';
 const DEFAULT_SERVICE = 'aisearch';
 const DEFAULT_PROJECT_NAME = 'default';
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -35,11 +32,6 @@ export const DEFAULT_AUTH_PROFILE = DEFAULT_CREDENTIAL_PROFILE;
 
 const cliProfileSchema = z.object({
   baseUrl: z.string().url().optional(),
-  controlPlaneBaseUrl: z.string().url().optional(),
-  dataPlaneBaseUrl: z.string().url().optional(),
-  host: z.string().min(1).optional(),
-  xTtBackend: z.string().min(1).optional(),
-  environmentId: z.string().min(1).optional(),
   projectName: z.string().min(1).optional(),
   region: z.string().min(1).optional(),
   credentialStore: credentialStoreModeSchema.optional(),
@@ -48,13 +40,7 @@ const cliProfileSchema = z.object({
 
 const cliConfigSchema = z.object({
   baseUrl: z.string().url().optional(),
-  controlPlaneBaseUrl: z.string().url().optional(),
-  dataPlaneBaseUrl: z.string().url().optional(),
-  host: z.string().min(1).optional(),
-  xTtBackend: z.string().min(1).optional(),
-  environmentId: z.string().min(1).optional(),
   service: z.string().min(1).optional(),
-  apiKey: z.string().min(1).optional(),
   accessKeyId: z.string().min(1).optional(),
   secretKey: z.string().min(1).optional(),
   activeProfile: z.string().min(1).optional(),
@@ -67,7 +53,6 @@ const cliConfigSchema = z.object({
   outputDir: z.string().min(1).optional(),
   sessionDir: z.string().min(1).optional(),
   llmBaseUrl: z.string().url().optional(),
-  llmProvider: z.literal('openai-compatible').optional(),
   llmApiKey: z.string().min(1).optional(),
   llmAccessKeyId: z.string().min(1).optional(),
   llmSecretKey: z.string().min(1).optional(),
@@ -83,18 +68,12 @@ export type VikingCliProfile = z.infer<typeof cliProfileSchema>;
 export interface ResolvedCliDefaults {
   activeProfile: string;
   baseUrl: string;
-  controlPlaneBaseUrl: string;
-  dataPlaneBaseUrl: string;
-  dataPlaneHost?: string;
-  xTtBackend?: string;
-  environmentId?: EnvironmentId;
   service: string;
-  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   credentialStore: CredentialStoreMode;
   resolvedCredentialStoreMode: CredentialStoreBackend;
-  authSource: 'api-key' | 'flag' | 'env' | 'secure-store' | 'none';
+  authSource: 'flag' | 'env' | 'secure-store' | 'none';
   projectName: string;
   region: string;
   timeoutMs: number;
@@ -102,7 +81,6 @@ export interface ResolvedCliDefaults {
   outputDir: string;
   sessionDir: string;
   llmBaseUrl?: string;
-  llmProvider?: 'openai-compatible';
   llmApiKey?: string;
   llmAccessKeyId?: string;
   llmSecretKey?: string;
@@ -114,13 +92,7 @@ export interface ResolvedCliDefaults {
 
 const configKeySpecs = {
   'base-url': { property: 'baseUrl', type: 'string', secret: false },
-  'control-plane-base-url': { property: 'controlPlaneBaseUrl', type: 'string', secret: false },
-  'data-plane-base-url': { property: 'dataPlaneBaseUrl', type: 'string', secret: false },
-  host: { property: 'host', type: 'string', secret: false, visible: false },
-  'x-tt-backend': { property: 'xTtBackend', type: 'string', secret: false, visible: false },
-  'environment-id': { property: 'environmentId', type: 'string', secret: false },
   'project-name': { property: 'projectName', type: 'string', secret: false },
-  'api-key': { property: 'apiKey', type: 'string', secret: true },
   ak: { property: 'accessKeyId', type: 'string', secret: false, visible: false, managedBy: 'auth' },
   sk: { property: 'secretKey', type: 'string', secret: true, visible: false, managedBy: 'auth' },
   'credentials-store': { property: 'credentialStore', type: 'string', secret: false },
@@ -131,8 +103,7 @@ const configKeySpecs = {
   'session-dir': { property: 'sessionDir', type: 'string', secret: false },
   'max-cases': { property: 'maxCases', type: 'number', secret: false },
   'llm-base-url': { property: 'llmBaseUrl', type: 'string', secret: false },
-  'llm-provider': { property: 'llmProvider', type: 'string', secret: false },
-  'llm-api-key': { property: 'llmApiKey', type: 'string', secret: true, visible: false, managedBy: 'llm' },
+  'llm-api-key': { property: 'llmApiKey', type: 'string', secret: true },
   'llm-ak': { property: 'llmAccessKeyId', type: 'string', secret: false },
   'llm-sk': { property: 'llmSecretKey', type: 'string', secret: true },
   'llm-region': { property: 'llmRegion', type: 'string', secret: false },
@@ -140,7 +111,7 @@ const configKeySpecs = {
   'llm-model': { property: 'llmModel', type: 'string', secret: false }
 } as const satisfies Record<
   string,
-  { property: keyof VikingCliConfig; type: 'string' | 'number'; secret: boolean; visible?: boolean; managedBy?: 'auth' | 'llm' }
+  { property: keyof VikingCliConfig; type: 'string' | 'number'; secret: boolean; visible?: boolean; managedBy?: 'auth' }
 >;
 
 export type CliConfigKey = keyof typeof configKeySpecs;
@@ -181,7 +152,7 @@ export async function saveCliConfig(config: VikingCliConfig, customPath?: string
   const configPath = resolveCliConfigPath(customPath);
   const normalized = cliConfigSchema.parse(config);
   await ensureDir(path.dirname(configPath));
-  await writeJson(configPath, serializeCliConfigShape(normalized));
+  await writeJson(configPath, normalized);
   return configPath;
 }
 
@@ -228,17 +199,11 @@ export function isAuthManagedCliConfigKey(key: CliConfigKey): boolean {
 
 export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, customPath?: string): ResolvedCliDefaults {
   const stored = loadCliConfigSync(customPath);
-  const envProfile = optionalEnvString(process.env.VIKING_PROFILE);
-  const envCredentialStore = optionalEnvString(process.env.VIKING_CREDENTIALS_STORE);
-  const envApiKey = optionalEnvString(process.env.VIKING_API_KEY);
-  const envAk = optionalEnvString(process.env.VIKING_AK);
-  const envSk = optionalEnvString(process.env.VIKING_SK);
-  const envLlmAk = optionalEnvString(process.env.VIKING_LLM_AK);
-  const envLlmApiKey = optionalEnvString(process.env.VIKING_LLM_API_KEY);
-  const envLlmProvider = optionalEnvString(process.env.VIKING_LLM_PROVIDER);
-  const activeProfile = resolveActiveCliProfile(stored, input.activeProfile ?? envProfile);
+  const activeProfile = resolveActiveCliProfile(stored, input.activeProfile ?? process.env.VIKING_PROFILE);
   const profileConfig = getCliProfile(stored, activeProfile) ?? {};
-  const credentialStore = resolveCredentialStoreMode(input.credentialStore ?? envCredentialStore ?? profileConfig.credentialStore ?? stored.credentialStore);
+  const credentialStore = resolveCredentialStoreMode(
+    input.credentialStore ?? process.env.VIKING_CREDENTIALS_STORE ?? profileConfig.credentialStore ?? stored.credentialStore
+  );
   const credentialStatus = getCredentialStoreStatus(credentialStore);
   let credentialLookup: ReturnType<typeof loadServiceCredentialsSync> = {
     backend: credentialStatus.resolvedMode
@@ -249,24 +214,12 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
   } catch (error) {
     credentialLoadError = error as Error;
   }
-  let llmCredentialLookup: ReturnType<typeof loadLlmApiCredentialsSync> = {
-    backend: credentialStatus.resolvedMode
-  };
-  try {
-    llmCredentialLookup = loadLlmApiCredentialsSync(credentialStore, activeProfile);
-  } catch {
-    llmCredentialLookup = { backend: credentialStatus.resolvedMode };
-  }
-  const llmAccessKeyId = input.llmAccessKeyId ?? envLlmAk ?? stored.llmAccessKeyId;
-  const llmApiKey = input.llmApiKey ?? envLlmApiKey ?? llmCredentialLookup.credentials?.apiKey ?? stored.llmApiKey;
-  const explicitAkSk = Boolean(input.accessKeyId || input.secretKey);
-  const apiKey = explicitAkSk ? undefined : input.apiKey ?? envApiKey ?? stored.apiKey;
+  const llmAccessKeyId = input.llmAccessKeyId ?? process.env.VIKING_LLM_AK ?? stored.llmAccessKeyId;
+  const llmApiKey = input.llmApiKey ?? process.env.VIKING_LLM_API_KEY ?? stored.llmApiKey;
   const authSource: ResolvedCliDefaults['authSource'] =
-    apiKey
-      ? 'api-key'
-      : input.accessKeyId || input.secretKey
+    input.accessKeyId || input.secretKey
       ? 'flag'
-      : envAk || envSk
+      : process.env.VIKING_AK || process.env.VIKING_SK
         ? 'env'
         : credentialLookup.credentials
           ? 'secure-store'
@@ -276,60 +229,29 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
     credentialLoadError &&
     !input.accessKeyId &&
     !input.secretKey &&
-    !envAk &&
-    !envSk
+    !process.env.VIKING_AK &&
+    !process.env.VIKING_SK
   ) {
     throw credentialLoadError;
   }
 
-  const explicitRegion =
-    input.region ??
-    optionalEnvString(process.env.VIKING_REGION) ??
-    profileConfig.region ??
-    stored.region;
-
-  const endpoints = resolveEndpointsOrThrow({
-    controlPlaneBaseUrl:
-      input.controlPlaneBaseUrl ??
-      optionalEnvString(process.env.VIKING_CONTROL_PLANE_BASE_URL) ??
-      profileConfig.controlPlaneBaseUrl ??
-      stored.controlPlaneBaseUrl,
-    dataPlaneBaseUrl:
-      input.dataPlaneBaseUrl ??
-      optionalEnvString(process.env.VIKING_DATA_PLANE_BASE_URL) ??
-      profileConfig.dataPlaneBaseUrl ??
-      stored.dataPlaneBaseUrl,
-    baseUrl:
-      input.baseUrl ??
-      optionalEnvString(process.env.VIKING_BASE_URL) ??
-      profileConfig.baseUrl ??
-      stored.baseUrl,
-    region: explicitRegion
-  });
-
   return {
     activeProfile,
-    baseUrl: endpoints.dataPlaneBaseUrl,
-    controlPlaneBaseUrl: endpoints.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: endpoints.dataPlaneBaseUrl,
-    dataPlaneHost: profileConfig.host ?? stored.host,
-    xTtBackend: profileConfig.xTtBackend ?? stored.xTtBackend,
-    environmentId: endpoints.envId,
+    baseUrl: input.baseUrl ?? process.env.VIKING_BASE_URL ?? profileConfig.baseUrl ?? stored.baseUrl ?? DEFAULT_BASE_URL,
     service: input.service ?? stored.service ?? DEFAULT_SERVICE,
-    apiKey,
     accessKeyId:
       input.accessKeyId ??
-      envAk ??
+      process.env.VIKING_AK ??
       credentialLookup.credentials?.accessKeyId,
     secretKey:
       input.secretKey ??
-      envSk ??
+      process.env.VIKING_SK ??
       credentialLookup.credentials?.secretKey,
     credentialStore,
     resolvedCredentialStoreMode: credentialLookup.backend ?? credentialStatus.resolvedMode,
     authSource,
-    projectName: input.projectName ?? optionalEnvString(process.env.VIKING_PROJECT_NAME) ?? profileConfig.projectName ?? stored.projectName ?? DEFAULT_PROJECT_NAME,
-    region: endpoints.region,
+    projectName: input.projectName ?? process.env.VIKING_PROJECT_NAME ?? profileConfig.projectName ?? stored.projectName ?? DEFAULT_PROJECT_NAME,
+    region: input.region ?? process.env.VIKING_REGION ?? profileConfig.region ?? stored.region ?? DEFAULT_REGION,
     timeoutMs:
       input.timeoutMs ??
       optionalNumber(process.env.VIKING_TIMEOUT_MS) ??
@@ -337,20 +259,19 @@ export function resolveCliDefaults(input: Partial<ResolvedCliDefaults> = {}, cus
       stored.timeoutMs ??
       DEFAULT_TIMEOUT_MS,
     defaultPageSize: input.defaultPageSize ?? optionalNumber(process.env.VIKING_PAGE_SIZE) ?? stored.defaultPageSize ?? DEFAULT_PAGE_SIZE,
-    outputDir: input.outputDir ?? optionalEnvString(process.env.VIKING_OUTPUT_DIR) ?? stored.outputDir ?? DEFAULT_OUTPUT_DIR,
-    sessionDir: input.sessionDir ?? optionalEnvString(process.env.VIKING_SESSION_DIR) ?? stored.sessionDir ?? DEFAULT_SESSION_DIR,
+    outputDir: input.outputDir ?? process.env.VIKING_OUTPUT_DIR ?? stored.outputDir ?? DEFAULT_OUTPUT_DIR,
+    sessionDir: input.sessionDir ?? process.env.VIKING_SESSION_DIR ?? stored.sessionDir ?? DEFAULT_SESSION_DIR,
     llmBaseUrl:
       input.llmBaseUrl ??
-      optionalEnvString(process.env.VIKING_LLM_BASE_URL) ??
+      process.env.VIKING_LLM_BASE_URL ??
       stored.llmBaseUrl ??
-      (llmAccessKeyId ? DEFAULT_LLM_BASE_URL : undefined),
-    llmProvider: parseOptionalLlmProvider(input.llmProvider ?? envLlmProvider ?? stored.llmProvider ?? llmCredentialLookup.credentials?.provider),
+      (llmAccessKeyId || llmApiKey ? DEFAULT_LLM_BASE_URL : undefined),
     llmApiKey,
     llmAccessKeyId,
-    llmSecretKey: input.llmSecretKey ?? optionalEnvString(process.env.VIKING_LLM_SK) ?? stored.llmSecretKey,
-    llmRegion: input.llmRegion ?? optionalEnvString(process.env.VIKING_LLM_REGION) ?? stored.llmRegion ?? DEFAULT_LLM_REGION,
-    llmService: input.llmService ?? optionalEnvString(process.env.VIKING_LLM_SERVICE) ?? stored.llmService ?? DEFAULT_LLM_SERVICE,
-    llmModel: input.llmModel ?? optionalEnvString(process.env.VIKING_LLM_MODEL) ?? stored.llmModel,
+    llmSecretKey: input.llmSecretKey ?? process.env.VIKING_LLM_SK ?? stored.llmSecretKey,
+    llmRegion: input.llmRegion ?? process.env.VIKING_LLM_REGION ?? stored.llmRegion ?? DEFAULT_LLM_REGION,
+    llmService: input.llmService ?? process.env.VIKING_LLM_SERVICE ?? stored.llmService ?? DEFAULT_LLM_SERVICE,
+    llmModel: input.llmModel ?? process.env.VIKING_LLM_MODEL ?? stored.llmModel,
     maxCases: input.maxCases ?? optionalNumber(process.env.VIKING_MAX_CASES) ?? stored.maxCases
   };
 }
@@ -409,105 +330,20 @@ export function upsertCliProfile(
 export function parseCliConfigKey(value: string): CliConfigKey {
   const normalized = normalizeCliConfigKey(value);
   if (normalized in configKeySpecs) {
-    const key = normalized as CliConfigKey;
-    const spec = configKeySpecs[key];
-    if (!('visible' in spec) || spec.visible !== false) {
-      return key;
-    }
+    return normalized as CliConfigKey;
   }
   throw new Error(`Unknown config key: ${value}. Use one of: ${listCliConfigKeys().join(', ')}`);
-}
-
-export function sanitizeCliConfigForDisplay<T extends Record<string, unknown>>(config: T): Partial<T> {
-  const hiddenProperties = new Set<string>(
-    Object.values(configKeySpecs)
-      .filter(spec => 'visible' in spec && spec.visible === false)
-      .map(spec => spec.property)
-  );
-
-  return Object.fromEntries(
-    Object.entries(config).filter(([key]) => !hiddenProperties.has(key))
-  ) as Partial<T>;
 }
 
 function parseCliConfig(raw: string): VikingCliConfig {
   const trimmed = raw.trim();
   if (!trimmed) return {};
-  return cliConfigSchema.parse(normalizeCliConfigShape(JSON.parse(trimmed) as unknown));
-}
-
-function normalizeCliConfigShape(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
-  }
-
-  const record = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (key === 'profiles' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
-      normalized.profiles = Object.fromEntries(
-        Object.entries(entry as Record<string, unknown>).map(([profileName, profileEntry]) => [
-          profileName,
-          normalizeXttBackendEntry(profileEntry)
-        ])
-      );
-      continue;
-    }
-
-    normalized[key] = entry;
-  }
-
-  return normalizeXttBackendEntry(normalized);
-}
-
-function normalizeXttBackendEntry(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
-  }
-
-  const record = { ...(value as Record<string, unknown>) };
-  const xttBackend = record['x-tt-backend'];
-  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0 && record.xTtBackend === undefined) {
-    record.xTtBackend = xttBackend.trim();
-  }
-  delete record['x-tt-backend'];
-  return record;
-}
-
-function serializeCliConfigShape(config: VikingCliConfig): Record<string, unknown> {
-  const serialized = serializeXttBackendEntry(config);
-  const profiles = config.profiles
-    ? Object.fromEntries(
-        Object.entries(config.profiles).map(([profileName, profileConfig]) => [
-          profileName,
-          serializeXttBackendEntry(profileConfig)
-        ])
-      )
-    : undefined;
-
-  if (profiles) {
-    serialized.profiles = profiles;
-  }
-
-  return serialized;
-}
-
-function serializeXttBackendEntry(value: Record<string, unknown>): Record<string, unknown> {
-  const record = { ...value };
-  const xttBackend = record.xTtBackend;
-  delete record.xTtBackend;
-  if (typeof xttBackend === 'string' && xttBackend.trim().length > 0) {
-    record['x-tt-backend'] = xttBackend;
-  }
-  return record;
+  return cliConfigSchema.parse(JSON.parse(trimmed) as unknown);
 }
 
 function parseCliConfigValue(key: CliConfigKey, rawValue: string): string | number {
   if (key === 'credentials-store') {
     return resolveCredentialStoreMode(rawValue);
-  }
-  if (key === 'llm-provider') {
-    return parseOptionalLlmProvider(rawValue) ?? 'openai-compatible';
   }
 
   if (configKeySpecs[key].type === 'number') {
@@ -536,20 +372,6 @@ function optionalNumber(rawValue: string | undefined): number | undefined {
   if (!rawValue) return undefined;
   const parsed = Number.parseInt(rawValue, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function optionalEnvString(rawValue: string | undefined): string | undefined {
-  if (rawValue === undefined) return undefined;
-  const trimmed = rawValue.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function parseOptionalLlmProvider(rawValue: string | undefined): 'openai-compatible' | undefined {
-  if (!rawValue) return undefined;
-  const normalized = rawValue.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (normalized === 'openai-compatible') return 'openai-compatible';
-  throw new Error(`Invalid LLM provider: ${rawValue}. First version supports only openai-compatible.`);
 }
 
 function maskSecret(value: string): string {

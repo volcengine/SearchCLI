@@ -14,7 +14,7 @@ export default class DataImport extends Command {
     ...serviceFlags,
     'dataset-id': Flags.string({ required: true }),
     fields: Flags.string({
-      description: 'Inline JSON array, @file path, or JSON/JSONL file path containing the fields array. JSONL (one record per line) is accepted and converted to an array automatically.'
+      description: 'Inline JSON array, @file path, or JSON file path containing the fields array.'
     })
   };
 
@@ -22,11 +22,8 @@ export default class DataImport extends Command {
     const { flags } = await this.parse(DataImport);
     await runDataImportShortcutCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

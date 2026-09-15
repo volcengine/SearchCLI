@@ -77,9 +77,15 @@ export interface QueryConfig {
   instruction_type?: string;
 }
 
+export interface ItemTypeFilterConfig {
+  for_parent?: boolean;
+  filter?: Record<string, unknown>;
+}
+
 export interface FilterConfig {
   rule_id?: string;
   config?: Record<string, unknown>;
+  item_type_filter?: ItemTypeFilterConfig;
 }
 
 export interface BoostBuryCondConfig {
@@ -187,7 +193,6 @@ export interface SearchDynamic {
   enable_rerank_with_hot?: boolean;
   rerank_model?: string;
   rerank_doubao_config?: RerankDoubaoConfig;
-  user_defined_recall_mode?: UserDefinedRecallModeName | UserDefinedRecallModeValue;
 }
 
 export interface SearchCase {
@@ -208,7 +213,6 @@ export interface SearchCase {
   output_fields?: string[];
   conditional_boost?: unknown[];
   disable_personalize?: boolean;
-  query_keyword_match_percent?: number;
   expected_ids?: string[];
   relevance_tiers?: string[][];
   notes?: string;
@@ -418,14 +422,11 @@ export function buildEventTypeEnumerateMeta(customValues?: string[]): UserEventE
 }
 
 export interface RuntimeConfig {
-  controlPlaneBaseUrl: string;
-  dataPlaneBaseUrl: string;
-  dataPlaneHost?: string;
+  baseUrl: string;
   service: string;
   applicationId: string;
   datasetId: string;
   sceneId?: string;
-  apiKey?: string;
   accessKeyId?: string;
   secretKey?: string;
   region: string;
@@ -439,5 +440,4 @@ export interface RuntimeConfig {
   llmRegion?: string;
   llmService?: string;
   llmModel?: string;
-  debug: boolean;
 }

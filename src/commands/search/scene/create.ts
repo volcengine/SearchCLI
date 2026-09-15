@@ -8,12 +8,6 @@ import { serviceFlags } from '../../../command-support/service-flags';
 export default class SearchSceneCreate extends Command {
   static override description = 'Create a search scene.';
 
-  static override examples = [
-    '<%= config.bin %> search scene create --application-id app_xxx --name default-search',
-    '<%= config.bin %> search scene create --application-id app_xxx --name default-search --description "Main search scene"',
-    '<%= config.bin %> search scene create --data @create-search-scene.json'
-  ];
-
   static override flags = {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
@@ -26,11 +20,8 @@ export default class SearchSceneCreate extends Command {
     const { flags } = await this.parse(SearchSceneCreate);
     await runSearchSceneCreateCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

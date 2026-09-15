@@ -41,25 +41,7 @@ export interface AppDiagnoseWorkflowOptions extends WorkflowServiceOptions {
   activatedOnly?: boolean;
 }
 
-export interface DatasetIngestWorkflowOptions extends WorkflowServiceOptions {
-  // V2 onboarding chain (file-based)
-  file?: string;
-  type?: string;
-  datasetName?: string;
-  industry?: string;
-  language?: string;
-  theme?: string;
-  abnormalImagePolicy?: string;
-  abnormalVideoPolicy?: string;
-  videoAutoDelete?: boolean;
-  postPaidType?: string;
-  schemaWaitTimeoutMs?: number;
-  schemaPollIntervalMs?: number;
-  dryRun?: boolean;
-  // Legacy data-write
-  datasetId?: string;
-  fields?: string;
-}
+export interface DatasetIngestWorkflowOptions extends DataImportShortcutOptions {}
 
 interface WorkflowStepResult {
   step: string;
@@ -69,48 +51,61 @@ interface WorkflowStepResult {
   response?: unknown;
 }
 
-interface DatasetIngestV2ExecutionResult {
-  ok: true;
-  mode: 'v2';
-  file: string;
-  fileKey: string;
-  taskId: string;
-  datasetId?: string;
-  dryRun: boolean;
-  schema: unknown;
-  fieldDescMap: unknown;
-  dataFieldConfig: unknown;
-  steps: WorkflowStepResult[];
-}
-
 import { isUserEventDatasetType } from '../core/types';
-import { toInteger, printResult, isRecord, parseDatasetTypeV2Value, parseDatasetThemeValue, parsePostPaidTypeValue, INFER_SCHEMA_DATASET_TYPES, CREATE_DATASET_TYPES } from './product-commands';
+import { promptText, toInteger, printResult, isRecord } from './product-commands';
 
 export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWorkflowOptions): Promise<void> {
-  console.warn("Warning: 'vs app dataset bind' is deprecated; use 'vs app attach-dataset' instead.");
-
   const config = resolveServiceConfig(toServiceConfigInput(options));
-  const projectName = options.projectName ?? config.projectName;
   const client = new VikingOpenApiClient(config);
   const steps: WorkflowStepResult[] = [];
 
+  let backtrackReq: Record<string, unknown> | undefined = undefined;
+
   const datasetRes = await client.post('/api/v1/GetDataset', compactObject({
     DatasetID: options.datasetId,
-    ProjectName: projectName
+    ProjectName: options.projectName
   }));
 
   const datasetResult = isRecord(datasetRes) && isRecord((datasetRes as any).Result) ? (datasetRes as any).Result : undefined;
   const typeCode = toInteger(datasetResult?.Type);
 
-  if (isUserEventDatasetType(typeCode)
-      && (options.backtrackEnable !== undefined
-        || options.backtrackAll !== undefined
-        || options.backtrackStart !== undefined
-        || options.backtrackEnd !== undefined)) {
-    console.warn(
-      "Warning: backtrack flags are ignored by 'attach-dataset' (V2). The V2 API no longer accepts BacktrackReq. " +
-      'If you need historical backtrack, run it as a separate workflow.'
-    );
+  if (isUserEventDatasetType(typeCode)) {
+    const interactive = process.stdout.isTTY && process.stdin.isTTY;
+    let enable = options.backtrackEnable;
+    let isAll = options.backtrackAll;
+    let startDate = options.backtrackStart;
+    let endDate = options.backtrackEnd;
+
+    if (enable === undefined && interactive) {
+      console.log('Notice: You are binding a user-event (behavior) dataset.');
+      const answer = await promptText('Do you want to enable historical data backtrack? (yes/no): ');
+      enable = answer.toLowerCase() === 'yes' || answer.toLowerCase() === 'y';
+    }
+
+    if (enable) {
+      if (isAll === undefined && interactive) {
+        const answer = await promptText('Do you want to backtrack all historical data? (yes/no): ');
+        isAll = answer.toLowerCase() === 'yes' || answer.toLowerCase() === 'y';
+      }
+
+      if (!isAll) {
+        if (!startDate && interactive) {
+          startDate = await promptText('Enter start date (e.g., 20230101 or 2023-01-01): ');
+        }
+        if (!endDate && interactive) {
+          endDate = await promptText('Enter end date (e.g., 20231231 or 2023-12-31): ');
+        }
+      }
+
+      backtrackReq = compactObject({
+        Enable: true,
+        IsAll: Boolean(isAll),
+        StartDate: startDate,
+        EndDate: endDate
+      });
+    } else if (enable === false) {
+      backtrackReq = { Enable: false };
+    }
   }
 
   const bindingConfig = await resolveBindingDataConfig(client, options, datasetResult, typeCode);
@@ -153,15 +148,16 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
   }
 
   const bindPayload = compactObject({
-    ApplicationId: options.applicationId,
-    DatasetId: options.datasetId,
-    ProjectName: projectName,
+    AppID: options.applicationId,
+    DatasetIDs: [options.datasetId],
+    ProjectName: options.projectName,
+    BacktrackReq: backtrackReq,
     DataConfig: bindingConfig.dataConfig,
     SchemaVersion: options.schemaVersion,
     FieldsConfigVersion: options.fieldConfigVersion,
-    DryRun: options.dryRun
+    OnlySave: options.dryRun
   });
-  const bindResponse = await client.post('AttachDatasetToApplicationV2', bindPayload);
+  const bindResponse = await client.post('/api/v1/BindAppDataset', bindPayload);
   steps.push({
     step: 'bind_dataset',
     ok: true,
@@ -185,7 +181,7 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
     const onlineConfigPayload = compactObject({
       AppID: options.applicationId,
       Config: await loadJsonInput(options.onlineConfig),
-      ProjectName: projectName
+      ProjectName: options.projectName
     });
     const onlineConfigResponse = await client.post(onlineConfigAction.path, onlineConfigPayload);
     steps.push({
@@ -205,14 +201,14 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
   const snapshot = options.waitReady
     ? await waitForAppReady(config, {
         applicationId: options.applicationId,
-        projectName,
+        projectName: options.projectName,
         activatedOnly: options.activatedOnly,
         waitTimeoutMs: options.waitTimeoutMs,
         pollIntervalMs: options.pollIntervalMs
       })
     : await fetchAppStatusSnapshot(config, {
         applicationId: options.applicationId,
-        projectName,
+        projectName: options.projectName,
         activatedOnly: options.activatedOnly
       });
 
@@ -250,10 +246,9 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
 }
 
 export async function runAppDiagnoseWorkflowCommand(options: AppDiagnoseWorkflowOptions): Promise<void> {
-  const config = resolveServiceConfig(toServiceConfigInput(options));
-  const snapshot = await fetchAppStatusSnapshot(config, {
+  const snapshot = await fetchAppStatusSnapshot(resolveServiceConfig(toServiceConfigInput(options)), {
     applicationId: options.applicationId,
-    projectName: options.projectName ?? config.projectName,
+    projectName: options.projectName,
     activatedOnly: options.activatedOnly
   });
 
@@ -287,202 +282,7 @@ export async function runAppDiagnoseWorkflowCommand(options: AppDiagnoseWorkflow
 }
 
 export async function runDatasetIngestWorkflowCommand(options: DatasetIngestWorkflowOptions): Promise<void> {
-  if (options.file && options.type) {
-    await runDatasetIngestV2Command(options);
-    return;
-  }
-  if (options.datasetId) {
-    const legacyOptions: DataImportShortcutOptions = {
-      ...options,
-      datasetId: options.datasetId,
-      fields: options.fields
-    };
-    await runDataImportShortcutCommand(legacyOptions);
-    return;
-  }
-  throw new Error(
-    'dataset ingest requires one of: V2 chain inputs (--file --type) or legacy data-write inputs (--dataset-id --fields). Use connector export to turn a data source into JSONL first.'
-  );
-}
-
-async function runDatasetIngestV2Command(options: DatasetIngestWorkflowOptions): Promise<void> {
-  const result = await executeDatasetIngestV2Command(options);
-  await printWorkflowResult(
-    'dataset ingest (V2)',
-    [
-      ['file', result.file],
-      ['file_key', result.fileKey],
-      ['task_id', result.taskId],
-      ['dataset_id', result.datasetId ?? '(dry-run)'],
-      ['dry_run', result.dryRun ? 'true' : 'false']
-    ],
-    result,
-    {
-      ok: true,
-      mode: 'v2',
-      datasetId: result.datasetId,
-      dryRun: result.dryRun
-    }
-  );
-}
-
-async function executeDatasetIngestV2Command(options: DatasetIngestWorkflowOptions): Promise<DatasetIngestV2ExecutionResult> {
-  if (!options.file) throw new Error('--file is required for V2 dataset ingest.');
-  if (!options.type) throw new Error('--type is required for V2 dataset ingest.');
-  const normalizedType = parseDatasetTypeV2Value(options.type, INFER_SCHEMA_DATASET_TYPES);
-
-  const config = resolveServiceConfig(toServiceConfigInput(options));
-  const projectName = options.projectName ?? config.projectName;
-  const client = new VikingOpenApiClient(config);
-  const fs = await import('node:fs/promises');
-  const fileBuffer = await fs.readFile(options.file);
-  const fileName = options.file.split(/[\\/]/).pop() ?? 'dataset-input';
-  const steps: WorkflowStepResult[] = [];
-
-  const importUrlResponse = unwrapResult(
-    await client.post('GetPresignedImportUrlV2', compactObject({
-      FileName: fileName,
-      ProjectName: projectName
-    }))
-  );
-  const fileUrl = stringField(importUrlResponse, ['FileUrl', 'PresignedUrl', 'Url']);
-  const fileKey = stringField(importUrlResponse, ['FileKey', 'TosKey', 'Key']);
-  if (!fileUrl || !fileKey) {
-    throw new Error('GetPresignedImportUrlV2 did not return FileUrl and FileKey.');
-  }
-  steps.push({ step: 'request_import_url', ok: true, detail: `file_key=${fileKey}` });
-
-  const uploadRes = await fetch(fileUrl, {
-    method: 'PUT',
-    body: new Uint8Array(fileBuffer),
-    headers: { 'content-type': 'application/octet-stream', 'user-agent': 'Search-Cli' }
-  });
-  if (!uploadRes.ok) {
-    throw new Error(`Upload to presigned URL failed: ${uploadRes.status} ${uploadRes.statusText}`);
-  }
-  steps.push({ step: 'upload_file', ok: true, detail: `bytes=${fileBuffer.length}` });
-
-  const normalizedTheme = parseDatasetThemeValue(options.theme);
-
-  const inferTaskResponse = unwrapResult(
-    await client.post('AddInferDatasetSchemaTaskV2', compactObject({
-      TosKey: fileKey,
-      Type: normalizedType,
-      Name: options.datasetName,
-      Industry: options.industry,
-      Language: options.language,
-      Theme: normalizedTheme,
-      ProjectName: projectName
-    }))
-  );
-  const taskId = stringField(inferTaskResponse, ['TaskID', 'TaskId']);
-  if (!taskId) throw new Error('AddInferDatasetSchemaTaskV2 did not return TaskID.');
-  steps.push({ step: 'submit_infer_task', ok: true, detail: `task_id=${taskId}` });
-
-  const waitTimeoutMs = ensurePositiveInt(options.schemaWaitTimeoutMs ?? 120000, '--schema-wait-timeout-ms');
-  const pollIntervalMs = ensurePositiveInt(options.schemaPollIntervalMs ?? 2000, '--schema-poll-interval-ms');
-  const deadline = Date.now() + waitTimeoutMs;
-  let inferResult: Record<string, unknown> | undefined;
-  while (Date.now() <= deadline) {
-    const polled = unwrapResult(
-      await client.post('GetInferDatasetSchemaResultV2', { TaskID: taskId, ProjectName: projectName })
-    );
-    const status = readStatus(polled.Status);
-    if (status === 'success') {
-      inferResult = polled;
-      break;
-    }
-    if (status === 'failed') {
-      throw new Error(stringField(polled, ['Error', 'Message']) ?? `Schema inference task ${taskId} failed.`);
-    }
-    await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())));
-  }
-  if (!inferResult) throw new Error(`Timed out waiting for schema inference task ${taskId}.`);
-  steps.push({ step: 'poll_infer_result', ok: true, detail: 'status=succeeded' });
-
-  const processConfig = (options.abnormalImagePolicy !== undefined || options.abnormalVideoPolicy !== undefined || options.videoAutoDelete !== undefined)
-    ? compactObject({
-        AbnormalImageDataProcessPolicy: options.abnormalImagePolicy,
-        AbnormalVideoDataProcessPolicy: options.abnormalVideoPolicy,
-        VideoAutoDelete: options.videoAutoDelete
-      })
-    : undefined;
-
-  const datasetCreatePayload = compactObject({
-    Name: options.datasetName ?? `cli-${fileKey.split('/').pop()?.replace(/\.[^.]*$/, '') ?? Date.now()}`,
-    Type: parseDatasetTypeV2Value(normalizedType, CREATE_DATASET_TYPES),
-    Schema: inferResult.Schema,
-    Industry: options.industry,
-    Language: options.language,
-    Theme: normalizedTheme,
-    ProcessConfig: processConfig,
-    FieldDescMap: inferResult.FieldDescMap,
-    PostPaidType: parsePostPaidTypeValue(options.postPaidType),
-    DryRun: options.dryRun === true ? true : undefined,
-    ProjectName: projectName
-  });
-  const datasetCreateResponse = unwrapResult(
-    await client.post('CreateDatasetV2', datasetCreatePayload)
-  );
-  const datasetId = stringField(datasetCreateResponse, ['DatasetID', 'DatasetId']);
-  if (!options.dryRun && !datasetId) {
-    throw new Error('CreateDatasetV2 did not return DatasetID.');
-  }
-  steps.push({
-    step: 'create_dataset',
-    ok: true,
-    detail: options.dryRun ? 'dry_run=true' : `dataset_id=${datasetId ?? '(unknown)'}`
-  });
-
-  return {
-    ok: true,
-    mode: 'v2',
-    file: options.file,
-    fileKey,
-    taskId,
-    datasetId,
-    dryRun: Boolean(options.dryRun),
-    schema: inferResult.Schema,
-    fieldDescMap: inferResult.FieldDescMap,
-    dataFieldConfig: inferResult.DataFieldConfig ?? inferResult.FieldConfig,
-    steps
-  };
-}
-
-function unwrapResult(value: unknown): Record<string, unknown> {
-  if (!isRecord(value)) return {} as Record<string, unknown>;
-  const candidates: Array<unknown> = [
-    (value as any).Result,
-    (value as any).result,
-    (value as any).Response,
-    (value as any).response
-  ];
-  for (const candidate of candidates) {
-    if (isRecord(candidate)) return candidate as Record<string, unknown>;
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === 'string' && candidate.trim().length > 0) return candidate;
-  }
-  return undefined;
-}
-
-function readStatus(value: unknown): 'processing' | 'success' | 'failed' {
-  if (typeof value === 'number') {
-    if (value === 2) return 'success';
-    if (value === 3) return 'failed';
-    return 'processing';
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'succeeded' || normalized.endsWith('_succeeded')) return 'success';
-    if (normalized === 'failed' || normalized.endsWith('_failed')) return 'failed';
-  }
-  return 'processing';
+  await runDataImportShortcutCommand(options);
 }
 
 async function waitForAppReady(
@@ -549,15 +349,11 @@ async function printWorkflowResult(
 function toServiceConfigInput(options: WorkflowServiceOptions): ServiceConfigInput {
   return {
     baseUrl: options.baseUrl,
-    controlPlaneBaseUrl: options.controlPlaneBaseUrl,
-    dataPlaneBaseUrl: options.dataPlaneBaseUrl,
-    apiKey: options.apiKey,
     accessKeyId: options.accessKeyId,
     secretKey: options.secretKey,
     projectName: options.projectName,
     region: options.region,
-    timeoutMs: options.timeoutMs,
-    debug: options.debug
+    timeoutMs: options.timeoutMs
   };
 }
 

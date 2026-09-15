@@ -30,11 +30,8 @@ export default class AppDatasetConfigList extends Command {
     const { flags } = await this.parse(AppDatasetConfigList);
     await runAppDatasetConfigListCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,

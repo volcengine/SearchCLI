@@ -1,71 +1,43 @@
 // Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-  renderHelpLines,
-  type HelpLine,
-  withOpenApiReferenceHint,
-} from "./help-utils";
-import { isProjectFeatureEnabled } from "./feature-flags";
+import { renderHelpLines, type HelpLine } from './help-utils';
 
 const CORE_COMMANDS: HelpLine[] = [
-  { text: "skill              Manage installable Viking skills" },
-  { text: "auth               Manage Viking credentials" },
-  { text: "llm                Manage LLM credentials for tuning" },
-  { text: "doctor             Check auth, config, and local dependencies" },
+  { text: 'skill              Manage installable Viking skills' },
+  { text: 'auth               Manage Viking credentials' },
+  { text: 'doctor             Check auth, config, and local dependencies' }
 ];
 
-const PROJECT_COMMAND: HelpLine = {
-  text: "project            Create full-stack web projects",
-};
-
 const PRODUCT_COMMANDS: HelpLine[] = [
-  {
-    text: "dataset            Onboard data and manage datasets (V2 backend-driven schema inference; primary onboarding entry)",
-  },
-  { text: "app                Manage applications, activation, and readiness" },
-  { text: "data               Write and inspect dataset items directly" },
-  {
-    text: "connector          Export source snapshots to JSONL and run incremental sync into datasets",
-  },
-  { text: "search             Run search and manage search scenes" },
-  { text: "chat               Run conversational search" },
-  { text: "recommend          Run recommend and manage scenes and rules" },
+  { text: 'item               Profile item data, generate onboarding plans, and apply them' },
+  { text: 'app                Manage applications, activation, and readiness' },
+  { text: 'dataset            Manage datasets, schema, uploads, and ingest workflows' },
+  { text: 'data               Write and inspect dataset items directly' },
+  { text: 'search             Run search and manage search scenes' },
+  { text: 'chat               Run conversational search' },
+  { text: 'recommend          Run recommend and manage scenes and rules' }
 ];
 
 const ADVANCED_COMMANDS: HelpLine[] = [
-  { text: "version            Print or check the current CLI package version" },
+  { text: 'version            Print the current CLI version' }
 ];
 
 export function printRootHelp(): void {
-  const projectEnabled = isProjectFeatureEnabled();
-  const coreCommands = renderHelpLines(
-    projectEnabled ? [...CORE_COMMANDS, PROJECT_COMMAND] : CORE_COMMANDS,
-    false,
-  ).join("\n  ");
-  const productCommands = renderHelpLines(PRODUCT_COMMANDS, false).join("\n  ");
-  const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join(
-    "\n  ",
-  );
+  const coreCommands = renderHelpLines(CORE_COMMANDS, false).join('\n  ');
+  const productCommands = renderHelpLines(PRODUCT_COMMANDS, false).join('\n  ');
+  const advancedCommands = renderHelpLines(ADVANCED_COMMANDS, false).join('\n  ');
   const moreHelpLines = [
-    "vs <command> --help",
-    "vs dataset --help",
-    "vs app --help",
-    "vs connector --help",
-    ...(projectEnabled ? ["vs project --help"] : []),
-    "vs skill --help",
-    "vs auth --help",
-    "vs llm --help",
+    'vs <command> --help',
+    'vs app --help',
+    'vs item --help',
+    'vs skill --help',
+    'vs auth --help'
   ];
-  const projectQuickStart = projectEnabled
-    ? `
-  Create a starter web project
-    vs project create demo --app-id <app> --features search,chat --search-scene-id <scene> --search-dataset-id <dataset>`
-    : "";
 
-  console.log(withOpenApiReferenceHint(`SearchCLI
+  console.log(`SearchCLI
 
-Interactive AI search CLI. Use dataset/app/search/chat for the primary product workflow.
+Interactive AI search CLI. Use item/app/dataset/search/chat for the primary product workflow.
 
 USAGE
   vs <command>
@@ -74,31 +46,16 @@ QUICK START
   Sign in and verify access
     vs auth import-env
     vs auth login
-    vs llm login
     vs doctor
 
-  Onboard items into a fresh app (V2 — default, backend-driven schema inference)
-    vs dataset import-url --file-name items.jsonl
-    curl -X PUT --data-binary "@./items.jsonl" "<FileUrl from previous step>"
-    vs dataset infer-schema --tos-key <FileKey> --type item --industry e_commerce --language zh --name <dataset-name>
-    vs dataset infer-result --task-id <TaskID> --render-schema
-    vs dataset create --data @dataset-create.json
-    vs data write --dataset-id <DatasetId> --fields @items.json
-    vs app create --name <app-name> --industry e_commerce --language zh
-    vs app attach-dataset --data @attach.json
+  Create or activate an app from item data
+    vs item profile --file ./items.json --pretty
+    vs item plan --file ./items.json --goal "Build item search"
+    vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review --wait-ready --run-trials
 
   Try one search request
-    vs search run --application-id <app> --scene-id <scene> --query "wireless headphones"
+    vs search run --application-id <app> --query "wireless headphones"
     if the app has multiple datasets, add --dataset-id <dataset>
-
-  Run first-version search tuning
-    vs search tune llm-check
-    vs search tune query-generate --application-id <app> --dataset-id <dataset>
-    vs search tune plan --application-id <app> --dataset-id <dataset> --queries ./queries.jsonl
-    vs search tune run --application-id <app> --dataset-id <dataset> --profile similarity-only
-    vs search tune run --application-id <app> --resume-run-id <run-id>
-    vs search tune apply --application-id <app> --run-id <run-id> --dry-run
-${projectQuickStart}
 
 CORE
   ${coreCommands}
@@ -110,5 +67,5 @@ ADVANCED
   ${advancedCommands}
 
 MORE HELP
-  ${moreHelpLines.join("\n  ")}`));
+  ${moreHelpLines.join('\n  ')}`);
 }

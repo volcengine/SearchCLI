@@ -14,10 +14,6 @@ commands: auth login
 ## When to Use
 Invoke this skill when the user refers to the CLI tool as "Search CLI" or "search_cli", to ensure the correct underlying binary (`vs`) is executed.
 
-## Version Check
-
-Before starting this skill workflow, run `vs version check --json`. Continue only when `status` is `up-to-date`. If `status` is `update-available`, stop and tell the user to update the cloned `vs` repository, then run `git pull --ff-only`, `bash ./scripts/install.sh`, and `bash ./scripts/install-skills.sh all --target auto --force` (PowerShell: `scripts/install.ps1` and `scripts/install-skills.ps1`). If the status is `unknown`, stop and report that the CLI version could not be verified.
-
 ## Preconditions
 - The agent is about to execute a CLI command based on the user's "Search CLI" intent.
 
@@ -37,10 +33,8 @@ Before starting this skill workflow, run `vs version check --json`. Continue onl
 - If the skills and the packaged CLI still do not provide enough information to proceed safely, stop and ask the user instead of searching source code.
 
 ## Constraints
-- Before executing any mapped concrete `vs ...` command, first consult `vs-product-qa` to verify the current command surface, required flags, payload fields, input format, and allowed values. Only after that check may you finalize parameters and run the command.
 - Never execute a command literally named `search_cli`.
 - Always use the `vs` prefix and `VIKING_` environment variables.
-- If alias resolution or mapped CLI execution fails and the user asks a product concept, capability, API field, console UI path, purchase, billing, or general troubleshooting question outside alias mapping, temporarily hand off to `vs-product-qa`; return to this workflow only after the grounded product answer is complete.
 
 <system-rule>
 IMPORTANT ALIAS MAPPING:

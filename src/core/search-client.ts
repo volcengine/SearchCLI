@@ -2,15 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
+import { Signer } from '@volcengine/openapi';
 import type { RuntimeConfig, SearchCase, SearchDynamic, SearchResponseShape, SearchResultItem } from './types';
-import {
-  describeSearchModeOptions,
-  describeUserDefinedRecallModeOptions,
-  normalizeSearchMode,
-  normalizeUserDefinedRecallMode
-} from './search-mode';
-import { formatMissingVikingAuthMessage } from './auth-errors';
-import { buildSignedRequestHeaders } from './http';
+import { describeSearchModeOptions, normalizeSearchMode } from './search-mode';
 
 export class VikingSearchClient {
   constructor(private readonly config: RuntimeConfig) {}
@@ -29,8 +23,7 @@ export class VikingSearchClient {
       sort_order: searchCase.sort_order,
       output_fields: searchCase.output_fields,
       conditional_boost: searchCase.conditional_boost,
-      disable_personalize: searchCase.disable_personalize,
-      query_keyword_match_percent: searchCase.query_keyword_match_percent
+      disable_personalize: searchCase.disable_personalize
     };
 
     if (searchDynamic && Object.keys(searchDynamic).length > 0) {
@@ -62,20 +55,44 @@ export class VikingSearchClient {
   }
 
   private buildUrl(): string {
-    const base = this.config.dataPlaneBaseUrl.replace(/\/+$/, '');
+    const base = this.config.baseUrl.replace(/\/+$/, '');
     const scene = this.config.sceneId ? `/${this.config.sceneId}` : '';
     return `${base}/api/v1/application/${this.config.applicationId}/search${scene}`;
   }
 
   private buildHeaders(urlString: string, body: string): Record<string, string> {
-    if (!this.config.apiKey && (!this.config.accessKeyId || !this.config.secretKey)) {
-      throw new Error(formatMissingVikingAuthMessage());
+    if (!this.config.accessKeyId || !this.config.secretKey) {
+      throw new Error(
+        'Missing Viking auth. Run `vs auth import-env`, `vs auth login`, set VIKING_AK/VIKING_SK, or pass --ak/--sk.'
+      );
     }
 
     const url = new URL(urlString);
-    return buildSignedRequestHeaders(this.config, 'POST', url, body, {
-      'content-type': 'application/json'
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      host: url.host
+    };
+
+    const signer = new Signer(
+      {
+        region: this.config.region,
+        method: 'POST',
+        pathname: url.pathname,
+        params: Object.fromEntries(url.searchParams.entries()),
+        headers,
+        body
+      },
+      this.config.service
+    );
+
+    signer.addAuthorization({
+      accessKeyId: this.config.accessKeyId,
+      secretKey: this.config.secretKey,
+      sessionToken: ''
     });
+
+    return headers;
   }
 
   private toApiSearchDynamic(input: SearchDynamic): Record<string, unknown> {
@@ -86,15 +103,6 @@ export class VikingSearchClient {
         throw new Error(`Invalid search_dynamic.mode: '${String(input.mode)}'. Allowed values are: ${describeSearchModeOptions()}`);
       }
       output.mode = normalizedMode;
-    }
-    if (input.user_defined_recall_mode !== undefined) {
-      const normalizedMode = normalizeUserDefinedRecallMode(input.user_defined_recall_mode);
-      if (normalizedMode === undefined) {
-        throw new Error(
-          `Invalid search_dynamic.user_defined_recall_mode: '${String(input.user_defined_recall_mode)}'. Allowed values are: ${describeUserDefinedRecallModeOptions()}`
-        );
-      }
-      output.user_defined_recall_mode = normalizedMode;
     }
     return output;
   }

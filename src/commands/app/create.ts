@@ -6,11 +6,10 @@ import { runAppCreateCommand } from '../../app/product-commands';
 import { serviceFlags } from '../../command-support/service-flags';
 
 export default class AppCreate extends Command {
-  static override description = 'Create a Viking application via V2 CreateApplicationV2.';
+  static override description = 'Create a Viking application.';
 
   static override examples = [
     '<%= config.bin %> app create --name demo-app --industry ecommerce --description "demo application"',
-    '<%= config.bin %> app create --name demo-app --industry ecommerce --icon-color blue --risk-check --dry-run',
     '<%= config.bin %> app create --data @app.json'
   ];
 
@@ -19,42 +18,18 @@ export default class AppCreate extends Command {
     name: Flags.string({ description: 'Application name.' }),
     description: Flags.string({ description: 'Application description.' }),
     industry: Flags.string({
-      description:
-        'Application industry name or numeric code: none|ecommerce|material|video|news|social-platform|other (or 0/1/2/3/4/5/20).'
+      description: 'Application industry name or numeric code from the current control plane: none|ecommerce|material|video|news|social-platform|other or 0/1/2/3/4/5/20.'
     }),
-    language: Flags.string({ description: 'Application language: zh|en|ko|ja|hi' }),
-    'icon-color': Flags.string({
-      description: 'Application icon color: cyan|blue|purple|pink (V2 alias for the legacy --color flag).'
-    }),
-    color: Flags.string({
-      description: 'Deprecated alias for --icon-color. Retained for back-compat.',
-      hidden: true
-    }),
-    'risk-check': Flags.boolean({
-      description: 'Enable EnableRiskCheck on the new application.'
-    }),
-    'dry-run': Flags.boolean({
-      description: 'Validate the request without persisting the application (DryRun=true).'
-    }),
-    'post-paid-type': Flags.string({
-      description:
-        'Post-paid tier for post-paid billing instances: standard|premium. Omit for non-post-paid (none) instances.',
-      options: ['standard', 'premium', 'none']
-    }),
-    'project-name': Flags.string({
-      description: 'Viking project name when the API requires project scoping.'
-    })
+    language: Flags.string({ description: 'Application language: zh|en|ja' }),
+    color: Flags.string({ description: 'Application icon color: cyan|blue|purple|pink' })
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(AppCreate);
     await runAppCreateCommand({
       baseUrl: flags['base-url'],
-      controlPlaneBaseUrl: flags['control-plane-base-url'],
-      dataPlaneBaseUrl: flags['data-plane-base-url'],
       accessKeyId: flags.ak,
       secretKey: flags.sk,
-      apiKey: flags['api-key'],
       region: flags.region,
       timeoutMs: flags['timeout-ms'],
       data: flags.data,
@@ -62,12 +37,7 @@ export default class AppCreate extends Command {
       description: flags.description,
       industry: flags.industry,
       language: flags.language,
-      color: flags.color,
-      iconColor: flags['icon-color'],
-      riskCheck: flags['risk-check'],
-      dryRun: flags['dry-run'],
-      postPaidType: flags['post-paid-type'],
-      projectName: flags['project-name']
+      color: flags.color
     });
   }
 }
