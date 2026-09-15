@@ -2924,7 +2924,6 @@ function getLiveTestContext() {
     recommendDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_DEFAULT_SCENE_ID,
     recommendNonDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_NON_DEFAULT_SCENE_ID,
     userId: process.env.SEARCHCLI_TEST_USER_ID,
-    parentIds: process.env.SEARCHCLI_TEST_PARENT_IDS,
     query: process.env.SEARCHCLI_TEST_QUERY ?? 'GAZELLE 秦舒培同款经典运动板鞋',
     projectName: process.env.SEARCHCLI_TEST_PROJECT_NAME ?? 'searchcli-test',
     env: Object.fromEntries(
@@ -2952,9 +2951,6 @@ function buildRecommendRunArgs(context, sceneId) {
     context.projectName,
     '--json'
   ];
-  if (context.parentIds) {
-    args.push('--parent-ids', context.parentIds);
-  }
   return args;
 }
 

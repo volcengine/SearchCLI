@@ -10,8 +10,7 @@ export default class RecommendRun extends Command {
 
   static override examples = [
     '<%= config.bin %> recommend run --application-id 123 --scene-id sceneR01 --user-id user_1',
-    '<%= config.bin %> recommend run --application-id 123 --scene-id sceneR01 --parent-id item_42',
-    '<%= config.bin %> recommend run --application-id 123 --scene-id sceneR01 --parent-ids item_42,item_43'
+    '<%= config.bin %> recommend run --application-id 123 --scene-id sceneR01 --parent-id item_42'
   ];
 
   static override flags = {
@@ -20,7 +19,6 @@ export default class RecommendRun extends Command {
     'scene-id': Flags.string({ required: true }),
     'user-id': Flags.string({ description: 'Optional recommend user ID.' }),
     'parent-id': Flags.string({ description: 'Optional recommend parent item ID.' }),
-    'parent-ids': Flags.string({ description: 'Comma-separated recommend parent item IDs.' }),
     'page-size': Flags.integer({ description: 'Number of items to recommend per page.' })
   };
 
@@ -40,17 +38,7 @@ export default class RecommendRun extends Command {
       sceneId: flags['scene-id'],
       userId: flags['user-id'],
       parentId: flags['parent-id'],
-      parentIds: splitCommaList(flags['parent-ids']),
       pageSize: flags['page-size']
     });
   }
-}
-
-function splitCommaList(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
-  const parts = value
-    .split(',')
-    .map(part => part.trim())
-    .filter(Boolean);
-  return parts.length > 0 ? parts : undefined;
 }

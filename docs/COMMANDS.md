@@ -50,10 +50,19 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 
 ## 2. Product and Workflows (PRODUCT)
 
-> **V1 `vs item profile / plan / review / provision / verify / apply` is deprecated**
-> and hidden from help. New onboarding flows must use the V2 path below
-> (`vs dataset import-url → infer-schema → infer-result → dataset create`,
-> followed by `vs data write` and optional `vs app create` + `vs app attach-dataset`).
+### `item` - Item/Product Onboarding Workflow
+*   `vs item profile --file <path>`
+    *   Parameters: `[--type <item|video>] [output flags]`
+*   `vs item plan --file <path>`
+    *   Parameters: `[--type <item|video>] [--item-type-result <variant|parent>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]`
+*   `vs item apply --plan-dir <dir>`
+    *   Parameters: `[--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]`
+*   `vs item review --plan-dir <dir>`
+    *   Parameters: `[--reviewer <name>] [--review-notes <text>] [output flags]`
+*   `vs item provision --plan-dir <dir>`
+    *   Parameters: `[--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]`
+*   `vs item verify --plan-dir <dir>`
+    *   Parameters: `[--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]`
 
 ### `app` - Application Management
 *   `vs app create --name <name>`
@@ -152,13 +161,13 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Examples: `vs search scene get --application-id 123 --scene-id abc`; `vs search scene get --application-id 123 --scene-id abc --format json`; `vs search scene get --application-id 123 --scene-id abc --jq '.Result.Scene.Config'`
 *   `vs search scene update --application-id <id> --scene-id <id>`
     *   Usage: `vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]`
-    *   Usage: `vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]`
+    *   Usage: `vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]`
     *   Usage: `vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]`
-    *   Description: update and publish a search scene through `OnlineSearchScene`; prefer `scene get` first, then update only the intended parts
-    *   Key flags: `--application-id`, `--scene-id`, `--config`, `--search-config`, `--query-completion-config`, `--want-to-search-config`, `--overview-config`, `--data`
-    *   Search mode enums: `RetrieveConfigs[].Mode`: `Balanced=1`, `SemanticPriority=2`, `KeywordPriority=3`, `UserDefined=4`
-    *   Custom recall enums: `RetrieveConfigs[].UserDefinedRecallMode`: `KeywordSemantic=0`, `KeywordOnly=1`, `SemanticOnly=2`
-    *   Note: when `RetrieveConfigs[].Mode=UserDefined(4)`, also set `RetrieveConfigs[].UserDefinedRecallMode` in the same retrieve config
+    *   Description: update and publish a search scene; prefer `scene get` first, then update only the intended parts
+    *   Key flags: `--application-id`, `--scene-id`, `--config`, `--search-config`, `--item-type-result`, `--item-dataset-id`, `--item-type-field`, `--query-completion-config`, `--want-to-search-config`, `--overview-config`, `--data`
+    *   Search mode enums: `PerDatasetConfigs[].TextSearchConfig.Mode`: `balanced`, `semantic_priority`, `keyword_priority`, `user_defined`
+    *   Custom recall enums: `PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode`: `keyword_semantic`, `keyword_only`, `semantic_only`
+    *   Note: when `PerDatasetConfigs[].TextSearchConfig.Mode=user_defined`, also set `PerDatasetConfigs[].TextSearchConfig.UserDefinedRecallMode` in the same text search config
     *   Examples: `vs search scene get --application-id 123 --scene-id abc --format json > scene.json`; `vs search scene update --application-id 123 --scene-id abc --config @scene.json`; `vs search scene update --application-id 123 --scene-id abc --search-config @search.json`; `vs search scene update --application-id 123 --scene-id abc --data @payload.json`
 *   `vs search scene delete --application-id <id> --scene-id <id>`
     *   Usage: `vs search scene delete --application-id <id> --scene-id <id> [service flags]`
@@ -193,15 +202,15 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 *   `vs recommend run --application-id <id> --scene-id <id>`
     *   Parameters: `[--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]`
 *   `vs recommend scene create --application-id <id> --type for_you --name <name> --item-dataset-id <id>`
-    *   Parameters: `[--description <text>] [--recommend-model <n>] [--optimization-target <n>] [--bhv-scene-types <types>] [--click-event-types <types>] [--positive-event-types <types>] [--negative-event-types <types>] [--confirm-entry-binding] [service flags]`
+    *   Parameters: `[--description <text>] [--item-type-result <variant|parent>] [--item-type-field <field>] [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]`
 *   `vs recommend scene list --application-id <id>`
     *   Parameters: `[--types <types>] [service flags]`
 *   `vs recommend scene get --application-id <id> --scene-id <id>`
     *   Parameters: `[service flags]`
 *   `vs recommend scene update --application-id <id> --scene-id <id>`
-    *   Parameters: `[--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]`
+    *   Parameters: `[--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result <variant|parent>] [--item-type-field <field>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]`
 *   `vs recommend scene delete --application-id <id> --scene-id <id>`
-    *   Parameters: `[service flags]`
+    *   Parameters: `[--dry-run] [service flags]`
 
 ## 3. Advanced (ADVANCED)
 

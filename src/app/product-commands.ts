@@ -2386,7 +2386,7 @@ COMMON FLAGS
         'vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]',
         'vs search scene list --application-id <id> [service flags]',
         'vs search scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
+        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
         'vs search scene delete --application-id <id> --scene-id <id> [service flags]',
         'vs search tune llm-check [--live] [service flags]',
         'vs search tune validate --queries <file> [--query-count <n>] [service flags]',
@@ -3008,8 +3008,8 @@ function printItemCommandHelp(action: string): void {
     plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
 
 USAGE
-  vs item plan --file ./items.json [--type <item|video>] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app [output flags]
+  vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app [output flags]
 
 DESCRIPTION
   Use this command to generate the plan artifacts an agent or operator will review before provisioning.
@@ -3019,6 +3019,7 @@ DESCRIPTION
 KEY FLAGS
   --file               Source JSON array, JSONL, or CSV file.
   --type               Dataset type: item or video. Pass it explicitly for video data.
+  --item-type-result   Generated item hierarchy filter for search/recommend configs. Defaults to variant.
   --goal               Business goal carried into generated reports and payload descriptions.
   --output-dir         Custom directory for plan artifacts.
   --dataset-name       Override the generated dataset name.
@@ -3028,7 +3029,7 @@ KEY FLAGS
 EXAMPLES
   vs item plan --file ./items.json --output-dir ./.viking/item-plan
   vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
-  vs item plan --file ./items.jsonl --type item --goal "Build item search" --skip-app`,
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app`,
     apply: `Compatibility wrapper around item provision / verify.
 
 USAGE
@@ -3232,7 +3233,7 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
