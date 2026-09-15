@@ -316,7 +316,7 @@ async function inferNamedFieldPathGroups(
     const raw = await requestChatCompletion(llmConfig, prompt, inputPayload);
     const parsed = parseJsonResponse(raw);
     if (!isRecord(parsed)) return undefined;
-    const values = keys.flatMap(key => normalizeStringArray(parsed[key])); 
+    const values = keys.flatMap(key => normalizeStringArray(parsed[key]));
     return values.length > 0 ? dedupeStrings(values) : undefined;
   } catch {
     return undefined;

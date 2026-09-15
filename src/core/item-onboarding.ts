@@ -927,7 +927,7 @@ function inferRoles(
   const scalarUniqueCandidates = fields.filter(field =>
     ['string', 'int64'].includes(field.inferredType) && field.missingCount === 0 && field.distinctCount === total
   );
-  
+
   const pkNames = STRONG_PRIMARY_KEY_NAMES[datasetType] as readonly string[];
   const strongPkCandidates = fields
     .filter(field => ['string', 'int64'].includes(field.inferredType) && pkNames.includes(field.name as never))
@@ -1408,7 +1408,7 @@ function buildSchemaArtifact(
   }
 
   const schema = convertFields(profile.fields);
-  
+
   if (datasetType === 'video') {
     if (!schema.some(f => f.Name === 'content_type')) {
       schema.push({ Name: 'content_type', Type: 1, BizAttr: 22, Required: true });
@@ -1423,7 +1423,7 @@ function buildSchemaArtifact(
       schema.push({ Name: 'sequence_index', Type: 3, BizAttr: 25 });
     }
   }
-  
+
   return schema;
 }
 
@@ -2137,7 +2137,7 @@ function normalizeSchemaFieldType(value: unknown): number {
     const normalized = value.trim().toLowerCase().replace(/[\s_]+/g, '');
     const code = DATASET_FIELD_TYPE_CODES[normalized];
     if (code) return code;
-    
+
     const literalAlias = DATASET_FIELD_TYPE_CODES[value.trim().toLowerCase()];
     if (literalAlias) return literalAlias;
   }

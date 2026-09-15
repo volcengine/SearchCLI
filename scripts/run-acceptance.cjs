@@ -378,8 +378,8 @@ async function testDatasetListHelp() {
   const { stdout } = await runCli(['dataset', '--help']);
   assert.match(stdout, /--type/);
   assert.match(stdout, /--full/);
-  assert.match(stdout, /dataset list \[--type <type>\] \[--name <text>\] \[--application-id <id>\] \[--full\]/i);
-  return `${command.prefix} dataset list --help`;
+  assert.match(stdout, /dataset list \[--type <type> --name <text> --application-id <id> --full\]/i);
+  return `${command.prefix} dataset --help`;
 }
 
 async function testAppListHelp() {
