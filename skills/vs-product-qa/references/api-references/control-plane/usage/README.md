@@ -21,7 +21,7 @@ This file is the final-level router for billing, quota, usage, and count/statist
 | Data item summary, processed item summary | [GetDataItemSummary](./GetDataItemSummary.md) |
 | Dataset data count, dataset total rows/items | [GetDatasetDataCount](./GetDatasetDataCount.md) |
 | Dataset statistics, dataset metrics | [GetDatasetStatistics](./GetDatasetStatistics.md) |
-| Application effective item data count, `vs app item-data-count` | [GetAppItemDataCount](./GetAppItemDataCount.md) |
+| Application effective item data count, `vs app item-data-count` | [GetAppItemDataCountV2](./GetAppItemDataCountV2.md) |
 
 ## OpenAPI Name Routing
 
@@ -36,4 +36,4 @@ This file is the final-level router for billing, quota, usage, and count/statist
 | `GetDataItemSummary` | [GetDataItemSummary](./GetDataItemSummary.md) |
 | `GetDatasetDataCount` | [GetDatasetDataCount](./GetDatasetDataCount.md) |
 | `GetDatasetStatistics` | [GetDatasetStatistics](./GetDatasetStatistics.md) |
-| `GetAppItemDataCount` | [GetAppItemDataCount](./GetAppItemDataCount.md) |
+| `GetAppItemDataCountV2` | [GetAppItemDataCountV2](./GetAppItemDataCountV2.md) |

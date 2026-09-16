@@ -22,7 +22,7 @@ export default class AppItemDataCount extends Command {
       description: 'Viking item/video dataset ID. Do not pass user_event datasets; they do not require data-volume statistics.'
     }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
-    full: Flags.boolean({ description: 'Return the raw GetAppItemDataCount response instead of the compact summary.' })
+    full: Flags.boolean({ description: 'Return the raw GetAppItemDataCountV2 response instead of the compact summary.' })
   };
 
   async run(): Promise<void> {
