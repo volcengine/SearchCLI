@@ -400,9 +400,6 @@ export interface SearchSceneCreateOptions extends ProjectScopedOptions {
   applicationId: string;
   name?: string;
   description?: string;
-  itemDatasetId?: string;
-  itemTypeResult?: string;
-  itemTypeField?: string;
   config?: string;
   searchConfig?: string;
 }
@@ -1191,29 +1188,6 @@ export async function runSearchSceneCreateCommand(options: SearchSceneCreateOpti
     configPayload = compactObject({
       PerDatasetConfigs: await loadJsonInput(options.searchConfig)
     });
-  }
-  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(
-    options,
-    options.itemDatasetId?.trim() ? 'variant' : undefined
-  );
-  if (itemTypeFilterConfig) {
-    if (!configPayload) {
-      if (!options.itemDatasetId?.trim()) {
-        throw new Error('Need --item-dataset-id when setting --item-type-result for a search scene.');
-      }
-      configPayload = {
-        PerDatasetConfigs: [
-          {
-            DatasetId: options.itemDatasetId,
-            FilterConfig: {
-              ItemTypeFilter: itemTypeFilterConfig
-            }
-          }
-        ]
-      };
-    } else {
-      configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig, options.itemDatasetId);
-    }
   }
   if (configPayload) {
     validateSearchSceneConfig(configPayload);
@@ -2390,7 +2364,7 @@ COMMON FLAGS
     search: `${renderUsageBlock(
       [
         'vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
-        'vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @per-dataset.json] [--item-dataset-id <id> [--item-type-result variant|parent]] [--item-type-field item_type] [service flags]',
+        'vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @per-dataset.json] [service flags]',
         'vs search scene list --application-id <id> [service flags]',
         'vs search scene get --application-id <id> --scene-id <id> [service flags]',
         'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
@@ -3035,28 +3009,25 @@ EXAMPLES
 
 USAGE
   vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]
-  vs search scene create --application-id <id> --name <name> --search-config @search.json [--item-dataset-id <id> [--item-type-result variant|parent]] [--item-type-field item_type] [service flags]
+  vs search scene create --application-id <id> --name <name> --search-config @search.json [service flags]
   vs search scene create --application-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
   Creates a new search scene under the target application. Use \`--name\` and \`--description\`
   for the simple path, \`--search-config\` for Config.PerDatasetConfigs, or pass \`--data\`
-  when you need full control over the create payload.
+  when you need full control over the create payload. Search scene create does not
+  set parent/variant item hierarchy; use \`search scene update\` after creation to switch it.
 
 KEY FLAGS
   --application-id   Target application ID.
   --name             Search scene name.
   --description      Optional scene description.
   --search-config    \`Config.PerDatasetConfigs\` array only.
-  --item-dataset-id  Item dataset whose ItemTypeFilter should be set. Defaults to variant results when --item-type-result is omitted.
-  --item-type-result Search item hierarchy when the item dataset has ItemType: variant or parent. Defaults to variant on create when --item-dataset-id is set.
-  --item-type-field  ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --data             Full request payload. Use this when you need to set top-level fields directly.
 
 EXAMPLES
   vs search scene create --application-id 123 --name "default-search"
-  vs search scene create --application-id 123 --name "variant-search" --search-config @search.json --item-dataset-id ds_123
-  vs search scene create --application-id 123 --name "parent-search" --search-config @search.json --item-dataset-id ds_123 --item-type-result parent
+  vs search scene create --application-id 123 --name "default-search" --search-config @search.json
   vs search scene create --application-id 123 --name "image-search" --description "Search scene for image-heavy queries"
   vs search scene create --application-id 123 --data @payload.json`,
     'scene:list': `List search scenes for an application.
@@ -3943,9 +3914,6 @@ async function runSearchCli(argv: string[]): Promise<void> {
             applicationId: requiredString(values['application-id'], '--application-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
-            itemDatasetId: optionalString(values['item-dataset-id']),
-            itemTypeResult: optionalString(values['item-type-result']),
-            itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
             searchConfig: optionalString(values['search-config'])
           });

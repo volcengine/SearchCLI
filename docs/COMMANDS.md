@@ -133,11 +133,11 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Key flags: `--application-id`, `--scene-id`, `--dataset-id`, `--query`, `--page-size`
     *   Examples: `vs search run --application-id 123 --scene-id default-search --query "wireless headphones"`; `vs search run --application-id 123 --scene-id default-search --query "running shoes" --page-size 5`
 *   `vs search scene create --application-id <id> --name <name>`
-    *   Usage: `vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @search.json] [--item-dataset-id <id> [--item-type-result variant|parent]] [--item-type-field item_type] [service flags]`
+    *   Usage: `vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @search.json] [service flags]`
     *   Usage: `vs search scene create --application-id <id> --data @payload.json [service flags]`
-    *   Description: create a new search scene under the target application; `--item-dataset-id` writes `Config.PerDatasetConfigs[].FilterConfig.ItemTypeFilter` for parent/variant item datasets, defaulting to child/variant results when `--item-type-result` is omitted
-    *   Key flags: `--application-id`, `--name`, `--description`, `--search-config`, `--item-dataset-id`, `--item-type-result`, `--item-type-field`, `--data`
-    *   Examples: `vs search scene create --application-id 123 --name "default-search"`; `vs search scene create --application-id 123 --name "variant-search" --search-config @search.json --item-dataset-id ds_123`; `vs search scene create --application-id 123 --name "parent-search" --search-config @search.json --item-dataset-id ds_123 --item-type-result parent`; `vs search scene create --application-id 123 --data @payload.json`
+    *   Description: create a new search scene under the target application; parent/variant item hierarchy is switched after creation with `vs search scene update --item-dataset-id <id> --item-type-result variant|parent`
+    *   Key flags: `--application-id`, `--name`, `--description`, `--search-config`, `--data`
+    *   Examples: `vs search scene create --application-id 123 --name "default-search"`; `vs search scene create --application-id 123 --name "default-search" --search-config @search.json`; `vs search scene create --application-id 123 --data @payload.json`
 *   `vs search scene list --application-id <id>`
     *   Usage: `vs search scene list --application-id <id> [service flags]`
     *   Usage: `vs search scene list --application-id <id> --data @payload.json [service flags]`

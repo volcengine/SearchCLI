@@ -2362,8 +2362,6 @@ async function testSearchSceneV2ActionsMock() {
         'search-v2',
         '--search-config',
         `@${perDatasetConfigPath}`,
-        '--item-dataset-id',
-        'ds-v2-1',
         ...v2ServiceFlags(server.baseUrl)
       ],
       { env: envWithVikingBaseUrlsReset(server.baseUrl) }
@@ -2430,9 +2428,7 @@ async function testSearchSceneV2ActionsMock() {
       ]
     );
     assert.equal(state.requests[0].body.ApplicationId, 'app-v2-1');
-    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, false);
-    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must_not');
-    assert.deepEqual(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.conds, ['parent']);
+    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig, undefined);
     assert.equal(state.requests[1].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[2].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[2].body.SceneId, 'scene-v2-1');
