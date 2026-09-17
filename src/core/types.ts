@@ -77,15 +77,9 @@ export interface QueryConfig {
   instruction_type?: string;
 }
 
-export interface ItemTypeFilterConfig {
-  for_parent?: boolean;
-  filter?: Record<string, unknown>;
-}
-
 export interface FilterConfig {
   rule_id?: string;
   config?: Record<string, unknown>;
-  item_type_filter?: ItemTypeFilterConfig;
 }
 
 export interface BoostBuryCondConfig {

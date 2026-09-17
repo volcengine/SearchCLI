@@ -36,11 +36,6 @@ export default class RecommendSceneUpdate extends Command {
     name: Flags.string({ description: 'Recommend scene name.' }),
     description: Flags.string({ description: 'Recommend scene description.' }),
     'item-dataset-id': Flags.string({ description: 'Viking item dataset ID.' }),
-    'item-type-result': Flags.string({
-      description: 'Recommended item hierarchy when the item dataset has ItemType: variant or parent.',
-      options: ['variant', 'parent']
-    }),
-    'item-type-field': Flags.string({ description: 'ItemType field name used by ItemTypeFilter. Defaults to item_type.' }),
     'user-event-scenes': Flags.string({ description: 'Comma-separated UserEvent event_scene values.' }),
     'bhv-scene-types': Flags.string({ description: 'Deprecated alias of --user-event-scenes.' }),
     'dry-run': Flags.boolean({ description: 'Validate without publishing the recommend scene.' }),
@@ -68,8 +63,6 @@ export default class RecommendSceneUpdate extends Command {
       name: flags.name,
       description: flags.description,
       itemDatasetId: flags['item-dataset-id'],
-      itemTypeResult: flags['item-type-result'] as 'variant' | 'parent' | undefined,
-      itemTypeField: flags['item-type-field'],
       userEventScenes: flags['user-event-scenes'] ?? flags['bhv-scene-types'],
       config: flags.config,
       count: flags.count,
