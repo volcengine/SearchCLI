@@ -19,6 +19,7 @@ import {
 } from '../core/help-utils';
 import { isProjectFeatureEnabled } from '../core/feature-flags';
 import { ApiRequestError, postJson } from '../core/http';
+import { buildItemTypeFilterConfig, normalizeItemTypeResultMode, type ItemTypeResultMode } from '../core/item-type-filter';
 import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
 import { hasExplicitOutputFormatFlag } from '../core/output-format';
@@ -59,6 +60,14 @@ import {
 } from './connector-commands';
 import type { ConnectorCursorType, ConnectorSourceType } from '../core/connector/types';
 import { runProjectCreateCommand, runProjectDeployCommand } from './project-commands';
+import {
+  runItemApplyCommand,
+  runItemPlanCommand,
+  runItemProfileCommand,
+  runItemProvisionCommand,
+  runItemReviewCommand,
+  runItemVerifyCommand
+} from './item-commands';
 
 export interface ServiceCommandOptions extends ServiceConfigInput {
   data?: string;
@@ -411,6 +420,9 @@ export interface SearchSceneUpdateOptions extends ProjectScopedOptions {
   sceneId: string;
   name?: string;
   description?: string;
+  itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   config?: string;
   searchConfig?: string;
   queryCompletionConfig?: string;
@@ -424,6 +436,8 @@ export interface RecommendSceneCreateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   recommendModel?: string;
   optimizationTarget?: string;
   userEventScenes?: string;
@@ -453,6 +467,8 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: ItemTypeResultMode;
+  itemTypeField?: string;
   userEventScenes?: string;
   config?: string;
   count?: number;
@@ -486,6 +502,65 @@ export interface RecommendRuleGetOptions extends ProjectScopedOptions {
   applicationId: string;
   ruleId?: string;
   dryRun?: boolean;
+}
+
+function buildSceneItemTypeFilterConfig(options: { itemTypeResult?: ItemTypeResultMode; itemTypeField?: string }): Record<string, unknown> | undefined {
+  if (!options.itemTypeResult) {
+    return undefined;
+  }
+  return buildItemTypeFilterConfig(options.itemTypeField ?? 'item_type', normalizeItemTypeResultMode(options.itemTypeResult));
+}
+
+function mergeRecommendSceneFilterConfig(filterConfig: unknown, itemTypeFilterConfig: Record<string, unknown> | undefined): unknown {
+  if (!itemTypeFilterConfig) {
+    return filterConfig;
+  }
+  if (filterConfig === undefined) {
+    return { ItemTypeFilter: itemTypeFilterConfig };
+  }
+  if (!isRecord(filterConfig)) {
+    throw new Error('Recommend scene FilterConfig must be a JSON object when --item-type-result is set.');
+  }
+  return {
+    ...filterConfig,
+    ItemTypeFilter: itemTypeFilterConfig
+  };
+}
+
+function applySearchSceneItemTypeFilterConfig(
+  configPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown>,
+  itemDatasetId: string | undefined
+): Record<string, unknown> {
+  if (!itemDatasetId) {
+    throw new Error('Need --item-dataset-id when updating a search scene with --item-type-result.');
+  }
+  const config = isRecord(configPayload) ? configPayload : {};
+  if (!Array.isArray(config.PerDatasetConfigs)) {
+    throw new Error('Search scene config must contain PerDatasetConfigs when --item-type-result is set.');
+  }
+  let matched = false;
+  const perDatasetConfigs = config.PerDatasetConfigs.map(perDatasetConfig => {
+    const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
+    if (String(current.DatasetId ?? current.DatasetID ?? '') !== itemDatasetId) {
+      return current;
+    }
+    matched = true;
+    return {
+      ...current,
+      FilterConfig: {
+        ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+        ItemTypeFilter: itemTypeFilterConfig
+      }
+    };
+  });
+  if (!matched) {
+    throw new Error(`Search scene config does not contain PerDatasetConfig for item dataset ${itemDatasetId}.`);
+  }
+  return {
+    ...config,
+    PerDatasetConfigs: perDatasetConfigs
+  };
 }
 
 export interface RecommendRuleUpsertOptions extends ProjectScopedOptions {
@@ -1128,6 +1203,18 @@ export async function runSearchSceneGetCommand(options: SearchSceneGetOptions): 
   await printResult(callOpenApi('GetSearchSceneV2', payload, options));
 }
 
+function extractSearchSceneV2(response: unknown): Record<string, any> {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    throw new Error('GetSearchSceneV2 returned an invalid response.');
+  }
+  const body = response as Record<string, any>;
+  const result = body.Result ?? body.Scene ?? body;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('GetSearchSceneV2 returned an invalid scene payload.');
+  }
+  return result as Record<string, any>;
+}
+
 function validateSearchSceneConfig(config: any): void {
   const validateRelevanceCutoffConfig = (cutoffConfig: any, fieldPath: string): void => {
     if (!cutoffConfig) return;
@@ -1260,15 +1347,35 @@ function validateSearchSceneConfig(config: any): void {
 }
 
 export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOptions): Promise<void> {
+  const dataPayload = await loadJsonInput(options.data);
+  if (dataPayload) {
+    requireNonEmptyObject(dataPayload, 'Need --data, --config, or advanced config options for search scene update.');
+    await printResult(callOpenApi('PublishSearchSceneV2', dataPayload, options));
+    return;
+  }
+
   let configPayload = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   
-  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig)) {
+  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig || itemTypeFilterConfig)) {
+    const existingScene = itemTypeFilterConfig && !options.searchConfig
+      ? extractSearchSceneV2(await callOpenApi('GetSearchSceneV2', {
+          ProjectName: options.projectName,
+          ApplicationId: options.applicationId,
+          SceneId: options.sceneId
+        }, options))
+      : undefined;
+    const existingConfig = isRecord(existingScene?.Config) ? existingScene.Config : {};
     configPayload = compactObject({
-      PerDatasetConfigs: await loadJsonInput(options.searchConfig),
-      QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
-      WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
-      OverviewConfig: await loadJsonInput(options.overviewConfig)
+      ...existingConfig,
+      PerDatasetConfigs: (await loadJsonInput(options.searchConfig)) ?? existingConfig.PerDatasetConfigs,
+      QueryCompletionConfig: (await loadJsonInput(options.queryCompletionConfig)) ?? existingConfig.QueryCompletionConfig,
+      WantToSearchConfig: (await loadJsonInput(options.wantToSearchConfig)) ?? existingConfig.WantToSearchConfig,
+      OverviewConfig: (await loadJsonInput(options.overviewConfig)) ?? existingConfig.OverviewConfig
     });
+  }
+  if (itemTypeFilterConfig) {
+    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig, options.itemDatasetId);
   }
 
   if (configPayload) {
@@ -1276,7 +1383,6 @@ export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOpti
   }
 
   const payload =
-    (await loadJsonInput(options.data)) ??
     compactObject({
       ApplicationId: options.applicationId,
       SceneId: options.sceneId,
@@ -1315,6 +1421,8 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
   const userEventScenes = options.userEventScenes;
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
+  const filterConfig = mergeRecommendSceneFilterConfig(await loadJsonInput(options.filterConfig), itemTypeFilterConfig);
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
@@ -1330,7 +1438,7 @@ export async function runRecommendSceneCreateCommand(options: RecommendSceneCrea
       ClickEventTypes: await loadOptionalStringArray(options.clickEventTypes),
       PositiveEventTypes: await loadOptionalStringArray(options.positiveEventTypes),
       NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes),
-      FilterConfig: await loadJsonInput(options.filterConfig),
+      FilterConfig: filterConfig,
       DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data or required scene fields for recommend scene create.');
@@ -1393,6 +1501,7 @@ function extractRecommendSceneV2(response: unknown): Record<string, any> {
 
 async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
   const configPatch = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
   const flagConfigPatch = compactObject({
     MaxResults: options.count,
     FilterRuleId: options.filterRuleId,
@@ -1409,7 +1518,7 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
   });
   const userEventScenes = await loadOptionalStringArray(options.userEventScenes);
-  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0;
+  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0 || itemTypeFilterConfig !== undefined;
   const hasTopLevelPatch =
     options.type !== undefined ||
     options.name !== undefined ||
@@ -1442,11 +1551,14 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     throw new Error('GetRecommendSceneV2 did not return a full Config. Cannot build a full PublishRecommendSceneV2 payload.');
   }
 
-  const mergedConfig = {
+  const mergedConfig: Record<string, unknown> = {
     ...currentConfig,
     ...(configPatch as Record<string, unknown> | undefined),
     ...flagConfigPatch
   };
+  if (itemTypeFilterConfig) {
+    mergedConfig.FilterConfig = mergeRecommendSceneFilterConfig(mergedConfig.FilterConfig, itemTypeFilterConfig);
+  }
   validateRecommendSceneConfig(mergedConfig);
 
   return compactObject({
@@ -2044,6 +2156,13 @@ export async function runProductDomainFromArgv(domain: string, argv: string[]): 
       }
       await runDataCli(argv);
       return true;
+    case 'item':
+      if (isDomainHelpRequest(argv)) {
+        printDomainHelp(domain);
+        return true;
+      }
+      await runItemCli(argv);
+      return true;
     case 'connector':
       if (isDomainHelpRequest(argv)) {
         printDomainHelp(domain);
@@ -2111,6 +2230,7 @@ export function printProductDomainsHelp(): void {
     'vs dataset schema check',
     'vs dataset subscription create|get|list|close',
     'vs data write|import|delete',
+    'vs item profile|plan|review|provision|verify|apply',
     'vs connector init|run|status|stop|inspect',
     'vs search run|scene create|list|get|update|delete',
     'vs recommend run|scene create|list|get|update|delete',
@@ -2181,6 +2301,28 @@ COMMON FLAGS
 
 COMMON FLAGS
   --base-url --ak --sk --region --timeout-ms --data --format --jq --output`,
+    item: `${renderUsageBlock(
+      [
+        'vs item profile --file ./items.json [--type <item|video>] [output flags]',
+        'vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [--project-name <name>] [output flags]',
+        'vs item review --plan-dir <dir> [--reviewer <name>] [--review-notes <text>] [output flags]',
+        'vs item provision --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--force --dry-run] [workflow flags]',
+        'vs item verify --plan-dir <dir> [--application-id <id> --dataset-id <id>] [--wait-indexed] [--search-query <text> --chat-message <text>] [--skip-search --skip-chat] [workflow flags]',
+        'vs item apply --plan-dir <dir> [--phase <provision|verify|all>] [--application-id <id> --dataset-id <id>] [--application-name <name> --dataset-name <name>] [--skip-app] [--confirm-review | --interactive-review] [--reviewer <name>] [--review-notes <text>] [--run-trials --force --dry-run] [--confirm-recommend-entry-binding --recommend-bhv-scene-types <scene_a,scene_b>] [--search-query <text> --chat-message <text>] [workflow flags]'
+      ]
+    )}
+
+DESCRIPTION
+  Understand arbitrary structured item data, generate a reviewable onboarding plan, and apply it to
+  create / ingest / activate a Viking item-search app. Use \`--dry-run\` first when reviewing a plan.
+
+COMMON FLAGS
+  profile/plan:
+    --type <item|video> --item-type-result <variant|parent> --format --jq --output
+  review:
+    --format --jq --output
+  apply:
+    --base-url --ak --sk --region --timeout-ms --project-name --format --jq --output`,
     connector: `${renderUsageBlock(
       [
         'vs connector export --source mysql --source-table <table> --id-field <field> --cursor-field <field> [--dataset-name <name> --job <job>] [connector flags]',
@@ -2244,7 +2386,7 @@ COMMON FLAGS
         'vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]',
         'vs search scene list --application-id <id> [service flags]',
         'vs search scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
+        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
         'vs search scene delete --application-id <id> --scene-id <id> [service flags]',
         'vs search tune llm-check [--live] [service flags]',
         'vs search tune validate --queries <file> [--query-count <n>] [service flags]',
@@ -2276,10 +2418,10 @@ SEARCH SCENE ENUMS
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
-        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--item-type-result variant|parent] [--item-type-field item_type] [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result variant|parent] [--item-type-field item_type] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
         'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
         'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
@@ -2861,6 +3003,135 @@ EXAMPLES
   console.log(withOpenApiReferenceHint(helpByAction[key] ?? helpByAction[action] ?? `Unknown app subcommand: ${[action, subAction].filter(Boolean).join(' ')}`));
 }
 
+function printItemCommandHelp(action: string): void {
+  const helpByAction: Record<string, string> = {
+    plan: `Generate a reviewable item-onboarding plan with schema, field-config, and app artifacts.
+
+USAGE
+  vs item plan --file ./items.json [--type <item|video>] [--item-type-result variant|parent] [--goal <text>] [--output-dir <dir>] [--dataset-name <name>] [--application-name <name>] [--skip-app] [output flags]
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app [output flags]
+
+DESCRIPTION
+  Use this command to generate the plan artifacts an agent or operator will review before provisioning.
+  For dataset-only onboarding, pass \`--skip-app\`; the generated plan will include \`dataset-create.json\`
+  and \`normalized-items.json\` for the follow-up \`dataset create + dataset ingest\` flow.
+
+KEY FLAGS
+  --file               Source JSON array, JSONL, or CSV file.
+  --type               Dataset type: item or video. Pass it explicitly for video data.
+  --item-type-result   Generated item hierarchy filter for search/recommend configs. Defaults to variant.
+  --goal               Business goal carried into generated reports and payload descriptions.
+  --output-dir         Custom directory for plan artifacts.
+  --dataset-name       Override the generated dataset name.
+  --application-name   Override the generated application name.
+  --skip-app           Generate a dataset-only plan without app creation artifacts.
+
+EXAMPLES
+  vs item plan --file ./items.json --output-dir ./.viking/item-plan
+  vs item plan --file ./items.csv --goal "Build product item search" --application-name catalog-app
+  vs item plan --file ./items.jsonl --type item --item-type-result parent --goal "Build item search" --skip-app`,
+    apply: `Compatibility wrapper around item provision / verify.
+
+USAGE
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase verify [workflow flags]
+  vs item apply --plan-dir ./.viking/item-plans/<plan> --phase all --confirm-review [workflow flags]
+
+DESCRIPTION
+  Defaults to \`phase=provision\` unless \`--run-trials\` or \`--phase all\` is passed. Use
+  \`--confirm-review\` for a real apply after schema and bind-time field config review. Use
+  \`--skip-app\` to stop at dataset provisioning when you need to preserve the dataset-only boundary.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --phase                           Execution phase: provision, verify, or all.
+  --confirm-review                  Required for a real apply path.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Skip app creation and app-level setup.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --run-trials                      Legacy alias for \`--phase all\`.
+  --confirm-recommend-entry-binding Confirm the recommend scene target page/module before bootstrap.
+  --recommend-bhv-scene-types       Comma-separated behavior scene types for recommend bootstrap.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase verify
+  vs item apply --plan-dir ./.viking/item-plans/demo --phase all --confirm-review
+  vs item apply --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    provision: `Provision item onboarding resources up to dataset binding and activation start.
+
+USAGE
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --confirm-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --interactive-review [workflow flags]
+  vs item provision --plan-dir ./.viking/item-plans/<plan> --dry-run [workflow flags]
+
+DESCRIPTION
+  Stage-one provisioning command. It creates or reuses the dataset and, unless \`--skip-app\` is passed,
+  continues through app creation and dataset binding. It does not wait for runtime readiness or run
+  search/chat verification.
+
+KEY FLAGS
+  --plan-dir                        Directory containing plan.json and generated artifacts.
+  --confirm-review                  Required for real provisioning after review is complete.
+  --interactive-review              Render review summary and continue interactively.
+  --skip-app                        Stop after dataset provisioning and skip app-level binding.
+  --application-id / --dataset-id   Reuse existing resources instead of creating new ones.
+  --dry-run                         Print planned actions without calling Viking APIs.
+
+EXAMPLES
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --interactive-review
+  vs item provision --plan-dir ./.viking/item-plans/demo --dry-run
+  vs item provision --plan-dir ./.viking/item-plans/demo --confirm-review --skip-app`,
+    verify: `Wait until provisioned item data becomes searchable, then run runtime verification.
+
+USAGE
+  vs item verify --plan-dir ./.viking/item-plans/<plan> [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --search-query "wireless headphones" [workflow flags]
+  vs item verify --plan-dir ./.viking/item-plans/<plan> --skip-chat [workflow flags]
+
+DESCRIPTION
+  Use this after provisioning to wait for indexing and run search/chat smoke checks. You can override
+  the generated search query or chat message, skip individual runtime checks, or bootstrap recommend
+  verification when the required recommend flags are present.
+
+KEY FLAGS
+  --plan-dir             Directory containing plan.json and provision artifacts.
+  --wait-indexed         Wait for dataset/app searchability before runtime checks.
+  --search-query         Override the generated search smoke query.
+  --chat-message         Override the generated chat smoke message.
+  --skip-search          Skip runtime search smoke.
+  --skip-chat            Skip runtime chat smoke.
+  --dry-run              Print planned verify actions without calling Viking APIs.
+
+EXAMPLES
+  vs item verify --plan-dir ./.viking/item-plans/demo
+  vs item verify --plan-dir ./.viking/item-plans/demo --search-query "wireless headphones"
+  vs item verify --plan-dir ./.viking/item-plans/demo --skip-chat`,
+    review: `Render the current schema and bind-time field-config summary for a plan.
+
+USAGE
+  vs item review --plan-dir ./.viking/item-plans/<plan> [output flags]
+  vs item review --plan-dir ./.viking/item-plans/<plan> --reviewer alice --review-notes "Reviewed with PM" [output flags]
+
+DESCRIPTION
+  Use this to inspect the current review state and write \`review-confirmation.json\` from the plan's
+  current artifacts. This is a review record command; it does not provision or verify runtime behavior.
+
+KEY FLAGS
+  --plan-dir      Directory containing plan.json and review-confirmation.json.
+  --reviewer      Reviewer name to record.
+  --review-notes  Optional notes to persist in review-confirmation.json.
+
+EXAMPLES
+  vs item review --plan-dir ./.viking/item-plans/demo
+  vs item review --plan-dir ./.viking/item-plans/demo --reviewer alice --review-notes "Reviewed with PM"`,
+  };
+
+  console.log(helpByAction[action] ?? `Unknown item subcommand: ${action}`);
+}
+
 function printSearchCommandHelp(action: string, subAction?: string): void {
   const helpByAction: Record<string, string> = {
     run: `Run a search request against an application scene.
@@ -2962,7 +3233,7 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
@@ -2976,6 +3247,9 @@ KEY FLAGS
   --scene-id                 Target search scene ID.
   --config                   Full scene \`Config\` object.
   --search-config            \`Config.PerDatasetConfigs\` array only.
+  --item-type-result         Search item hierarchy when the item dataset has ItemType: variant or parent.
+  --item-dataset-id          Item dataset whose ItemTypeFilter should be updated. Required with --item-type-result.
+  --item-type-field          ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
   --overview-config          \`Config.OverviewConfig\` object only.
@@ -3583,6 +3857,119 @@ async function runDataCli(argv: string[]): Promise<void> {
   }
 }
 
+async function runItemCli(argv: string[]): Promise<void> {
+  const action = argv[0];
+  if (hasHelpFlag(argv.slice(1))) {
+    printDomainHelp('item');
+    return;
+  }
+  const values = parseStandaloneOptions(argv.slice(1));
+
+  switch (action) {
+    case 'profile':
+      await runItemProfileCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video'
+      });
+      return;
+    case 'plan':
+      await runItemPlanCommand({
+        file: requiredString(values.file, '--file'),
+        datasetType: optionalString(values.type) as 'item' | 'video',
+        itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+        goal: optionalString(values.goal),
+        outputDir: optionalString(values['output-dir']),
+        datasetName: optionalString(values['dataset-name']),
+        applicationName: optionalString(values['application-name']),
+        projectName: optionalString(values['project-name']),
+        skipApp: optionalBoolean(values['skip-app'])
+      });
+      return;
+    case 'review':
+      await runItemReviewCommand({
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        reviewer: optionalString(values.reviewer),
+        notes: optionalString(values['review-notes'])
+      });
+      return;
+    case 'provision':
+      await runItemProvisionCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        skipApp: optionalBoolean(values['skip-app']),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        force: optionalBoolean(values.force),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    case 'verify':
+      await runItemVerifyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        waitIndexed: optionalBoolean(values['wait-indexed']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        skipSearch: optionalBoolean(values['skip-search']),
+        skipChat: optionalBoolean(values['skip-chat']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    case 'apply':
+      await runItemApplyCommand({
+        ...toStandaloneServiceOptions(values),
+        planDir: requiredString(values['plan-dir'], '--plan-dir'),
+        projectName: optionalString(values['project-name']),
+        applicationId: optionalString(values['application-id']),
+        datasetId: optionalString(values['dataset-id']),
+        applicationName: optionalString(values['application-name']),
+        datasetName: optionalString(values['dataset-name']),
+        phase: optionalString(values.phase) as 'provision' | 'verify' | 'all' | undefined,
+        waitReady: optionalBoolean(values['wait-ready']),
+        waitTimeoutMs: parseOptionalInt(optionalString(values['wait-timeout-ms'])),
+        pollIntervalMs: parseOptionalInt(optionalString(values['poll-interval-ms'])),
+        runTrials: optionalBoolean(values['run-trials']),
+        searchQuery: optionalString(values['search-query']),
+        chatMessage: optionalString(values['chat-message']),
+        confirmReview: optionalBoolean(values['confirm-review']),
+        interactiveReview: optionalBoolean(values['interactive-review']),
+        reviewer: optionalString(values.reviewer),
+        reviewNotes: optionalString(values['review-notes']),
+        confirmRecommendEntryBinding: optionalBoolean(values['confirm-recommend-entry-binding']),
+        force: optionalBoolean(values.force),
+        recommendSceneType: optionalString(values['recommend-scene-type']),
+        recommendSceneName: optionalString(values['recommend-scene-name']),
+        recommendBhvSceneTypes: splitCommaList(optionalString(values['recommend-bhv-scene-types'])),
+        recommendUserId: optionalString(values['recommend-user-id']),
+        recommendParentId: optionalString(values['recommend-parent-id']),
+        recommendParentIds: splitCommaList(optionalString(values['recommend-parent-ids'])),
+        dryRun: optionalBoolean(values['dry-run'])
+      });
+      return;
+    default:
+      throw new Error(`Unknown item subcommand: ${action}`);
+  }
+}
+
 async function runConnectorCli(argv: string[]): Promise<void> {
   const action = argv[0];
   if (hasHelpFlag(argv.slice(1))) {
@@ -3801,6 +4188,9 @@ async function runSearchCli(argv: string[]): Promise<void> {
             sceneId: requiredString(values['scene-id'], '--scene-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
+            itemDatasetId: optionalString(values['item-dataset-id']),
+            itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+            itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
             searchConfig: optionalString(values['search-config']),
             queryCompletionConfig: optionalString(values['query-completion-config']),
@@ -3971,6 +4361,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
           recommendModel: optionalString(values['recommend-model']),
           optimizationTarget: optionalString(values['optimization-target']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
@@ -4005,6 +4397,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']) as 'variant' | 'parent' | undefined,
+          itemTypeField: optionalString(values['item-type-field']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
           config: optionalString(values.config),
           count: parseOptionalInt(optionalString(values.count)),
@@ -4381,6 +4775,8 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'max-attempts': { type: 'string' },
       'environment-id': { type: 'string' },
       phase: { type: 'string' },
+      'item-type-result': { type: 'string' },
+      'item-type-field': { type: 'string' },
       'skip-search': { type: 'boolean' },
       'skip-chat': { type: 'boolean' },
       types: { type: 'string' },
@@ -4391,6 +4787,7 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       'recommend-bhv-scene-types': { type: 'string' },
       'recommend-user-id': { type: 'string' },
       'recommend-parent-id': { type: 'string' },
+      'recommend-parent-ids': { type: 'string' },
       'user-event-scenes': { type: 'string' },
       'bhv-scene-types': { type: 'string' },
       'click-event-types': { type: 'string' },

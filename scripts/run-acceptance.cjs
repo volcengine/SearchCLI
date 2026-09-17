@@ -94,6 +94,8 @@ async function runCoreSuite() {
   await runTest('search-tune-run-help', testSearchTuneRunHelp);
   await runTest('app-list-help', testAppListHelp);
   await runTest('dataset-list-help', testDatasetListHelp);
+  await runTest('item-profile', testItemProfile);
+  await runTest('item-plan', testItemPlan);
   await runTest('data-delete-mock', testDataDeleteMock);
   await runTest('project-create-deploy', testProjectCreateDeploy);
   await runTest('config-summary-help', testConfigSummaryHelp);
@@ -163,6 +165,10 @@ async function runLiveSuite() {
     return;
   }
   await runTest('v2-onboarding-live', testV2OnboardingLivePlaceholder);
+  await runTest('live-search-default-scene', testLiveSearchDefaultScene);
+  await runTest('live-search-non-default-scene', testLiveSearchNonDefaultScene);
+  await runTest('live-recommend-default-scene', testLiveRecommendDefaultScene);
+  await runTest('live-recommend-non-default-scene', testLiveRecommendNonDefaultScene);
 }
 
 function loadV2OnboardingOrchestrator() {
@@ -215,6 +221,10 @@ async function runTest(name, fn) {
     const detail = await fn();
     tests.push({ name, suite: currentSuite, status: 'passed', detail });
   } catch (error) {
+    if (error instanceof SkippedTest) {
+      tests.push({ name, status: 'skipped', detail: error.message });
+      return;
+    }
     tests.push({
       name,
       suite: currentSuite,
@@ -226,6 +236,17 @@ async function runTest(name, fn) {
 
 async function runSkipped(name, reason) {
   tests.push({ name, suite: currentSuite, status: 'skipped', detail: reason });
+}
+
+class SkippedTest extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'SkippedTest';
+  }
+}
+
+function skipTest(reason) {
+  throw new SkippedTest(reason);
 }
 
 async function testRootHelp() {
@@ -354,11 +375,11 @@ async function testValidateSkillsSpacePath() {
 }
 
 async function testDatasetListHelp() {
-  const { stdout } = await runCli(['dataset', 'list', '--help']);
+  const { stdout } = await runCli(['dataset', '--help']);
   assert.match(stdout, /--type/);
   assert.match(stdout, /--full/);
-  assert.match(stdout, /dataset list \[--type <type>\] \[--name <text>\] \[--application-id <id>\] \[--full\]/i);
-  return `${command.prefix} dataset list --help`;
+  assert.match(stdout, /dataset list \[--type <type> --name <text> --application-id <id> --full\]/i);
+  return `${command.prefix} dataset --help`;
 }
 
 async function testAppListHelp() {
@@ -1300,8 +1321,8 @@ async function testSearchTuneApplyDryRun() {
 }
 
 async function testConfigSummaryHelp() {
-  const datasetGet = await runCli(['dataset', 'get', '--help']);
-  assert.match(datasetGet.stdout, /--full/);
+  const datasetHelp = await runCli(['dataset', '--help']);
+  assert.match(datasetHelp.stdout, /dataset get --id <dataset-id> \[--full\]/);
 
   const appDatasetConfigGet = await runCli(['app', 'dataset-config', 'get', '--help']);
   assert.match(appDatasetConfigGet.stdout, /--full/);
@@ -1313,7 +1334,70 @@ async function testConfigSummaryHelp() {
   return `${command.prefix} dataset get --help && ${command.prefix} app dataset-config get --help && ${command.prefix} app --help`;
 }
 
+async function testItemProfile() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-profile-'));
+  const samplePath = path.join(workspace, 'items.json');
+  fs.writeFileSync(
+    samplePath,
+    JSON.stringify(
+      [
+        { doc_id: 'item-1', title: 'Blue notebook', category: 'stationery', content: 'Soft cover notebook' },
+        { doc_id: 'item-2', title: 'Green notebook', category: 'stationery', content: 'Hard cover notebook' }
+      ],
+      null,
+      2
+    )
+  );
+
+  const { stdout } = await runCli(['item', 'profile', '--file', samplePath, '--json']);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.inferred.primaryKeyField, 'doc_id');
+  assert.equal(payload.inferred.titleField, 'title');
+  return `${command.prefix} item profile --file ${samplePath} --json`;
+}
+
+async function testItemPlan() {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'viking-acceptance-plan-'));
+  const samplePath = path.join(workspace, 'items.json');
+  const outputDir = path.join(workspace, 'plans');
+  fs.writeFileSync(
+    samplePath,
+    JSON.stringify(
+      [
+        { doc_id: 'item-1', title: 'Blue notebook', category: 'stationery', content: 'Soft cover notebook' },
+        { doc_id: 'item-2', title: 'Green notebook', category: 'stationery', content: 'Hard cover notebook' }
+      ],
+      null,
+      2
+    )
+  );
+
+  const { stdout } = await runCli([
+    'item',
+    'plan',
+    '--file',
+    samplePath,
+    '--goal',
+    'Build stationery search',
+    '--output-dir',
+    outputDir,
+    '--json'
+  ]);
+  const payload = JSON.parse(stdout);
+  const files = payload.plan.files;
+  for (const required of ['schema', 'fieldConfig', 'onlineConfig', 'validation']) {
+    assert.ok(files[required], `missing ${required}`);
+    assert.ok(fs.existsSync(path.join(payload.planDir, files[required])), `file not found for ${required}`);
+  }
+  assert.ok(fs.existsSync(payload.planPath), 'missing plan.json');
+  return `${command.prefix} item plan --file ${samplePath} --goal "Build stationery search" --output-dir ${outputDir} --json`;
+}
+
 async function testHighRiskGuards() {
+  const itemApplyHelp = await runCli(['item', 'apply', '--help']);
+  assert.match(itemApplyHelp.stdout, /--confirm-review/);
+  assert.match(itemApplyHelp.stdout, /--confirm-recommend-entry-binding/);
+
   const recommendHelp = await runCli(['recommend', '--help']);
   assert.match(recommendHelp.stdout, /--confirm-entry-binding/);
 
@@ -1321,7 +1405,7 @@ async function testHighRiskGuards() {
   const chatSkillPayload = JSON.parse(chatSkill.stdout);
   assert.match(JSON.stringify(chatSkillPayload.workflow), /not treat the output as NDJSON/i);
 
-  return `${command.prefix} recommend --help && ${command.prefix} skill show --name vs-chat --json`;
+  return `${command.prefix} item apply --help && ${command.prefix} recommend --help && ${command.prefix} skill show --name vs-chat --json`;
 }
 
 async function testAuthImportEnv() {
@@ -2750,6 +2834,130 @@ async function testDataWriteMock() {
 
 async function testV2OnboardingLivePlaceholder() {
   return 'Live V2 onboarding suite is a placeholder. Replace with a real signed E2E call when ready.';
+}
+
+async function testLiveSearchDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.itemDatasetId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID and SEARCHCLI_TEST_ITEM_DATASET_ID.');
+  }
+
+  const { stdout } = await runCli(
+    [
+      'search',
+      'run',
+      '--application-id',
+      context.applicationId,
+      '--dataset-id',
+      context.itemDatasetId,
+      '--query',
+      context.query,
+      '--page-size',
+      '3',
+      '--project-name',
+      context.projectName,
+      '--json'
+    ],
+    { env: context.env }
+  );
+  assertRuntimeResponse(stdout, 'search_results');
+  return `${command.prefix} search run --application-id ${context.applicationId} --dataset-id ${context.itemDatasetId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveSearchNonDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.itemDatasetId || !context.searchSceneId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_ITEM_DATASET_ID, and SEARCHCLI_TEST_SEARCH_SCENE_ID.');
+  }
+
+  const { stdout } = await runCli(
+    [
+      'search',
+      'run',
+      '--application-id',
+      context.applicationId,
+      '--scene-id',
+      context.searchSceneId,
+      '--dataset-id',
+      context.itemDatasetId,
+      '--query',
+      context.query,
+      '--page-size',
+      '3',
+      '--project-name',
+      context.projectName,
+      '--json'
+    ],
+    { env: context.env }
+  );
+  assertRuntimeResponse(stdout, 'search_results');
+  return `${command.prefix} search run --application-id ${context.applicationId} --scene-id ${context.searchSceneId} --dataset-id ${context.itemDatasetId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveRecommendDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.recommendDefaultSceneId || !context.userId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_RECOMMEND_DEFAULT_SCENE_ID, and SEARCHCLI_TEST_USER_ID.');
+  }
+
+  const { stdout } = await runCli(buildRecommendRunArgs(context, context.recommendDefaultSceneId), { env: context.env });
+  assertRuntimeResponse(stdout, 'rec_results');
+  return `${command.prefix} recommend run --application-id ${context.applicationId} --scene-id ${context.recommendDefaultSceneId} --project-name ${context.projectName} --json`;
+}
+
+async function testLiveRecommendNonDefaultScene() {
+  const context = getLiveTestContext();
+  if (!context.applicationId || !context.recommendNonDefaultSceneId || !context.userId) {
+    skipTest('Set SEARCHCLI_TEST_APPLICATION_ID, SEARCHCLI_TEST_RECOMMEND_NON_DEFAULT_SCENE_ID, and SEARCHCLI_TEST_USER_ID.');
+  }
+
+  const { stdout } = await runCli(buildRecommendRunArgs(context, context.recommendNonDefaultSceneId), { env: context.env });
+  assertRuntimeResponse(stdout, 'rec_results');
+  return `${command.prefix} recommend run --application-id ${context.applicationId} --scene-id ${context.recommendNonDefaultSceneId} --project-name ${context.projectName} --json`;
+}
+
+function getLiveTestContext() {
+  return {
+    applicationId: process.env.SEARCHCLI_TEST_APPLICATION_ID,
+    itemDatasetId: process.env.SEARCHCLI_TEST_ITEM_DATASET_ID,
+    searchSceneId: process.env.SEARCHCLI_TEST_SEARCH_SCENE_ID,
+    recommendDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_DEFAULT_SCENE_ID,
+    recommendNonDefaultSceneId: process.env.SEARCHCLI_TEST_RECOMMEND_NON_DEFAULT_SCENE_ID,
+    userId: process.env.SEARCHCLI_TEST_USER_ID,
+    query: process.env.SEARCHCLI_TEST_QUERY ?? 'GAZELLE 秦舒培同款经典运动板鞋',
+    projectName: process.env.SEARCHCLI_TEST_PROJECT_NAME ?? 'searchcli-test',
+    env: Object.fromEntries(
+      Object.entries({
+        VIKING_AK: process.env.VIKING_AK,
+        VIKING_SK: process.env.VIKING_SK
+      }).filter(([, value]) => value !== undefined)
+    )
+  };
+}
+
+function buildRecommendRunArgs(context, sceneId) {
+  const args = [
+    'recommend',
+    'run',
+    '--application-id',
+    context.applicationId,
+    '--scene-id',
+    sceneId,
+    '--user-id',
+    context.userId,
+    '--page-size',
+    '3',
+    '--project-name',
+    context.projectName,
+    '--json'
+  ];
+  return args;
+}
+
+function assertRuntimeResponse(stdout, resultKey) {
+  const payload = JSON.parse(stdout);
+  assert.ok(payload.request_id, 'missing request_id');
+  assert.ok(payload.result && Array.isArray(payload.result[resultKey]), `missing result.${resultKey}`);
 }
 
 function writeReport() {
