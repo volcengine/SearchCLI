@@ -11,7 +11,8 @@ export default class SearchSceneCreate extends Command {
   static override examples = [
     '<%= config.bin %> search scene create --application-id app_xxx --name default-search',
     '<%= config.bin %> search scene create --application-id app_xxx --name default-search --description "Main search scene"',
-    '<%= config.bin %> search scene create --application-id app_xxx --name default-search --search-config @per-dataset.json --item-dataset-id ds_xxx --item-type-result parent',
+    '<%= config.bin %> search scene create --application-id app_xxx --name default-search --search-config @per-dataset.json --item-dataset-id ds_xxx',
+    '<%= config.bin %> search scene create --application-id app_xxx --name parent-search --search-config @per-dataset.json --item-dataset-id ds_xxx --item-type-result parent',
     '<%= config.bin %> search scene create --data @create-search-scene.json'
   ];
 
@@ -23,9 +24,9 @@ export default class SearchSceneCreate extends Command {
     description: Flags.string({ description: 'Search scene description.' }),
     config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' }),
     'search-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for Config.PerDatasetConfigs.' }),
-    'item-dataset-id': Flags.string({ description: 'Viking item dataset ID whose ItemTypeFilter should be set.' }),
+    'item-dataset-id': Flags.string({ description: 'Viking item dataset ID whose ItemTypeFilter should be set. Defaults to variant results when --item-type-result is omitted.' }),
     'item-type-result': Flags.string({
-      description: 'Search item hierarchy when the item dataset has ItemType: variant or parent.',
+      description: 'Search item hierarchy when the item dataset has ItemType: variant or parent. Defaults to variant on create when --item-dataset-id is set.',
       options: ['variant', 'parent']
     }),
     'item-type-field': Flags.string({ description: 'ItemType field name used by ItemTypeFilter. Defaults to item_type.' })

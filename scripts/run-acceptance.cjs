@@ -2364,8 +2364,6 @@ async function testSearchSceneV2ActionsMock() {
         `@${perDatasetConfigPath}`,
         '--item-dataset-id',
         'ds-v2-1',
-        '--item-type-result',
-        'parent',
         ...v2ServiceFlags(server.baseUrl)
       ],
       { env: envWithVikingBaseUrlsReset(server.baseUrl) }
@@ -2401,7 +2399,7 @@ async function testSearchSceneV2ActionsMock() {
         '--item-dataset-id',
         'ds-v2-1',
         '--item-type-result',
-        'variant',
+        'parent',
         ...v2ServiceFlags(server.baseUrl)
       ],
       { env: envWithVikingBaseUrlsReset(server.baseUrl) }
@@ -2432,8 +2430,8 @@ async function testSearchSceneV2ActionsMock() {
       ]
     );
     assert.equal(state.requests[0].body.ApplicationId, 'app-v2-1');
-    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, true);
-    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must');
+    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, false);
+    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must_not');
     assert.deepEqual(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.conds, ['parent']);
     assert.equal(state.requests[1].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[2].body.ApplicationId, 'app-v2-1');
@@ -2441,8 +2439,8 @@ async function testSearchSceneV2ActionsMock() {
     assert.equal(state.requests[4].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[4].body.SceneId, 'scene-v2-1');
     assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].DatasetId, 'ds-v2-1');
-    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, false);
-    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must_not');
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, true);
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must');
     assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].ScoreType, 'image_semantic');
     assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].Threshold, 0.72);
     assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Fallback.MinResultCount, 5);
