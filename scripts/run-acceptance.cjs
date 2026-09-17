@@ -129,6 +129,7 @@ async function runV2OnboardingSuite() {
   await runTest('v2-app-create-mock', testAppCreateMock);
   await runTest('v2-app-attach-dataset-mock', testAppAttachDatasetMock);
   await runTest('v2-search-scene-actions-mock', testSearchSceneV2ActionsMock);
+  await runTest('v2-parent-variant-recommend-scene-mock', testParentVariantRecommendSceneMock);
   await runTest('data-source-subscription-actions-mock', testDataSourceSubscriptionActionsMock);
   await runTest('purchase-order-actions-mock', testPurchaseOrderActionsMock);
   await runTest('v2-data-write-mock', testDataWriteMock);
@@ -2070,6 +2071,7 @@ async function testDatasetValidateSchemaMixed() {
       { FieldName: 'item_id', FieldType: 'string', BizAttr: 'multi_modal_id', IsPrimaryKey: true, Required: true },
       { Name: 'title', Type: 'string', BizAttr: 'multi_modal_title', Required: false },
       { Name: 'tags', FieldType: 'array<string>' },
+      { FieldName: 'item_type', FieldType: 'string', BizAttr: 'multi_modal_item_type' },
       { FieldName: 'price', Type: 'float' }
     ],
     FieldDescMap: {
@@ -2086,13 +2088,14 @@ async function testDatasetValidateSchemaMixed() {
   };
   return runValidateSchema(mixedResult, ({ stdout }) => {
     assert.match(stdout, /vs-schema-confirm: BEGIN/);
-    assert.match(stdout, /Field count: 4/);
+    assert.match(stdout, /Field count: 5/);
     assert.match(stdout, /Primary key: item_id \(BizAttr=multi_modal_id\)/);
     assert.match(stdout, /name\s+\|\s+type\s+\|\s+BizAttr\s+\|\s+required\s+\|\s+description/);
     assert.match(stdout, /item_id\s+\|\s+`string`\s+\|\s+multi_modal_id\s+\|\s+yes\s+\|\s+Primary key/);
     assert.match(stdout, /tags\s+\|\s+`array<string>`\s+\|\s+-\s+\|\s+-\s+\|\s+Free-form tags/);
     assert.match(stdout, /price\s+\|\s+`float`\s+\|\s+-\s+\|\s+-\s+\|\s+-/);
-    assert.match(stdout, /FieldDescMap is missing entries for: price/);
+    assert.match(stdout, /FieldDescMap is missing entries for: item_type, price/);
+    assert.match(stdout, /Parent-variant schema is incomplete: item_type field\(s\) item_type require a matching parent_id BizAttr field/);
     assert.match(stdout, /Field roles reference unknown schema fields: non_existing/);
   });
 }
@@ -2297,7 +2300,17 @@ async function testSearchSceneV2ActionsMock() {
       }),
       GetSearchSceneV2: () => ({
         ResponseMetadata: { RequestId: 'req-search-scene-get' },
-        Result: { SceneId: 'scene-v2-1' }
+        Result: {
+          SceneId: 'scene-v2-1',
+          Config: {
+            PerDatasetConfigs: [
+              {
+                DatasetId: 'ds-v2-1',
+                TextSearchConfig: { Mode: 'balanced' }
+              }
+            ]
+          }
+        }
       }),
       PublishSearchSceneV2: () => ({
         ResponseMetadata: { RequestId: 'req-search-scene-publish' },
@@ -2347,6 +2360,12 @@ async function testSearchSceneV2ActionsMock() {
         'app-v2-1',
         '--name',
         'search-v2',
+        '--search-config',
+        `@${perDatasetConfigPath}`,
+        '--item-dataset-id',
+        'ds-v2-1',
+        '--item-type-result',
+        'parent',
         ...v2ServiceFlags(server.baseUrl)
       ],
       { env: envWithVikingBaseUrlsReset(server.baseUrl) }
@@ -2379,6 +2398,10 @@ async function testSearchSceneV2ActionsMock() {
         'scene-v2-1',
         '--search-config',
         `@${perDatasetConfigPath}`,
+        '--item-dataset-id',
+        'ds-v2-1',
+        '--item-type-result',
+        'variant',
         ...v2ServiceFlags(server.baseUrl)
       ],
       { env: envWithVikingBaseUrlsReset(server.baseUrl) }
@@ -2403,24 +2426,118 @@ async function testSearchSceneV2ActionsMock() {
         'CreateSearchSceneV2',
         'ListSearchScenesV2',
         'GetSearchSceneV2',
+        'GetSearchSceneV2',
         'PublishSearchSceneV2',
         'DeleteSearchSceneV2'
       ]
     );
     assert.equal(state.requests[0].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, true);
+    assert.equal(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must');
+    assert.deepEqual(state.requests[0].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.conds, ['parent']);
     assert.equal(state.requests[1].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[2].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[2].body.SceneId, 'scene-v2-1');
-    assert.equal(state.requests[3].body.ApplicationId, 'app-v2-1');
-    assert.equal(state.requests[3].body.SceneId, 'scene-v2-1');
-    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].DatasetId, 'ds-v2-1');
-    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].ScoreType, 'image_semantic');
-    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].Threshold, 0.72);
-    assert.equal(state.requests[3].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Fallback.MinResultCount, 5);
     assert.equal(state.requests[4].body.ApplicationId, 'app-v2-1');
     assert.equal(state.requests[4].body.SceneId, 'scene-v2-1');
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].DatasetId, 'ds-v2-1');
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.ForParent, false);
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].FilterConfig.ItemTypeFilter.Filter.op, 'must_not');
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].ScoreType, 'image_semantic');
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Rules[0].Threshold, 0.72);
+    assert.equal(state.requests[4].body.Config.PerDatasetConfigs[0].RelevanceCutoffConfig.Fallback.MinResultCount, 5);
+    assert.equal(state.requests[5].body.ApplicationId, 'app-v2-1');
+    assert.equal(state.requests[5].body.SceneId, 'scene-v2-1');
 
     return `${command.prefix} search scene create/list/get/update/delete use V2 actions`;
+  } finally {
+    await server.close();
+  }
+}
+
+async function testParentVariantRecommendSceneMock() {
+  const state = {
+    requests: [],
+    responses: {
+      CreateRecommendSceneV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-rec-scene-create' },
+        Result: { SceneId: 'rec-scene-v2-1', ForParent: body?.FilterConfig?.ItemTypeFilter?.ForParent }
+      }),
+      GetRecommendSceneV2: () => ({
+        ResponseMetadata: { RequestId: 'req-rec-scene-get' },
+        Result: {
+          SceneId: 'rec-scene-v2-1',
+          Type: 'for_you',
+          Name: 'rec-v2',
+          ItemDatasetId: 'ds-v2-1',
+          UserEventScenes: ['home'],
+          Config: {
+            MaxResults: 12,
+            FilterConfig: {
+              FilterRuleId: 'rule-1'
+            }
+          }
+        }
+      }),
+      PublishRecommendSceneV2: ({ body }) => ({
+        ResponseMetadata: { RequestId: 'req-rec-scene-publish' },
+        Result: { SceneId: body?.SceneId }
+      })
+    }
+  };
+  const server = await startV2MockServer(state);
+  try {
+    await runCli(
+      [
+        'recommend',
+        'scene',
+        'create',
+        '--application-id',
+        'app-v2-1',
+        '--type',
+        'for_you',
+        '--name',
+        'rec-v2',
+        '--item-dataset-id',
+        'ds-v2-1',
+        '--user-event-scenes',
+        'home',
+        '--item-type-result',
+        'parent',
+        '--confirm-entry-binding',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+    await runCli(
+      [
+        'recommend',
+        'scene',
+        'update',
+        '--application-id',
+        'app-v2-1',
+        '--scene-id',
+        'rec-scene-v2-1',
+        '--item-type-result',
+        'variant',
+        '--confirm-entry-binding',
+        ...v2ServiceFlags(server.baseUrl)
+      ],
+      { env: envWithVikingBaseUrlsReset(server.baseUrl) }
+    );
+
+    assert.deepEqual(state.requests.map(call => call.action), [
+      'CreateRecommendSceneV2',
+      'GetRecommendSceneV2',
+      'PublishRecommendSceneV2'
+    ]);
+    assert.equal(state.requests[0].body.FilterConfig.ItemTypeFilter.ForParent, true);
+    assert.equal(state.requests[0].body.FilterConfig.ItemTypeFilter.Filter.op, 'must');
+    assert.equal(state.requests[2].body.Config.MaxResults, 12);
+    assert.equal(state.requests[2].body.Config.FilterConfig.FilterRuleId, 'rule-1');
+    assert.equal(state.requests[2].body.Config.FilterConfig.ItemTypeFilter.ForParent, false);
+    assert.equal(state.requests[2].body.Config.FilterConfig.ItemTypeFilter.Filter.op, 'must_not');
+    return `${command.prefix} recommend scene create/update --item-type-result`;
   } finally {
     await server.close();
   }
