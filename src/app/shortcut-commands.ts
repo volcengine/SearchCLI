@@ -26,7 +26,6 @@ export interface RecommendShortcutRunOptions extends ShortcutServiceOptions {
   sceneId: string;
   userId?: string;
   parentId?: string;
-  parentIds?: string[];
   pageSize?: number;
 }
 
@@ -85,7 +84,7 @@ export async function runRecommendShortcutRunCommand(options: RecommendShortcutR
     (await loadJsonInput(options.data)) ??
     compactObject({
       user: options.userId ? { _user_id: options.userId } : undefined,
-      parent_items: buildRecommendParentItems(options.parentId, options.parentIds),
+      parent_items: options.parentId ? [{ _id: options.parentId }] : undefined,
       page_size: options.pageSize ?? 20
     });
   requireNonEmptyObject(payload, 'Need --data or recommend context for recommend run.');
@@ -96,7 +95,6 @@ export async function runRecommendShortcutRunCommand(options: RecommendShortcutR
     ['scene', options.sceneId],
     ['user_id', options.userId],
     ['parent_id', options.parentId],
-    ['parent_ids', options.parentIds?.join(',')],
     ['page_size', String(extractNumber(payload, 'page_size') ?? options.pageSize ?? 20)]
   ]);
   await printJson(result);
@@ -201,14 +199,6 @@ function printShortcutHeader(title: string, rows: Array<[string, string | undefi
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
-}
-
-function buildRecommendParentItems(parentId: string | undefined, parentIds: string[] | undefined): Array<{ _id: string }> | undefined {
-  const ids = [...(parentId ? [parentId] : []), ...(parentIds ?? [])]
-    .map(value => value.trim())
-    .filter(Boolean);
-  const unique = [...new Set(ids)];
-  return unique.length > 0 ? unique.map(_id => ({ _id })) : undefined;
 }
 
 function requireNonEmptyObject(value: unknown, message: string): void {
