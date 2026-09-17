@@ -105,6 +105,8 @@ Long-sequence scenes are created through an async training/configuration path. R
 ## CLI Notes
 
 - `vs recommend scene create --user-event-scenes a,b` maps to `UserEventScenes`.
+- `--item-type-result parent|variant` maps to `FilterConfig.ItemTypeFilter`. `parent` sets `ForParent=true` with a `must parent` filter; `variant` sets `ForParent=false` with a `must_not parent` filter.
+- `--item-type-field <field>` sets `FilterConfig.ItemTypeFilter.Filter.field`; omit it to use the CLI default `item_type`.
 - `--recommend-model` expects `default` or `long_sequence`, not integer enum values.
 - `--optimization-target` expects `ctr`, not integer enum values.
 - Use `--dry-run` to validate without creating.
