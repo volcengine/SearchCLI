@@ -370,7 +370,7 @@ message NumberRange {
 
 ## Field Semantics and Validation Notes
 
-This API creates a search scene with service-generated default `SearchSceneConfigV2`. The returned `Config` and `DraftConfig` fields use the same enum-like string values and field-reference constraints as the publish API. For the complete config payload contract, see [PublishSearchSceneV2](./PublishSearchSceneV2.md#field-semantics-and-validation-notes).
+This API creates a search scene with service-generated default `SearchSceneConfigV2`. The create request does not accept a `Config` payload, so it cannot set parent/variant item hierarchy or other dataset-level search configuration at creation time. Create the scene first, then call `PublishSearchSceneV2` through `vs search scene update` to switch parent/variant scope or publish other scene config changes. The returned `Config` and `DraftConfig` fields use the same enum-like string values and field-reference constraints as the publish API. For the complete config payload contract, see [PublishSearchSceneV2](./PublishSearchSceneV2.md#field-semantics-and-validation-notes).
 
 | Field | Constraint | Notes |
 | --- | --- | --- |
