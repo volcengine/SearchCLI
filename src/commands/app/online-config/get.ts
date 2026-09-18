@@ -12,7 +12,7 @@ export default class AppOnlineConfigGet extends Command {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
-    full: Flags.boolean({ description: 'Return the raw GetAppOnlineConfig response instead of the compact summary.' })
+    full: Flags.boolean({ description: 'Return the raw GetAppOnlineConfigV2 response instead of the compact summary.' })
   };
 
   async run(): Promise<void> {

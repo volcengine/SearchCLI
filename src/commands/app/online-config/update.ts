@@ -12,7 +12,8 @@ export default class AppOnlineConfigUpdate extends Command {
     ...serviceFlags,
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
-    config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' })
+    config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' }),
+    'dry-run': Flags.boolean({ description: 'Validate the config without publishing it.' })
   };
 
   async run(): Promise<void> {
@@ -29,7 +30,8 @@ export default class AppOnlineConfigUpdate extends Command {
       data: flags.data,
       projectName: flags['project-name'],
       applicationId: flags['application-id'],
-      config: flags.config
+      config: flags.config,
+      dryRun: flags['dry-run']
     });
   }
 }

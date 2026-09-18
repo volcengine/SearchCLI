@@ -811,35 +811,33 @@ export async function runAppOnlineConfigGetCommand(options: AppOnlineConfigGetOp
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName
     });
-  const response = await callConsoleTopAction('GetAppOnlineConfig', payload, options);
+  const response = await callConsoleTopAction('GetAppOnlineConfigV2', payload, options);
   if (options.full) {
     await printResult(response);
     return;
   }
 
   if (!isRecord(response)) {
-    throw new Error('GetAppOnlineConfig returned an unexpected response shape.');
+    throw new Error('GetAppOnlineConfigV2 returned an unexpected response shape.');
   }
 
   await printResult(summarizeAppOnlineConfigResponse(response, options.applicationId));
 }
 
 export async function runAppOnlineConfigUpdateCommand(options: AppOnlineConfigUpdateOptions): Promise<void> {
-  if (options.dryRun !== undefined) {
-    throw new Error('--dry-run is not supported by the console online-config API. Remove --dry-run and retry.');
-  }
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       Config: await loadJsonInput(options.config),
+      DryRun: options.dryRun,
       ProjectName: options.projectName
     });
   requireNonEmptyObject(payload, 'Need --data or --config for app online-config update.');
-  await printResult(callConsoleTopAction('UpsertAppOnlineConfig', payload, options));
+  await printResult(callConsoleTopAction('PublishAppOnlineConfigV2', payload, options));
 }
 
 export async function runDatasetCreateCommand(options: DatasetCreateOptions): Promise<void> {
@@ -5268,7 +5266,7 @@ function summarizeAppOnlineConfigResponse(response: Record<string, unknown>, app
       configDomains: config ? Object.keys(config) : [],
       chat: chatConfig
         ? compactObject({
-            searchSceneId: chatConfig.SearchSceneID,
+            searchSceneId: chatConfig.SearchSceneId,
             networkSearchMode: chatConfig.NetworkSearchMode,
             banWordCount: banWords.length,
             hasRoleInfo: hasNonEmptyString(chatConfig.RoleInfo),

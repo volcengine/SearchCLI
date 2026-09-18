@@ -17,8 +17,8 @@ This file is the final-level router for scene-related control-plane API contract
 | List search scenes, `vs search scene list` | [ListSearchScenesV2](./ListSearchScenesV2.md) |
 | Update or publish search scene config, `vs search scene update` | [PublishSearchSceneV2](./PublishSearchSceneV2.md) |
 | Delete search scene, `vs search scene delete` | [DeleteSearchSceneV2](./DeleteSearchSceneV2.md) |
-| Get application online config, `vs app online-config get` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
-| Create or update application online config, `vs app online-config update` | [UpsertAppOnlineConfig](./UpsertAppOnlineConfig.md) |
+| Get application online config, `vs app online-config get` | [GetAppOnlineConfigV2](./GetAppOnlineConfigV2.md) |
+| Update or publish application online config, `vs app online-config update` | [PublishAppOnlineConfigV2](./PublishAppOnlineConfigV2.md) |
 | Create recommend scene, `vs recommend scene create` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
 | Update or publish recommend scene, `vs recommend scene update` | [PublishRecommendSceneV2](./PublishRecommendSceneV2.md) |
 | List recommend scenes, `vs recommend scene list` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |
@@ -38,8 +38,8 @@ This file is the final-level router for scene-related control-plane API contract
 | `ListSearchScenesV2` | [ListSearchScenesV2](./ListSearchScenesV2.md) |
 | `PublishSearchSceneV2` | [PublishSearchSceneV2](./PublishSearchSceneV2.md) |
 | `DeleteSearchSceneV2` | [DeleteSearchSceneV2](./DeleteSearchSceneV2.md) |
-| `GetAppOnlineConfig` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
-| `UpsertAppOnlineConfig` | [UpsertAppOnlineConfig](./UpsertAppOnlineConfig.md) |
+| `GetAppOnlineConfigV2` | [GetAppOnlineConfigV2](./GetAppOnlineConfigV2.md) |
+| `PublishAppOnlineConfigV2` | [PublishAppOnlineConfigV2](./PublishAppOnlineConfigV2.md) |
 | `CreateRecommendSceneV2` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
 | `PublishRecommendSceneV2` | [PublishRecommendSceneV2](./PublishRecommendSceneV2.md) |
 | `ListRecommendScenesV2` | [ListRecommendScenesV2](./ListRecommendScenesV2.md) |

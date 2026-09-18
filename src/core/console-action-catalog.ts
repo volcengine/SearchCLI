@@ -14,21 +14,25 @@ export interface ConsoleTopAction {
 
 const PUBLIC_CONSOLE_TOP_ACTIONS: ConsoleTopAction[] = [
   {
-    action: 'GetAppOnlineConfig',
-    path: '/api/v1/GetAppOnlineConfig',
+    action: 'GetAppOnlineConfigV2',
+    path: '/open/GetAppOnlineConfigV2',
     version: '2025-03-01',
     description: 'Get application online config through the console API.',
     command: 'vs app online-config get --application-id <app>',
-    payload: { AppID: 'app_123', ProjectName: 'default' },
+    payload: { ApplicationId: 'app_123', ProjectName: 'default' },
     category: 'application'
   },
   {
-    action: 'UpsertAppOnlineConfig',
-    path: '/api/v1/UpsertAppOnlineConfig',
+    action: 'PublishAppOnlineConfigV2',
+    path: '/open/PublishAppOnlineConfigV2',
     version: '2025-03-01',
-    description: 'Create or update application online config through the console API.',
+    description: 'Publish application online config through the console API.',
     command: 'vs app online-config update --application-id <app> --config @online-config.json',
-    payload: { AppID: 'app_123', Config: { ChatConfig: { SearchSceneID: 'search_scene_default' } }, ProjectName: 'default' },
+    payload: {
+      ApplicationId: 'app_123',
+      Config: { ChatConfig: { SearchSceneId: 'search_scene_default', OpeningRemarksConfig: {} } },
+      ProjectName: 'default'
+    },
     category: 'application'
   }
 ];
