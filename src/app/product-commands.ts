@@ -1780,7 +1780,7 @@ export async function runPurchaseOrderWaitCommand(options: PurchaseOrderWaitOpti
 
 async function getBillingOrder(options: PurchaseOrderStatusOptions): Promise<unknown> {
   const payload = (await loadJsonInput(options.data)) ?? compactObject({ ProjectName: options.projectName });
-  return callOpenApi('/api/v1/GetBillingOrder', payload, options);
+  return callOpenApi('GetBillingOrderV2', payload, options);
 }
 
 const VIKING_AISEARCH_PRODUCT_CODE = 'REC-SaaS-LLM-SEARCH';
@@ -1792,6 +1792,9 @@ const BILLING_ORDER_SCENE_CODES: Record<string, number> = {
   renew: 2,
   modify: 3
 };
+
+const BILLING_INSTANCE_STATUS_DISABLE = 'disable';
+const BILLING_INSTANCE_STATUS_CREATE_FAILED = 'create_failed';
 
 export async function runPurchaseOrderPriceCommand(options: PurchaseOrderPriceOptions): Promise<void> {
   const payload = withBillingProductCode(
@@ -1883,9 +1886,9 @@ function isBillingOrderNotFoundError(error: unknown): boolean {
 
 function assertBillingOrderHealthy(response: unknown): void {
   const result = extractOpenApiResult(response);
-  const opened = result?.IsAirSearchRecOpened;
-  const state = Number(result?.InstanceState);
-  if (opened === false || state === 99) {
+  const opened = result?.IsAiSearchRecOpened;
+  const status = result?.InstanceStatus;
+  if (opened === false || status === BILLING_INSTANCE_STATUS_DISABLE) {
     throw new ApiRequestError(
       'API Error [ResourceNotFound.Instance]: Viking AI Search billing instance was not found or is not enabled.',
       404,
@@ -1894,7 +1897,7 @@ function assertBillingOrderHealthy(response: unknown): void {
       response
     );
   }
-  if (state === 2) {
+  if (status === BILLING_INSTANCE_STATUS_CREATE_FAILED) {
     throw new Error('Billing order exists but instance creation failed. Ask the user to revisit the purchase page and confirm the order status.');
   }
 }

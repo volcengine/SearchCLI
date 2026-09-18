@@ -76,7 +76,7 @@ message CreateBillingOrderV2Resp {
 
 - The console converts the request to a Trade one-step order call (`CreateOrderInOneStep`); it does not create EPS pre-orders or formal orders directly.
 - Instance ownership is validated locally before calling Trade to prevent cross-account, cross-project, or cross-product operations.
-- Creating the order does not complete payment: the user must finish payment in the FastPay cashier. After payment, poll the instance state with `GetBillingOrder` (SearchCLI: `vs purchase order status` / `vs purchase order wait`).
+- Creating the order does not complete payment: the user must finish payment in the FastPay cashier. After payment, poll the instance state with `GetBillingOrderV2` (SearchCLI: `vs purchase order status` / `vs purchase order wait`).
 - `ClientToken` is an idempotency key, not a credential.
 
 ## Error Codes

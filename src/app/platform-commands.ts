@@ -538,7 +538,7 @@ async function classifyAuthStatus(defaults: ResolvedCliDefaults): Promise<AuthSt
       status: 'ok',
       reason: null,
       reasonDetail: null,
-      serviceProbe: { ok: true, detail: `GetBillingOrder succeeded (project=${defaults.projectName})` }
+      serviceProbe: { ok: true, detail: `GetBillingOrderV2 succeeded (project=${defaults.projectName})` }
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message.split('\n')[0] : String(error);
@@ -797,7 +797,7 @@ export async function runDoctorCommand(options: DoctorOptions = {}): Promise<voi
         timeoutMs: Math.min(resolved.timeoutMs, 5000),
         suppressOutput: true
       });
-      auth = { ok: true, detail: `GetBillingOrder succeeded (project=${resolved.projectName})` };
+      auth = { ok: true, detail: `GetBillingOrderV2 succeeded (project=${resolved.projectName})` };
     } catch (error) {
       auth = {
         ok: false,

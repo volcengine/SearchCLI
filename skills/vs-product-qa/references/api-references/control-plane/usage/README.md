@@ -12,7 +12,7 @@ This file is the final-level router for billing, quota, usage, and count/statist
 
 | User question or command signal | Read |
 | --- | --- |
-| Billing order, purchase order status, service opening status, `vs purchase order status` | [GetBillingOrder](./GetBillingOrder.md) |
+| Billing order, purchase order status, service opening status, `vs purchase order status` | [GetBillingOrderV2](./GetBillingOrderV2.md) |
 | Quote a price, estimate order cost, purchase/renew/modify price, `vs purchase order price` | [CalculateBillingOrderPrice](./CalculateBillingOrderPrice.md) |
 | Place an order, create billing order, new purchase/renew/modify order, FastPay OrderNO, `vs purchase order create` | [CreateBillingOrderV2](./CreateBillingOrderV2.md) |
 | Update auto-renewal settings, enable/disable auto-renew for an instance | [UpdateBillingOrderRenewSettings](./UpdateBillingOrderRenewSettings.md) |
@@ -27,7 +27,7 @@ This file is the final-level router for billing, quota, usage, and count/statist
 
 | OpenAPI | Read |
 | --- | --- |
-| `GetBillingOrder` | [GetBillingOrder](./GetBillingOrder.md) |
+| `GetBillingOrderV2` | [GetBillingOrderV2](./GetBillingOrderV2.md) |
 | `CalculateBillingOrderPrice` | [CalculateBillingOrderPrice](./CalculateBillingOrderPrice.md) |
 | `CreateBillingOrderV2` | [CreateBillingOrderV2](./CreateBillingOrderV2.md) |
 | `UpdateBillingOrderRenewSettings` | [UpdateBillingOrderRenewSettings](./UpdateBillingOrderRenewSettings.md) |
