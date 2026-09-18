@@ -1,6 +1,6 @@
 # Control-Plane Scene API Router
 
-This file is the final-level router for scene-related control-plane API contracts, including search scenes, app online config, recommendation scenes, and recommendation rules. For `vs search scene update`, route to `PublishSearchSceneV2`; `UpdateSearchSceneV2` is a separate API contract and is not the current SearchCLI update command path.
+This file is the final-level router for scene-related control-plane API contracts, including search scenes, app online config, recommendation scenes, and recommendation rules. For `vs search scene update`, route to `PublishSearchSceneV2`.
 
 ## Routing Rules
 
@@ -17,7 +17,6 @@ This file is the final-level router for scene-related control-plane API contract
 | List search scenes, `vs search scene list` | [ListSearchScenesV2](./ListSearchScenesV2.md) |
 | Update or publish search scene config, `vs search scene update` | [PublishSearchSceneV2](./PublishSearchSceneV2.md) |
 | Delete search scene, `vs search scene delete` | [DeleteSearchSceneV2](./DeleteSearchSceneV2.md) |
-| Direct search-scene update API named by user | [UpdateSearchSceneV2](./UpdateSearchSceneV2.md) |
 | Get application online config, `vs app online-config get` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
 | Create or update application online config, `vs app online-config update` | [UpsertAppOnlineConfig](./UpsertAppOnlineConfig.md) |
 | Create recommend scene, `vs recommend scene create` | [CreateRecommendSceneV2](./CreateRecommendSceneV2.md) |
@@ -37,7 +36,6 @@ This file is the final-level router for scene-related control-plane API contract
 | `CreateSearchSceneV2` | [CreateSearchSceneV2](./CreateSearchSceneV2.md) |
 | `GetSearchSceneV2` | [GetSearchSceneV2](./GetSearchSceneV2.md) |
 | `ListSearchScenesV2` | [ListSearchScenesV2](./ListSearchScenesV2.md) |
-| `UpdateSearchSceneV2` | [UpdateSearchSceneV2](./UpdateSearchSceneV2.md) |
 | `PublishSearchSceneV2` | [PublishSearchSceneV2](./PublishSearchSceneV2.md) |
 | `DeleteSearchSceneV2` | [DeleteSearchSceneV2](./DeleteSearchSceneV2.md) |
 | `GetAppOnlineConfig` | [GetAppOnlineConfig](./GetAppOnlineConfig.md) |
