@@ -31,7 +31,7 @@ This is a workflow-oriented routing guide, not a full API reference. SearchCLI r
 | recommendation count limit, returned item count limit, 推荐数量上限 | Run the Scene Update Workflow and modify `Config.MaxResults`; for one request only, use `vs recommend run --page-size <n>`. |
 | filter recommendation item scope, filter item range, only recommend/exclude items matching a condition, 筛选物品范围 | Use the Item Filter Rule Workflow; create or reuse a `filter` rule, then attach it with `Config.FilterRuleId`. |
 | remove item-scope filtering, clear filter rule, 取消筛选物品范围 | Use the Item Filter Rule Workflow's removal path: clear `Config.FilterRuleId`, verify the scene readback, then delete the explicitly identified old rule only after it is unused. |
-| parent/variant recommendation range, recommend only parent items, recommend only child/SKU items | Modify `Config.FilterConfig.ItemTypeFilter` or create-time `FilterConfig.ItemTypeFilter` when the request is for initial scene scope. This is different from reusable item filtering. |
+| parent/variant recommendation range, recommend only parent items, recommend only child/SKU items, 父商品推荐, 子商品推荐 | Use `--item-type-result parent|variant` on `recommend scene create` for initial scene scope, or on `recommend scene update` for an existing scene. This writes `Config.FilterConfig.ItemTypeFilter` and is different from reusable item filtering. Use `--item-type-field <field>` only when the ItemType field is not `item_type`. |
 | cold start, new item recall, new item boost, new item injection, 新物品冷启动召回 | Use the Cold Start Workflow and modify `Config.ColdStartConfig`. |
 | hot item recall, popular item fallback, fallback strategy, 热门物品召回 | Use the Degrade Rule Workflow for rule type `degrade`, then attach it with `Config.DegradeRuleId`. |
 | switch hot-item recall to the default rule, restore default hot-item rule, 切换默认热门规则 | Use the Degrade Rule Workflow's default-rule path: resolve the existing system default rule, attach it, verify the scene readback, and only then delete explicitly requested obsolete rules. |
@@ -63,7 +63,7 @@ Use this workflow when the user wants a new recommend scene.
 
 5. Confirm `UserEventScenes[]`. These values must exist in the UserEvent `event_scene` enum/candidate values returned by `vs dataset get --id <user-event-dataset-id> --full`; specifically, find the schema field whose business attribute is UserEventScene and use `EnumerateMeta[].EnumerateValue`.
 6. If using `RecommendModel=long_sequence`, confirm `ClickEventTypes[]`; values must exist in the UserEvent `event_type` enum values. Also set a non-empty optimization target such as `ctr`.
-7. If the scene needs parent/variant item scope at creation time, set `FilterConfig.ItemTypeFilter`.
+7. If the scene needs parent/variant item scope at creation time, pass `--item-type-result parent|variant`; add `--item-type-field <field>` only when the ItemType field is not `item_type`. This sets `FilterConfig.ItemTypeFilter`.
 8. Run `vs recommend scene create ... --confirm-entry-binding`; use `--dry-run` only after required values are resolved and before the real create.
 9. Run `vs recommend scene get --application-id <application-id> --scene-id <scene-id>` and verify `Type`, `ItemDatasetId`, `UserEventScenes`, model, optimization target, `Status`, and `SceneConfigPhase`.
 10. For standard-model scenes with an item dataset, creation can deploy immediately. For long-sequence scenes, treat async workflow status as the deployment indicator before runtime verification.
@@ -76,7 +76,7 @@ Creation contract:
 - `RecommendOptimizationTarget`: `ctr` or empty.
 - `UserEventScenes[]` values are selected page/module bindings and must come from the bound UserEvent dataset's `event_scene` enum/candidate values.
 - `ClickEventTypes[]`, `PositiveEventTypes[]`, and `NegativeEventTypes[]` are create-time behavior event declarations and must come from `event_type` enum values.
-- `FilterConfig.ItemTypeFilter` controls parent/variant recommendation scope when needed.
+- `--item-type-result parent|variant` controls parent/variant recommendation scope when needed. It writes `FilterConfig.ItemTypeFilter`; `--item-type-field` defaults to `item_type`.
 
 ## Scene Update Workflow
 
@@ -105,6 +105,7 @@ Common top-level update fields:
 | `ItemDatasetId` | Must refer to an item dataset bound to the application; field-based config may need schema revalidation after changing it. |
 | `UserEventScenes[]` | Selected behavior-scene bindings; values come from the bound UserEvent dataset's `event_scene` enum/candidate values. |
 | `Config` | `RecommendSceneConfigV2`. Treat as full-publish config and preserve unrelated areas. CLI `--config` may be a full config or first-level patch merged over readback; it is not a nested JSONPath patch. |
+| `Config.FilterConfig.ItemTypeFilter` | Parent/variant recommendation scope. Prefer CLI flags `--item-type-result parent|variant` and optional `--item-type-field <field>` over hand-writing the filter JSON. |
 
 ## Scene Delete Workflow
 
@@ -322,7 +323,7 @@ Backend deployment effects to keep in mind:
 | `Config.ColdStartConfig` | `Enable`, `ItemConditionType`, `ImportTimeWindowHours`, `ItemFilter`, `ExposureThreshold`, `MaxInjectCount`, `Name` | `ItemConditionType` is `import_time` or `custom_filter`; `import_time` requires `ImportTimeWindowHours > 0`; `custom_filter` requires non-empty `ItemFilter`; numeric thresholds/counts must be non-negative. |
 | `Config.MergeConfigs[]` | `Strategy`, `CustomWeights[]` | Strategies: `for_you` supports `user_profile_first`, `multimodal_first`, `hot_item_first`, `custom`; `related` also supports `item_similarity_first`; `shopping_cart` supports only `item_similarity_first` and `custom`. For `custom`, use `CustomWeights[].RecallChannel` and `CustomWeights[].Weight`; channels are `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start`; weights must be non-negative and sum to `> 0`; duplicate channels are rejected. `item_similarity` is not allowed for `for_you`. |
 | `Config.ReasonTemplateConfig` | `Enable`, `Templates[]`, `FallbackReason` | Template channels: `multimodal`, `user_profile`, `item_cf`, `hot_item`, `item_similarity`, `cold_start`. Enabled templates require non-empty `Template` and explicit non-null `Variables[]`: `hot_item=["rank"]`, `user_profile=["category"]`, item channels use de-duplicated `item.*` placeholders from `Template`, and channels without variables use `[]`. |
-| `Config.FilterConfig.ItemTypeFilter` | `ForParent`, `Filter` | Required when the item dataset schema has an ItemType business attribute; invalid when the schema has no ItemType business attribute. The schema must also have the paired ParentId business attribute, the ItemType field must be filterable, and `Filter.field` must match item schema casing. |
+| `Config.FilterConfig.ItemTypeFilter` | `ForParent`, `Filter` | Required when the item dataset schema has an ItemType business attribute; invalid when the schema has no ItemType business attribute. The schema must also have the paired ParentId business attribute, the ItemType field must be filterable, and `Filter.field` must match item schema casing. CLI flags `--item-type-result parent|variant` and optional `--item-type-field <field>` build this object. |
 | `Config.RecAssistantConfig` | `Enable`, `AssistantRole`, `AnswerStyle`, `FollowUpStyle` | Controls LLM recommendation assistant behavior. |
 
 ## Rule Resource Workflow

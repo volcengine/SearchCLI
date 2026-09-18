@@ -133,11 +133,11 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Key flags: `--application-id`, `--scene-id`, `--dataset-id`, `--query`, `--page-size`
     *   Examples: `vs search run --application-id 123 --scene-id default-search --query "wireless headphones"`; `vs search run --application-id 123 --scene-id default-search --query "running shoes" --page-size 5`
 *   `vs search scene create --application-id <id> --name <name>`
-    *   Usage: `vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]`
+    *   Usage: `vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @search.json] [service flags]`
     *   Usage: `vs search scene create --application-id <id> --data @payload.json [service flags]`
-    *   Description: create a new search scene under the target application; use `--data` when you need full control over the create payload
-    *   Key flags: `--application-id`, `--name`, `--description`, `--data`
-    *   Examples: `vs search scene create --application-id 123 --name "default-search"`; `vs search scene create --application-id 123 --name "image-search" --description "Search scene for image-heavy queries"`; `vs search scene create --application-id 123 --data @payload.json`
+    *   Description: create a new search scene under the target application; parent/variant item hierarchy is switched after creation with `vs search scene update --item-dataset-id <id> --item-type-result variant|parent`
+    *   Key flags: `--application-id`, `--name`, `--description`, `--search-config`, `--data`
+    *   Examples: `vs search scene create --application-id 123 --name "default-search"`; `vs search scene create --application-id 123 --name "default-search" --search-config @search.json`; `vs search scene create --application-id 123 --data @payload.json`
 *   `vs search scene list --application-id <id>`
     *   Usage: `vs search scene list --application-id <id> [service flags]`
     *   Usage: `vs search scene list --application-id <id> --data @payload.json [service flags]`
@@ -152,14 +152,14 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
     *   Examples: `vs search scene get --application-id 123 --scene-id abc`; `vs search scene get --application-id 123 --scene-id abc --format json`; `vs search scene get --application-id 123 --scene-id abc --jq '.Result.Scene.Config'`
 *   `vs search scene update --application-id <id> --scene-id <id>`
     *   Usage: `vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]`
-    *   Usage: `vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]`
+    *   Usage: `vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]`
     *   Usage: `vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]`
     *   Description: update and publish a search scene through `OnlineSearchScene`; prefer `scene get` first, then update only the intended parts
-    *   Key flags: `--application-id`, `--scene-id`, `--config`, `--search-config`, `--query-completion-config`, `--want-to-search-config`, `--overview-config`, `--data`
+    *   Key flags: `--application-id`, `--scene-id`, `--config`, `--search-config`, `--item-dataset-id`, `--item-type-result`, `--item-type-field`, `--query-completion-config`, `--want-to-search-config`, `--overview-config`, `--data`
     *   Search mode enums: `RetrieveConfigs[].Mode`: `Balanced=1`, `SemanticPriority=2`, `KeywordPriority=3`, `UserDefined=4`
     *   Custom recall enums: `RetrieveConfigs[].UserDefinedRecallMode`: `KeywordSemantic=0`, `KeywordOnly=1`, `SemanticOnly=2`
     *   Note: when `RetrieveConfigs[].Mode=UserDefined(4)`, also set `RetrieveConfigs[].UserDefinedRecallMode` in the same retrieve config
-    *   Examples: `vs search scene get --application-id 123 --scene-id abc --format json > scene.json`; `vs search scene update --application-id 123 --scene-id abc --config @scene.json`; `vs search scene update --application-id 123 --scene-id abc --search-config @search.json`; `vs search scene update --application-id 123 --scene-id abc --data @payload.json`
+    *   Examples: `vs search scene get --application-id 123 --scene-id abc --format json > scene.json`; `vs search scene update --application-id 123 --scene-id abc --config @scene.json`; `vs search scene update --application-id 123 --scene-id abc --item-dataset-id ds_123 --item-type-result variant`; `vs search scene update --application-id 123 --scene-id abc --search-config @search.json`; `vs search scene update --application-id 123 --scene-id abc --data @payload.json`
 *   `vs search scene delete --application-id <id> --scene-id <id>`
     *   Usage: `vs search scene delete --application-id <id> --scene-id <id> [service flags]`
     *   Usage: `vs search scene delete --application-id <id> --scene-id <id> --data @payload.json [service flags]`
@@ -193,13 +193,13 @@ SearchCLI is an interactive AI search command-line tool. Below is the list of cu
 *   `vs recommend run --application-id <id> --scene-id <id>`
     *   Parameters: `[--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]`
 *   `vs recommend scene create --application-id <id> --type for_you --name <name> --item-dataset-id <id>`
-    *   Parameters: `[--description <text>] [--recommend-model <n>] [--optimization-target <n>] [--bhv-scene-types <types>] [--click-event-types <types>] [--positive-event-types <types>] [--negative-event-types <types>] [--confirm-entry-binding] [service flags]`
+    *   Parameters: `[--description <text>] [--item-type-result variant|parent] [--item-type-field item_type] [--recommend-model <n>] [--optimization-target <n>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--click-event-types <types>] [--positive-event-types <types>] [--negative-event-types <types>] [--confirm-entry-binding] [service flags]`
 *   `vs recommend scene list --application-id <id>`
     *   Parameters: `[--types <types>] [service flags]`
 *   `vs recommend scene get --application-id <id> --scene-id <id>`
     *   Parameters: `[service flags]`
 *   `vs recommend scene update --application-id <id> --scene-id <id>`
-    *   Parameters: `[--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--bhv-scene-types <types>] [--config @scene.json] [--confirm-entry-binding] [service flags]`
+    *   Parameters: `[--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result variant|parent] [--item-type-field item_type] [--user-event-scenes <scenes>] [--config @scene.json] [--filter-config @filter.json] [--confirm-entry-binding] [service flags]`
 *   `vs recommend scene delete --application-id <id> --scene-id <id>`
     *   Parameters: `[service flags]`
 

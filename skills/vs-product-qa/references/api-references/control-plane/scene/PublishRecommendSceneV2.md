@@ -199,7 +199,7 @@ message ShuffleRuleV2 {
 | `ColdStartConfig.ItemConditionType` | `import_time`, `custom_filter` |
 | `ShuffleConfig.Rules[].WindowType` | `SLIDE`, `TOP`; empty is normalized to `SLIDE` |
 | `ShuffleConfig.Rules[].ShuffleType` | `dimension`, `expression`; empty is treated as `dimension` |
-| `FilterConfig.ItemTypeFilter.ForParent` | `true` means recommend parent items; `false` or omitted means no parent-only switch |
+| `FilterConfig.ItemTypeFilter.ForParent` | `true` means recommend parent items; `false` means recommend variant/child items when paired with a matching `Filter`; omitted leaves parent/variant scope unchanged or unspecified depending on the surrounding publish payload |
 
 ## Scene-specific Merge Rules
 
@@ -246,6 +246,8 @@ For `Strategy=custom`, `CustomWeights[]` must be non-empty, every `Weight` must 
 
 - `vs recommend scene update --count <n>` maps to `Config.MaxResults`.
 - `--user-event-scenes` maps to `UserEventScenes`.
+- `--item-type-result parent|variant` maps to `Config.FilterConfig.ItemTypeFilter`. `parent` sets `ForParent=true` with a `must parent` filter; `variant` sets `ForParent=false` with a `must_not parent` filter.
+- `--item-type-field <field>` sets `Config.FilterConfig.ItemTypeFilter.Filter.field`; omit it to use the CLI default `item_type`.
 - `--boost-bury-cond-config`, `--shuffle-config`, `--impression-config`, `--suggest-config`, `--reason-template-config`, `--cold-start-config`, `--merge-configs`, `--filter-config`, and `--rec-assistant-config` map to the same V2 `Config` children.
 - For `recommend scene update`, the CLI first reads the current scene with `GetRecommendSceneV2`, merges `--config` or advanced flags at the first `Config` level, and then sends a full `PublishRecommendSceneV2` payload. Prefer passing the full first-level child object when modifying nested fields.
 - `--config @file.json` may contain a full `RecommendSceneConfigV2` or a first-level patch such as `{ "RecAssistantConfig": { ...full object... } }`. It is merged over the current `Config`; it is not a raw nested JSONPath patch.
