@@ -79,9 +79,9 @@ message PerDatasetConfig {
   PersonalizedRecall PersonalizedRecallConfig = 16;
   optional bool EnableRerankWithHot = 17;
   RerankConfig RerankConfig = 18;
-  rule.BoostBuryCondConfig BoostBuryCondConfig = 19;
+  rule.BoostBuryCondConfigV2 BoostBuryCondConfig = 19;
   SortRulesConfig SortRulesConfig = 20;
-  rule.ShuffleConfig ShuffleConfig = 21;
+  rule.ShuffleConfigV2 ShuffleConfig = 21;
   ServingControlConfig ServingControlConfig = 22;
   CorrectionConfigV2 CorrectionConfig = 23;
   SynonymConfigV2 SynonymConfig = 24;
@@ -129,16 +129,16 @@ message RerankConfig {
   RerankDoubaoConfig RerankDoubaoConfig = 4;
 }
 
-message BoostBuryCondConfig {
-  repeated BoostBuryCondRule Rules = 2;
+message BoostBuryCondConfigV2 {
+  repeated BoostBuryCondRuleV2 Rules = 2;
 }
 
 message SortRulesConfig {
   repeated SortRule Rules = 1;
 }
 
-message ShuffleConfig {
-  repeated ShuffleRule Rules = 1;
+message ShuffleConfigV2 {
+  repeated ShuffleRuleV2 Rules = 1;
 }
 
 message ServingControlConfig {
@@ -186,8 +186,8 @@ message RerankDoubaoConfig {
   string Instruction = 2;
 }
 
-message BoostBuryCondRule {
-  uint32 ID = 1;
+message BoostBuryCondRuleV2 {
+  uint32 Id = 1;
   bool Enable = 2;
   string Name = 3;
   google.protobuf.Struct Config = 4;
@@ -201,11 +201,11 @@ message SortRule {
   optional bool Enable = 3;
 }
 
-message ShuffleRule {
+message ShuffleRuleV2 {
 
-  uint32 ID = 1;
+  uint32 Id = 1;
 
-  bool Disable = 2;
+  bool Enable = 2;
 
   string Name = 3;
 
@@ -219,9 +219,7 @@ message ShuffleRule {
 
   string ShuffleType = 9;
 
-  google.protobuf.Struct ShuffleExpr = 10;
-
-  int64 RecallMax = 11;
+  google.protobuf.Struct ShuffleExpression = 10;
 }
 
 message ServingControlV2 {
@@ -233,9 +231,9 @@ message ServingControlV2 {
   TextSearchConfig TextSearchConfig = 21;
   AuxiliaryPoolsConfig AuxiliaryPoolsConfig = 22;
   SortRulesConfig SortRulesConfig = 23;
-  rule.ShuffleConfig ShuffleConfig = 24;
+  rule.ShuffleConfigV2 ShuffleConfig = 24;
   FilterConfigV2 FilterConfig = 25;
-  rule.BoostBuryCondConfig BoostBuryCondConfig = 26;
+  rule.BoostBuryCondConfigV2 BoostBuryCondConfig = 26;
   RelevanceCutoffConfig RelevanceCutoffConfig = 27;
 }
 
@@ -336,7 +334,7 @@ These fields are encoded as strings. Do not send numeric enum codes.
 | `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.ItemFeature` | `text`, `mixed`, `image`                                              | Only effective with`RerankModel="doubao-rerank"`.                                                        |
 | `Config.PerDatasetConfigs[].SortRulesConfig.Rules[].Order`               | `asc`, `desc`                                                           | Sort ascending or descending by the configured field.                                                      |
 | `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowType`            | `SLIDE`, `TOP`                                                          | Empty value is normalized to`SLIDE` by service behavior.                                                 |
-| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleType`           | `dimension`, `expression`                                               | Empty value is accepted for legacy dimension-shuffle behavior; expression shuffle requires`ShuffleExpr`. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleType`           | `dimension`, `expression`                                               | Empty value is accepted for legacy dimension-shuffle behavior; expression shuffle requires`ShuffleExpression`. |
 | `Config.PerDatasetConfigs[].CorrectionConfig.Mode`                       | `auto`, `suggestion_only`                                               | `auto` directly rewrites the query; `suggestion_only` returns suggestions only.                        |
 | `Config.PerDatasetConfigs[].CorrectionConfig.MatchMode`                  | `exact`, `partial`                                                      | Match mode for correction dictionary matching.                                                             |
 | `Config.PerDatasetConfigs[].RelevanceCutoffConfig.Rules[].ScoreType`     | `keyword`, `text_semantic`, `image_semantic`, `final`               | Relevance score used for cutoff.                                                                           |
@@ -355,12 +353,12 @@ These fields are encoded as strings. Do not send numeric enum codes.
 | `Config.PerDatasetConfigs[].TextSearchConfig.TextWeight`                   | `[0, 1]`                                                                                                                                             | Only meaningful when`Mode="user_defined"` and `UserDefinedRecallMode="semantic_only"`.                                          |
 | `Config.PerDatasetConfigs[].TextSearchConfig.DenseWeight`                  | `[0, 1]`                                                                                                                                             | Only meaningful when`Mode="user_defined"` and `UserDefinedRecallMode` is `keyword_semantic` or `semantic_only`.             |
 | `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Boost`             | `[-1, 1]`                                                                                                                                            | Positive values boost; negative values bury.                                                                                        |
-| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ID`                      | non-zero and unique within the rule list                                                                                                               | Rule ID may be generated by service behavior when omitted through higher-level tooling, but persisted rules must have non-zero IDs. |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].Id`                      | non-zero and unique within the rule list                                                                                                               | Rule ID may be generated by service behavior when omitted through higher-level tooling, but persisted rules must have non-zero IDs. |
 | `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].Name`                    | non-empty                                                                                                                                              | Required for each shuffle rule.                                                                                                     |
 | `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].FieldName`               | non-empty                                                                                                                                              | Must also satisfy the field-reference constraints below.                                                                            |
-| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowSize`              | `> 0` and `>= MaxSize` or `RecallMax`                                                                                                            | `MaxSize` takes precedence; `RecallMax` is legacy compatibility.                                                                |
-| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].MaxSize` / `RecallMax` | at least one effective value`> 0`                                                                                                                    | `RecallMax` is legacy compatibility.                                                                                              |
-| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr`             | non-empty when`ShuffleType="expression"`                                                                                                             | Expression shuffle is invalid without an expression body.                                                                           |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].WindowSize`              | `> 0` and `>= MaxSize`                                                                                                            | `MaxSize` takes precedence; RecallMax removed in V2.                                                                |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].MaxSize` | at least one effective value`> 0`                                                                                                                    | RecallMax removed in V2.                                                                                              |
+| `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpression`             | non-empty when`ShuffleType="expression"`                                                                                                             | Expression shuffle is invalid without an expression body.                                                                           |
 | `Config.PerDatasetConfigs[].RerankConfig.RerankDoubaoConfig.Instruction`   | length`<= 1023`                                                                                                                                      | User-editable Doubao rerank instruction.                                                                                            |
 | `Config.PerDatasetConfigs[].FacetConfig.Facets[].MaxFacetBuckets`          | `1..50` when non-zero                                                                                                                                | Default is`10` for enumerable facet fields.                                                                                       |
 | `Config.PerDatasetConfigs[].FacetConfig.Facets[].NumberRanges[]`           | at least one bound; do not set both`Lt` and `Lte`, or both `Gt` and `Gte`; lower bound must be less than upper bound                           | Applies to numeric facet ranges.                                                                                                    |
@@ -378,8 +376,8 @@ These fields are encoded as strings. Do not send numeric enum codes.
 
 ### Cross-config Constraints
 
-- For one dataset, `ShuffleConfig.Rules[].ID` values must be unique across the dataset-level shuffle config and all `ServingControlConfig.ServingControls[].ShuffleConfig` blocks.
-- For one dataset, `BoostBuryCondConfig.Rules[].ID` values must be unique across the dataset-level boost/bury config and all `ServingControlConfig.ServingControls[].BoostBuryCondConfig` blocks.
+- For one dataset, `ShuffleConfig.Rules[].Id` values must be unique across the dataset-level shuffle config and all `ServingControlConfig.ServingControls[].ShuffleConfig` blocks.
+- For one dataset, `BoostBuryCondConfig.Rules[].Id` values must be unique across the dataset-level boost/bury config and all `ServingControlConfig.ServingControls[].BoostBuryCondConfig` blocks.
 - `WantToSearchConfig.DictIds[]` must reference existing dictionaries of type `query_recommendation`.
 - `QueryCompletionConfig.DictIds[]` must reference existing dictionaries of type `query_completion`.
 - `CorrectionConfig.DictIds[]` must reference existing dictionaries of type `query_correction_exemption`.
@@ -388,7 +386,7 @@ These fields are encoded as strings. Do not send numeric enum codes.
 
 ### Shuffle Expression Shape
 
-`Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr` is used only when `ShuffleType="expression"`. It is a single leaf expression object, not a recursive condition tree.
+`Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpression` is used only when `ShuffleType="expression"`. It is a single leaf expression object, not a recursive condition tree.
 
 Required shape:
 
@@ -402,7 +400,7 @@ Required shape:
 
 Allowed stored `op` values are `must`, `must_not`, and `range`.
 
-| `ShuffleExpr.field` field type | Allowed stored `op` | Value shape | Frontend meaning |
+| `ShuffleExpression.field` field type | Allowed stored `op` | Value shape | Frontend meaning |
 | --- | --- | --- | --- |
 | `string` | `must`, `must_not` | `conds: string[]` | Contains / does not contain the listed values. |
 | `int32`, `int64` | `must`, `must_not` | `conds: number[]` | Equals / not equals the listed numeric values. |
@@ -411,7 +409,7 @@ Allowed stored `op` values are `must`, `must_not`, and `range`.
 | `bool` | `must`, `must_not` | `conds: [true]` or `conds: [false]` | Equals / not equals the boolean value. |
 | `array<string>`, `array<int32>`, `array<int64>`, `array<float>` | `must`, `must_not` | `conds` array whose element type matches the field | Array contains / does not contain the listed values. |
 
-Do not use `and`, `or`, `partial_match`, query dynamic operators, or nested rule trees in `ShuffleExpr`.
+Do not use `and`, `or`, `partial_match`, query dynamic operators, or nested rule trees in `ShuffleExpression`.
 
 ### Field-Reference Constraints
 
@@ -423,7 +421,7 @@ The following fields must use exact dataset schema field names and are case-sens
 - `Config.PerDatasetConfigs[].FilterConfig.Config.field`.
 - `Config.PerDatasetConfigs[].AuxiliaryPoolsConfig.Pools[].Filter.field`.
 - Fields inside `Config.PerDatasetConfigs[].BoostBuryCondConfig.Rules[].Config`.
-- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpr.field` when `ShuffleType="expression"`.
+- `Config.PerDatasetConfigs[].ShuffleConfig.Rules[].ShuffleExpression.field` when `ShuffleType="expression"`.
 - `Config.PerDatasetConfigs[].FacetConfig.Facets[].Field`; facet fields must be filterable and supported for enum or numeric aggregation.
 
 ### Condition DSL Shapes

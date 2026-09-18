@@ -79,9 +79,9 @@ message PerDatasetConfig {
   PersonalizedRecall PersonalizedRecallConfig = 16;
   optional bool EnableRerankWithHot = 17;
   RerankConfig RerankConfig = 18;
-  rule.BoostBuryCondConfig BoostBuryCondConfig = 19;
+  rule.BoostBuryCondConfigV2 BoostBuryCondConfig = 19;
   SortRulesConfig SortRulesConfig = 20;
-  rule.ShuffleConfig ShuffleConfig = 21;
+  rule.ShuffleConfigV2 ShuffleConfig = 21;
   ServingControlConfig ServingControlConfig = 22;
   CorrectionConfigV2 CorrectionConfig = 23;
   SynonymConfigV2 SynonymConfig = 24;
@@ -129,16 +129,16 @@ message RerankConfig {
   RerankDoubaoConfig RerankDoubaoConfig = 4;
 }
 
-message BoostBuryCondConfig {
-  repeated BoostBuryCondRule Rules = 2;
+message BoostBuryCondConfigV2 {
+  repeated BoostBuryCondRuleV2 Rules = 2;
 }
 
 message SortRulesConfig {
   repeated SortRule Rules = 1;
 }
 
-message ShuffleConfig {
-  repeated ShuffleRule Rules = 1;
+message ShuffleConfigV2 {
+  repeated ShuffleRuleV2 Rules = 1;
 }
 
 message ServingControlConfig {
@@ -186,8 +186,8 @@ message RerankDoubaoConfig {
   string Instruction = 2;
 }
 
-message BoostBuryCondRule {
-  uint32 ID = 1;
+message BoostBuryCondRuleV2 {
+  uint32 Id = 1;
   bool Enable = 2;
   string Name = 3;
   google.protobuf.Struct Config = 4;
@@ -201,11 +201,11 @@ message SortRule {
   optional bool Enable = 3;
 }
 
-message ShuffleRule {
+message ShuffleRuleV2 {
 
-  uint32 ID = 1;
+  uint32 Id = 1;
 
-  bool Disable = 2;
+  bool Enable = 2;
 
   string Name = 3;
 
@@ -219,9 +219,7 @@ message ShuffleRule {
 
   string ShuffleType = 9;
 
-  google.protobuf.Struct ShuffleExpr = 10;
-
-  int64 RecallMax = 11;
+  google.protobuf.Struct ShuffleExpression = 10;
 }
 
 message ServingControlV2 {
@@ -233,9 +231,9 @@ message ServingControlV2 {
   TextSearchConfig TextSearchConfig = 21;
   AuxiliaryPoolsConfig AuxiliaryPoolsConfig = 22;
   SortRulesConfig SortRulesConfig = 23;
-  rule.ShuffleConfig ShuffleConfig = 24;
+  rule.ShuffleConfigV2 ShuffleConfig = 24;
   FilterConfigV2 FilterConfig = 25;
-  rule.BoostBuryCondConfig BoostBuryCondConfig = 26;
+  rule.BoostBuryCondConfigV2 BoostBuryCondConfig = 26;
   RelevanceCutoffConfig RelevanceCutoffConfig = 27;
 }
 
