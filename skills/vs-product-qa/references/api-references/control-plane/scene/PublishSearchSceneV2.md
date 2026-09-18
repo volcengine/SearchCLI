@@ -321,7 +321,7 @@ message NumberRange {
 
 ## Field Semantics and Validation Notes
 
-`PublishSearchSceneV2` applies incremental update semantics: omitted or `null` child config blocks do not overwrite the existing online scene config. When updating one nested config area, include the target `DatasetId` and preserve sibling fields inside that same config block unless the change intentionally clears them.
+`PublishSearchSceneV2` applies incremental update semantics: omitted or `null` child config blocks do not overwrite the existing online scene config. When updating one nested config area, include the target `DatasetId` and preserve sibling fields inside that same config block unless the change intentionally clears them. This is the effective path for switching search parent/variant item hierarchy; `CreateSearchSceneV2` does not accept parent/variant item hierarchy parameters.
 
 ### String Enum Values
 

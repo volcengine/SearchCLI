@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const PK_BIZ_ATTRS = new Set(['multi_modal_id']);
+const ITEM_TYPE_BIZ_ATTRS = new Set(['ImageItemType', '20', 'multi_modal_item_type', 'MultiModalItemType', '103']);
+const PARENT_ID_BIZ_ATTRS = new Set(['ImageParentId', '201', 'multi_modal_parent_id', 'MultiModalParentId', '94']);
 
 const ROLE_KEYS = [
   ['IndexFields', 'index'],
@@ -96,6 +98,12 @@ export function buildInferSchemaConfirm(envelope: unknown, datasetType: string):
       .filter(value => value.length > 0);
     roles[roleKey] = dedupe(values);
   }
+  roles.filter = dedupe([
+    ...roles.filter,
+    ...fields
+      .filter(field => isItemTypeBizAttr(field.bizAttr) || isParentIdBizAttr(field.bizAttr))
+      .map(field => field.name)
+  ]);
   const filterFieldsMap = toRecord(pick(dataFieldConfig, ['FilterFieldsMap', 'filterFieldsMap']));
   for (const [field, raw] of Object.entries(filterFieldsMap)) {
     const obj = toRecord(raw);
@@ -159,12 +167,28 @@ function collectWarnings(input: {
     warnings.push('DataFieldConfig.IndexFields is empty — text search will not work until populated.');
   }
   if (input.datasetType !== 'user_event') {
+    const itemTypeFields = input.fields.filter(field => isItemTypeBizAttr(field.bizAttr)).map(field => field.name);
+    const parentIdFields = input.fields.filter(field => isParentIdBizAttr(field.bizAttr)).map(field => field.name);
+    if (itemTypeFields.length > 0 && parentIdFields.length === 0) {
+      warnings.push(`Parent-variant schema is incomplete: item_type field(s) ${itemTypeFields.join(', ')} require a matching parent_id BizAttr field.`);
+    }
+    if (parentIdFields.length > 0 && itemTypeFields.length === 0) {
+      warnings.push(`Parent-variant schema is incomplete: parent_id field(s) ${parentIdFields.join(', ')} require a matching item_type BizAttr field.`);
+    }
     const unknownRoles = collectUnknownRoleFields(input.roles, input.seenNames);
     if (unknownRoles.length > 0) {
       warnings.push(`Field roles reference unknown schema fields: ${unknownRoles.join(', ')}.`);
     }
   }
   return warnings;
+}
+
+function isItemTypeBizAttr(value: string): boolean {
+  return ITEM_TYPE_BIZ_ATTRS.has(value);
+}
+
+function isParentIdBizAttr(value: string): boolean {
+  return PARENT_ID_BIZ_ATTRS.has(value);
 }
 
 function collectUnknownRoleFields(roles: SchemaConfirmRoles, seenNames: Set<string>): string[] {

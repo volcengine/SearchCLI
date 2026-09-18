@@ -23,6 +23,7 @@ import { VikingOpenApiClient } from '../core/openapi-client';
 import { printOutput } from '../core/output-format';
 import { hasExplicitOutputFormatFlag } from '../core/output-format';
 import { buildInferSchemaConfirm, renderInferSchemaConfirmText } from '../core/infer-schema-confirm';
+import { buildItemTypeFilterConfig, normalizeItemTypeResultMode } from '../core/item-type-filter';
 import { VikingRuntimeApiClient } from '../core/runtime-api-client';
 import { resolveServiceConfig, type ServiceConfigInput } from '../core/service-config';
 import {
@@ -399,6 +400,8 @@ export interface SearchSceneCreateOptions extends ProjectScopedOptions {
   applicationId: string;
   name?: string;
   description?: string;
+  config?: string;
+  searchConfig?: string;
 }
 
 export interface SearchSceneGetOptions extends ProjectScopedOptions {
@@ -411,6 +414,9 @@ export interface SearchSceneUpdateOptions extends ProjectScopedOptions {
   sceneId: string;
   name?: string;
   description?: string;
+  itemDatasetId?: string;
+  itemTypeResult?: string;
+  itemTypeField?: string;
   config?: string;
   searchConfig?: string;
   queryCompletionConfig?: string;
@@ -424,6 +430,8 @@ export interface RecommendSceneCreateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: string;
+  itemTypeField?: string;
   recommendModel?: string;
   optimizationTarget?: string;
   userEventScenes?: string;
@@ -453,6 +461,8 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
   name?: string;
   description?: string;
   itemDatasetId?: string;
+  itemTypeResult?: string;
+  itemTypeField?: string;
   userEventScenes?: string;
   config?: string;
   count?: number;
@@ -473,6 +483,84 @@ export interface RecommendSceneUpdateOptions extends ProjectScopedOptions {
 }
 
 export interface RecommendSceneExpConfigOptions extends RecommendSceneUpdateOptions {}
+
+function buildSceneItemTypeFilterConfig(
+  options: { itemTypeResult?: string; itemTypeField?: string },
+  defaultItemTypeResult?: string
+): Record<string, unknown> | undefined {
+  const itemTypeResult = normalizeItemTypeResultMode(options.itemTypeResult ?? defaultItemTypeResult);
+  if (!itemTypeResult) return undefined;
+  return buildItemTypeFilterConfig(options.itemTypeField ?? 'item_type', itemTypeResult);
+}
+
+function extractSearchSceneV2(response: unknown): Record<string, unknown> {
+  const result = extractOpenApiResult(response);
+  if (!result) {
+    throw new Error('GetSearchSceneV2 returned an invalid response.');
+  }
+  return (isRecord(result.Scene) ? result.Scene : result) as Record<string, unknown>;
+}
+
+function applySearchSceneItemTypeFilterConfig(
+  configPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown>,
+  itemDatasetId: string | undefined
+): Record<string, unknown> {
+  if (!itemDatasetId?.trim()) {
+    throw new Error('Need --item-dataset-id when setting --item-type-result for a search scene.');
+  }
+  const config = isRecord(configPayload) ? configPayload : {};
+  const perDatasetConfigs = Array.isArray(config.PerDatasetConfigs) ? config.PerDatasetConfigs : [];
+  let matched = false;
+  const updatedPerDatasetConfigs = perDatasetConfigs.map(perDatasetConfig => {
+    const current = isRecord(perDatasetConfig) ? perDatasetConfig : {};
+    if (String(current.DatasetId ?? current.DatasetID ?? '') !== itemDatasetId) {
+      return current;
+    }
+    matched = true;
+    return {
+      ...current,
+      FilterConfig: {
+        ...(isRecord(current.FilterConfig) ? current.FilterConfig : {}),
+        ItemTypeFilter: itemTypeFilterConfig
+      }
+    };
+  });
+  if (!matched) {
+    throw new Error(`Search scene config does not contain PerDatasetConfig for item dataset ${itemDatasetId}.`);
+  }
+  return {
+    ...config,
+    PerDatasetConfigs: updatedPerDatasetConfigs
+  };
+}
+
+function mergeRecommendItemTypeFilterConfig(
+  configPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown> | undefined
+): unknown {
+  if (!itemTypeFilterConfig) return configPayload;
+  const config = isRecord(configPayload) ? configPayload : {};
+  return {
+    ...config,
+    FilterConfig: {
+      ...(isRecord(config.FilterConfig) ? config.FilterConfig : {}),
+      ItemTypeFilter: itemTypeFilterConfig
+    }
+  };
+}
+
+function mergeRecommendFilterItemTypeFilterConfig(
+  filterConfigPayload: unknown,
+  itemTypeFilterConfig: Record<string, unknown> | undefined
+): unknown {
+  if (!itemTypeFilterConfig) return filterConfigPayload;
+  const filterConfig = isRecord(filterConfigPayload) ? filterConfigPayload : {};
+  return {
+    ...filterConfig,
+    ItemTypeFilter: itemTypeFilterConfig
+  };
+}
 
 export interface RecommendRuleListOptions extends ProjectScopedOptions {
   applicationId: string;
@@ -1093,13 +1181,23 @@ export async function runSearchSceneCreateCommand(options: SearchSceneCreateOpti
   if (!options.data && !options.name?.trim()) {
     throw new Error('Need --data or --name for search scene create.');
   }
+  let configPayload = await loadJsonInput(options.config);
+  if (!configPayload && options.searchConfig) {
+    configPayload = compactObject({
+      PerDatasetConfigs: await loadJsonInput(options.searchConfig)
+    });
+  }
+  if (configPayload) {
+    validateSearchSceneConfig(configPayload);
+  }
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
       ApplicationId: options.applicationId,
       ProjectName: options.projectName,
       Name: options.name,
-      Description: options.description
+      Description: options.description,
+      Config: configPayload
     });
   requireNonEmptyObject(payload, 'Need --data or --name for search scene create.');
   await printResult(callOpenApi('CreateSearchSceneV2', payload, options));
@@ -1259,14 +1357,34 @@ function validateSearchSceneConfig(config: any): void {
 
 export async function runSearchSceneUpdateCommand(options: SearchSceneUpdateOptions): Promise<void> {
   let configPayload = await loadJsonInput(options.config);
-  
-  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig)) {
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
+
+  if (!configPayload && (options.searchConfig || options.queryCompletionConfig || options.wantToSearchConfig || options.overviewConfig || itemTypeFilterConfig)) {
+    const currentConfig = itemTypeFilterConfig
+      ? extractSearchSceneV2(await callOpenApi('GetSearchSceneV2', {
+          ApplicationId: options.applicationId,
+          SceneId: options.sceneId,
+          ProjectName: options.projectName
+        }, options)).Config
+      : undefined;
     configPayload = compactObject({
+      ...(isRecord(currentConfig) ? currentConfig : {}),
       PerDatasetConfigs: await loadJsonInput(options.searchConfig),
       QueryCompletionConfig: await loadJsonInput(options.queryCompletionConfig),
       WantToSearchConfig: await loadJsonInput(options.wantToSearchConfig),
       OverviewConfig: await loadJsonInput(options.overviewConfig)
     });
+  }
+  if (itemTypeFilterConfig) {
+    if (!configPayload || !isRecord(configPayload) || !Array.isArray(configPayload.PerDatasetConfigs)) {
+      const current = extractSearchSceneV2(await callOpenApi('GetSearchSceneV2', {
+        ApplicationId: options.applicationId,
+        SceneId: options.sceneId,
+        ProjectName: options.projectName
+      }, options));
+      configPayload = isRecord(current.Config) ? current.Config : {};
+    }
+    configPayload = applySearchSceneItemTypeFilterConfig(configPayload, itemTypeFilterConfig, options.itemDatasetId);
   }
 
   if (configPayload) {
@@ -1313,6 +1431,8 @@ export async function runRecommendRunCommand(options: RecommendRunOptions): Prom
 export async function runRecommendSceneCreateCommand(options: RecommendSceneCreateOptions): Promise<void> {
   requireRecommendEntryBindingConfirmation(options.confirmEntryBinding, 'recommend scene create');
   const userEventScenes = options.userEventScenes;
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
+  const filterConfig = mergeRecommendFilterItemTypeFilterConfig(await loadJsonInput(options.filterConfig), itemTypeFilterConfig);
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
@@ -1328,7 +1448,7 @@ export async function runRecommendSceneCreateCommand(options: RecommendSceneCrea
       ClickEventTypes: await loadOptionalStringArray(options.clickEventTypes),
       PositiveEventTypes: await loadOptionalStringArray(options.positiveEventTypes),
       NegativeEventTypes: await loadOptionalStringArray(options.negativeEventTypes),
-      FilterConfig: await loadJsonInput(options.filterConfig),
+      FilterConfig: filterConfig,
       DryRun: options.dryRun
     });
   requireNonEmptyObject(payload, 'Need --data or required scene fields for recommend scene create.');
@@ -1391,6 +1511,8 @@ function extractRecommendSceneV2(response: unknown): Record<string, any> {
 
 async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOptions): Promise<Record<string, unknown>> {
   const configPatch = await loadJsonInput(options.config);
+  const itemTypeFilterConfig = buildSceneItemTypeFilterConfig(options);
+  const filterConfig = await loadJsonInput(options.filterConfig);
   const flagConfigPatch = compactObject({
     MaxResults: options.count,
     FilterRuleId: options.filterRuleId,
@@ -1403,11 +1525,11 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     ReasonTemplateConfig: await loadJsonInput(options.reasonTemplateConfig),
     ColdStartConfig: await loadJsonInput(options.coldStartConfig),
     MergeConfigs: await loadJsonInput(options.mergeConfigs),
-    FilterConfig: await loadJsonInput(options.filterConfig),
+    FilterConfig: filterConfig,
     RecAssistantConfig: await loadJsonInput(options.recAssistantConfig)
   });
   const userEventScenes = await loadOptionalStringArray(options.userEventScenes);
-  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0;
+  const hasConfigPatch = configPatch !== undefined || Object.keys(flagConfigPatch).length > 0 || itemTypeFilterConfig !== undefined;
   const hasTopLevelPatch =
     options.type !== undefined ||
     options.name !== undefined ||
@@ -1445,7 +1567,8 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     ...(configPatch as Record<string, unknown> | undefined),
     ...flagConfigPatch
   };
-  validateRecommendSceneConfig(mergedConfig);
+  const finalConfig = mergeRecommendItemTypeFilterConfig(mergedConfig, itemTypeFilterConfig);
+  validateRecommendSceneConfig(finalConfig);
 
   return compactObject({
     ProjectName: options.projectName,
@@ -1456,7 +1579,7 @@ async function buildRecommendScenePublishPayload(options: RecommendSceneUpdateOp
     Description: options.description ?? current.Description,
     ItemDatasetId: options.itemDatasetId ?? current.ItemDatasetId,
     UserEventScenes: userEventScenes ?? current.UserEventScenes,
-    Config: mergedConfig,
+    Config: finalConfig,
     DryRun: options.dryRun
   });
 }
@@ -2242,10 +2365,10 @@ COMMON FLAGS
     search: `${renderUsageBlock(
       [
         'vs search run --application-id <id> --scene-id <id> [--dataset-id <id>] --query <text> [--page-size <n>] [service flags]',
-        'vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]',
+        'vs search scene create --application-id <id> --name <name> [--description <text>] [--search-config @per-dataset.json] [service flags]',
         'vs search scene list --application-id <id> [service flags]',
         'vs search scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
+        'vs search scene update --application-id <id> --scene-id <id> [--config @scene.json] [--search-config @search.json] [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]',
         'vs search scene delete --application-id <id> --scene-id <id> [service flags]',
         'vs search tune llm-check [--live] [service flags]',
         'vs search tune validate --queries <file> [--query-count <n>] [service flags]',
@@ -2277,10 +2400,10 @@ SEARCH SCENE ENUMS
     recommend: `${renderUsageBlock(
       [
         'vs recommend run --application-id <id> --scene-id <id> [--user-id <id>] [--parent-id <id>] [--page-size <n>] [service flags]',
-        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene create --application-id <id> --type for_you --name <name> [--description <text>] --item-dataset-id <id> [--item-type-result variant|parent] [--item-type-field item_type] [--recommend-model <default|long_sequence>] [--optimization-target <ctr>] [--user-event-scenes <scenes>] [--filter-config @filter.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene list --application-id <id> [--types <types>] [service flags]',
         'vs recommend scene get --application-id <id> --scene-id <id> [service flags]',
-        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
+        'vs recommend scene update --application-id <id> --scene-id <id> [--type <type>] [--name <name>] [--description <text>] [--item-dataset-id <id>] [--item-type-result variant|parent] [--item-type-field item_type] [--user-event-scenes <scenes>] [--config @config-patch.json] [--dry-run] [--confirm-entry-binding] [service flags]',
         'vs recommend scene delete --application-id <id> --scene-id <id> [--dry-run] [service flags]',
         'vs recommend rule list --application-id <id> [--types <types>] [--dataset-id <id>] [--item-dataset-id <id>] [service flags]',
         'vs recommend rule get --application-id <id> --rule-id <id> [service flags]',
@@ -2887,20 +3010,25 @@ EXAMPLES
 
 USAGE
   vs search scene create --application-id <id> --name <name> [--description <text>] [service flags]
+  vs search scene create --application-id <id> --name <name> --search-config @search.json [service flags]
   vs search scene create --application-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
   Creates a new search scene under the target application. Use \`--name\` and \`--description\`
-  for the simple path, or pass \`--data\` when you need full control over the create payload.
+  for the simple path, \`--search-config\` for Config.PerDatasetConfigs, or pass \`--data\`
+  when you need full control over the create payload. Search scene create does not
+  set parent/variant item hierarchy; use \`search scene update\` after creation to switch it.
 
 KEY FLAGS
-  --application-id  Target application ID.
-  --name            Search scene name.
-  --description     Optional scene description.
-  --data            Full request payload. Use this when you need to set top-level fields directly.
+  --application-id   Target application ID.
+  --name             Search scene name.
+  --description      Optional scene description.
+  --search-config    \`Config.PerDatasetConfigs\` array only.
+  --data             Full request payload. Use this when you need to set top-level fields directly.
 
 EXAMPLES
   vs search scene create --application-id 123 --name "default-search"
+  vs search scene create --application-id 123 --name "default-search" --search-config @search.json
   vs search scene create --application-id 123 --name "image-search" --description "Search scene for image-heavy queries"
   vs search scene create --application-id 123 --data @payload.json`,
     'scene:list': `List search scenes for an application.
@@ -2963,7 +3091,7 @@ EXAMPLES
 
 USAGE
   vs search scene update --application-id <id> --scene-id <id> --config @scene.json [service flags]
-  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
+  vs search scene update --application-id <id> --scene-id <id> --search-config @search.json [--item-type-result variant|parent --item-dataset-id <id>] [--item-type-field item_type] [--query-completion-config @qc.json] [--want-to-search-config @wts.json] [--overview-config @overview.json] [service flags]
   vs search scene update --application-id <id> --scene-id <id> --data @payload.json [service flags]
 
 DESCRIPTION
@@ -2977,6 +3105,9 @@ KEY FLAGS
   --scene-id                 Target search scene ID.
   --config                   Full scene \`Config\` object.
   --search-config            \`Config.PerDatasetConfigs\` array only.
+  --item-type-result         Search item hierarchy when the item dataset has ItemType: variant or parent.
+  --item-dataset-id          Item dataset whose ItemTypeFilter should be updated. Required with --item-type-result.
+  --item-type-field          ItemType field name used by ItemTypeFilter. Defaults to item_type.
   --query-completion-config  \`Config.QueryCompletionConfig\` object only.
   --want-to-search-config    \`Config.WantToSearchConfig\` object only.
   --overview-config          \`Config.OverviewConfig\` object only.
@@ -2999,6 +3130,7 @@ SEARCH MODE ENUMS
 EXAMPLES
   vs search scene get --application-id 123 --scene-id abc --format json > scene.json
   vs search scene update --application-id 123 --scene-id abc --config @scene.json
+  vs search scene update --application-id 123 --scene-id abc --item-dataset-id ds_123 --item-type-result variant
   vs search scene update --application-id 123 --scene-id abc --search-config @search.json
   vs search scene update --application-id 123 --scene-id abc --data @payload.json`,
     tune: `Evaluate and tune text search similarity.
@@ -3782,7 +3914,9 @@ async function runSearchCli(argv: string[]): Promise<void> {
             ...projectOptions,
             applicationId: requiredString(values['application-id'], '--application-id'),
             name: optionalString(values.name),
-            description: optionalString(values.description)
+            description: optionalString(values.description),
+            config: optionalString(values.config),
+            searchConfig: optionalString(values['search-config'])
           });
           return;
         case 'list':
@@ -3802,6 +3936,9 @@ async function runSearchCli(argv: string[]): Promise<void> {
             sceneId: requiredString(values['scene-id'], '--scene-id'),
             name: optionalString(values.name),
             description: optionalString(values.description),
+            itemDatasetId: optionalString(values['item-dataset-id']),
+            itemTypeResult: optionalString(values['item-type-result']),
+            itemTypeField: optionalString(values['item-type-field']),
             config: optionalString(values.config),
             searchConfig: optionalString(values['search-config']),
             queryCompletionConfig: optionalString(values['query-completion-config']),
@@ -3972,6 +4109,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']),
+          itemTypeField: optionalString(values['item-type-field']),
           recommendModel: optionalString(values['recommend-model']),
           optimizationTarget: optionalString(values['optimization-target']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
@@ -4006,6 +4145,8 @@ async function runRecommendCli(argv: string[]): Promise<void> {
           name: optionalString(values.name),
           description: optionalString(values.description),
           itemDatasetId: optionalString(values['item-dataset-id']),
+          itemTypeResult: optionalString(values['item-type-result']),
+          itemTypeField: optionalString(values['item-type-field']),
           userEventScenes: optionalString(values['user-event-scenes']) ?? optionalString(values['bhv-scene-types']),
           config: optionalString(values.config),
           count: parseOptionalInt(optionalString(values.count)),
@@ -4359,6 +4500,8 @@ function parseStandaloneArguments(argv: string[]): { values: StandaloneValues; p
       message: { type: 'string' },
       'opening-remarks': { type: 'string' },
       'item-dataset-id': { type: 'string' },
+      'item-type-result': { type: 'string' },
+      'item-type-field': { type: 'string' },
       'dataset-type': { type: 'string' },
       input: { type: 'string', short: 'i' },
       'page-number': { type: 'string' },

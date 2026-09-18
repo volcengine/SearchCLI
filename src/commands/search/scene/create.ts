@@ -11,6 +11,7 @@ export default class SearchSceneCreate extends Command {
   static override examples = [
     '<%= config.bin %> search scene create --application-id app_xxx --name default-search',
     '<%= config.bin %> search scene create --application-id app_xxx --name default-search --description "Main search scene"',
+    '<%= config.bin %> search scene create --application-id app_xxx --name default-search --search-config @per-dataset.json',
     '<%= config.bin %> search scene create --data @create-search-scene.json'
   ];
 
@@ -19,7 +20,9 @@ export default class SearchSceneCreate extends Command {
     'application-id': Flags.string({ required: true, description: 'Viking application ID.' }),
     'project-name': Flags.string({ description: 'Viking project name when the API requires project scoping.' }),
     name: Flags.string({ description: 'Search scene name.' }),
-    description: Flags.string({ description: 'Search scene description.' })
+    description: Flags.string({ description: 'Search scene description.' }),
+    config: Flags.string({ description: 'Inline JSON, @file path, or JSON file path for a nested Config payload.' }),
+    'search-config': Flags.string({ description: 'Inline JSON, @file path, or JSON file path for Config.PerDatasetConfigs.' })
   };
 
   async run(): Promise<void> {
@@ -37,7 +40,9 @@ export default class SearchSceneCreate extends Command {
       projectName: flags['project-name'],
       applicationId: flags['application-id'],
       name: flags.name,
-      description: flags.description
+      description: flags.description,
+      config: flags.config,
+      searchConfig: flags['search-config']
     });
   }
 }
