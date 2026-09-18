@@ -7,7 +7,7 @@ import { serviceFlags } from '../../command-support/service-flags';
 
 export default class AppItemDataCount extends Command {
   static override description =
-    'Get the effective item data count (ValidCnt/TotalCnt) for an item/video dataset under an application. User behavior datasets (user_event) do not require data-volume statistics; document datasets use document metadata instead.';
+    'Get the effective item data count (ValidCount/TotalCount) for an item/video dataset under an application. User behavior datasets (user_event) do not require data-volume statistics; document datasets use document metadata instead.';
 
   static override examples = [
     '<%= config.bin %> app item-data-count --application-id 123 --dataset-id 456',
