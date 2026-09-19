@@ -178,12 +178,12 @@ export async function runAppDatasetBindWorkflowCommand(options: AppDatasetBindWo
   }
 
   if (options.onlineConfig) {
-    const onlineConfigAction = getConsoleTopAction('UpsertAppOnlineConfig');
+    const onlineConfigAction = getConsoleTopAction('PublishAppOnlineConfigV2');
     if (!onlineConfigAction) {
-      throw new Error('Missing console-top mapping for UpsertAppOnlineConfig.');
+      throw new Error('Missing console-top mapping for PublishAppOnlineConfigV2.');
     }
     const onlineConfigPayload = compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       Config: await loadJsonInput(options.onlineConfig),
       ProjectName: projectName
     });

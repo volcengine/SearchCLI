@@ -1,37 +1,37 @@
-# GetAppOnlineConfig
+# GetAppOnlineConfigV2
 
 ## Overview
 
-- API name: `GetAppOnlineConfig`
+- API name: `GetAppOnlineConfigV2`
 - Category: Control Plane - Scene
 - Description: Gets App Online Config.
 
 ## IDL Definition
 
 ```proto
-message GetAppOnlineConfigReq {
-  string AppID = 1;
-  string ProjectName = 20;
+message GetAppOnlineConfigV2Req {
+  string ProjectName = 1;
+  string ApplicationId = 2;
 }
 
-message GetAppOnlineConfigResp {
-  OnlineConfig Config = 1;
-  OnlineConfig DraftConfig = 2;
+message GetAppOnlineConfigV2Resp {
+  OnlineConfigV2 Config = 1;
+  OnlineConfigV2 DraftConfig = 2;
 }
 
-message OnlineConfig {
-  ChatConfig ChatConfig = 11;
+message OnlineConfigV2 {
+  ChatConfigV2 ChatConfig = 1;
 }
 
-message ChatConfig {
-  repeated string BanWords = 2;
-  string RoleInfo = 3;
-  string AnswerInfo = 4;
-  string RoleAuxiliaryPrompt = 5;
-  OpeningRemarksConfig OpeningRemarksConfig = 6;
-  string NetworkSearchMode = 7;
-  string SearchSceneID = 8;
-  string FollowUpInfo = 9;
+message ChatConfigV2 {
+  repeated string BanWords = 1;
+  string RoleInfo = 2;
+  string AnswerInfo = 3;
+  string RoleAuxiliaryPrompt = 4;
+  OpeningRemarksConfig OpeningRemarksConfig = 5;
+  string NetworkSearchMode = 6;
+  string SearchSceneId = 7;
+  string FollowUpInfo = 8;
 }
 
 message OpeningRemarksConfig {
@@ -55,24 +55,24 @@ message CustomizedQuestionConfig {
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `AppID` | string | See service validation | Application ID. |
 | `ProjectName` | string | See service validation | Project name. |
+| `ApplicationId` | string | See service validation | Application ID. |
 
 ## Response Parameters
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `Config` | OnlineConfig | See service validation | Config. |
-| `DraftConfig` | OnlineConfig | See service validation | Draft config. |
-| `Config.ChatConfig` | ChatConfig | See service validation | Chat config. |
-| `DraftConfig.ChatConfig` | ChatConfig | See service validation | Chat config. |
+| `Config` | OnlineConfigV2 | See service validation | Config. |
+| `DraftConfig` | OnlineConfigV2 | See service validation | Draft config. |
+| `Config.ChatConfig` | ChatConfigV2 | See service validation | Chat config. |
+| `DraftConfig.ChatConfig` | ChatConfigV2 | See service validation | Chat config. |
 | `Config.ChatConfig.BanWords[]` | array<string> | No | Ban words. |
 | `Config.ChatConfig.RoleInfo` | string | See service validation | Role info. |
 | `Config.ChatConfig.AnswerInfo` | string | See service validation | Answer info. |
 | `Config.ChatConfig.RoleAuxiliaryPrompt` | string | See service validation | Role auxiliary prompt. |
 | `Config.ChatConfig.OpeningRemarksConfig` | OpeningRemarksConfig | See service validation | Opening remarks config. |
 | `Config.ChatConfig.NetworkSearchMode` | string | See service validation | Network search mode. |
-| `Config.ChatConfig.SearchSceneID` | string | See service validation | Search scene ID. |
+| `Config.ChatConfig.SearchSceneId` | string | See service validation | Search scene ID. |
 | `Config.ChatConfig.FollowUpInfo` | string | See service validation | Follow up info. |
 | `DraftConfig.ChatConfig.BanWords[]` | array<string> | No | Ban words. |
 | `DraftConfig.ChatConfig.RoleInfo` | string | See service validation | Role info. |
@@ -80,7 +80,7 @@ message CustomizedQuestionConfig {
 | `DraftConfig.ChatConfig.RoleAuxiliaryPrompt` | string | See service validation | Role auxiliary prompt. |
 | `DraftConfig.ChatConfig.OpeningRemarksConfig` | OpeningRemarksConfig | See service validation | Opening remarks config. |
 | `DraftConfig.ChatConfig.NetworkSearchMode` | string | See service validation | Network search mode. |
-| `DraftConfig.ChatConfig.SearchSceneID` | string | See service validation | Search scene ID. |
+| `DraftConfig.ChatConfig.SearchSceneId` | string | See service validation | Search scene ID. |
 | `DraftConfig.ChatConfig.FollowUpInfo` | string | See service validation | Follow up info. |
 
 ## Field Semantics and Validation Notes
@@ -102,7 +102,7 @@ This API returns application online chat config. `Config` is the published confi
 
 ### Reference Constraints
 
-- `ChatConfig.SearchSceneID` may be empty. When non-empty, it must refer to an existing search scene under the same application.
+- `ChatConfig.SearchSceneId` may be empty. When non-empty, it must refer to an existing search scene under the same application.
 - When `OpeningRemarksConfig.EnableRecommend=true`, `OpeningRemarksConfig.RecommendSceneId` is required and must refer to an existing recommend scene under the same application.
 - `OpeningRemarksConfig.RecommendItemDatasetId` may be omitted. When provided, it must match the item dataset bound to `RecommendSceneId`.
 - `RoleAuxiliaryPrompt` is compatibility data derived from `RoleInfo`, `AnswerInfo`, and `FollowUpInfo`; prefer reading the explicit fields when present.

@@ -810,18 +810,18 @@ export async function runAppItemDataCountCommand(options: AppItemDataCountGetOpt
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
-      DatasetID: options.datasetId,
+      ApplicationId: options.applicationId,
+      DatasetId: options.datasetId,
       ProjectName: options.projectName
     });
-  const response = await callOpenApi('/api/v1/GetAppItemDataCount', payload, options);
+  const response = await callOpenApi('GetAppItemDataCountV2', payload, options);
   if (options.full) {
     await printResult(response);
     return;
   }
 
   if (!isRecord(response)) {
-    throw new Error('GetAppItemDataCount returned an unexpected response shape.');
+    throw new Error('GetAppItemDataCountV2 returned an unexpected response shape.');
   }
 
   await printResult(summarizeAppItemDataCountResponse(response, options.applicationId, options.datasetId));
@@ -899,35 +899,33 @@ export async function runAppOnlineConfigGetCommand(options: AppOnlineConfigGetOp
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       ProjectName: options.projectName
     });
-  const response = await callConsoleTopAction('GetAppOnlineConfig', payload, options);
+  const response = await callConsoleTopAction('GetAppOnlineConfigV2', payload, options);
   if (options.full) {
     await printResult(response);
     return;
   }
 
   if (!isRecord(response)) {
-    throw new Error('GetAppOnlineConfig returned an unexpected response shape.');
+    throw new Error('GetAppOnlineConfigV2 returned an unexpected response shape.');
   }
 
   await printResult(summarizeAppOnlineConfigResponse(response, options.applicationId));
 }
 
 export async function runAppOnlineConfigUpdateCommand(options: AppOnlineConfigUpdateOptions): Promise<void> {
-  if (options.dryRun !== undefined) {
-    throw new Error('--dry-run is not supported by the console online-config API. Remove --dry-run and retry.');
-  }
   const payload =
     (await loadJsonInput(options.data)) ??
     compactObject({
-      AppID: options.applicationId,
+      ApplicationId: options.applicationId,
       Config: await loadJsonInput(options.config),
+      DryRun: options.dryRun,
       ProjectName: options.projectName
     });
   requireNonEmptyObject(payload, 'Need --data or --config for app online-config update.');
-  await printResult(callConsoleTopAction('UpsertAppOnlineConfig', payload, options));
+  await printResult(callConsoleTopAction('PublishAppOnlineConfigV2', payload, options));
 }
 
 export async function runDatasetCreateCommand(options: DatasetCreateOptions): Promise<void> {
@@ -1903,7 +1901,7 @@ export async function runPurchaseOrderWaitCommand(options: PurchaseOrderWaitOpti
 
 async function getBillingOrder(options: PurchaseOrderStatusOptions): Promise<unknown> {
   const payload = (await loadJsonInput(options.data)) ?? compactObject({ ProjectName: options.projectName });
-  return callOpenApi('/api/v1/GetBillingOrder', payload, options);
+  return callOpenApi('GetBillingOrderV2', payload, options);
 }
 
 const VIKING_AISEARCH_PRODUCT_CODE = 'REC-SaaS-LLM-SEARCH';
@@ -1915,6 +1913,9 @@ const BILLING_ORDER_SCENE_CODES: Record<string, number> = {
   renew: 2,
   modify: 3
 };
+
+const BILLING_INSTANCE_STATUS_DISABLE = 'disable';
+const BILLING_INSTANCE_STATUS_CREATE_FAILED = 'create_failed';
 
 export async function runPurchaseOrderPriceCommand(options: PurchaseOrderPriceOptions): Promise<void> {
   const payload = withBillingProductCode(
@@ -2006,9 +2007,9 @@ function isBillingOrderNotFoundError(error: unknown): boolean {
 
 function assertBillingOrderHealthy(response: unknown): void {
   const result = extractOpenApiResult(response);
-  const opened = result?.IsAirSearchRecOpened;
-  const state = Number(result?.InstanceState);
-  if (opened === false || state === 99) {
+  const opened = result?.IsAiSearchRecOpened;
+  const status = result?.InstanceStatus;
+  if (opened === false || status === BILLING_INSTANCE_STATUS_DISABLE) {
     throw new ApiRequestError(
       'API Error [ResourceNotFound.Instance]: Viking AI Search billing instance was not found or is not enabled.',
       404,
@@ -2017,7 +2018,7 @@ function assertBillingOrderHealthy(response: unknown): void {
       response
     );
   }
-  if (state === 2) {
+  if (status === BILLING_INSTANCE_STATUS_CREATE_FAILED) {
     throw new Error('Billing order exists but instance creation failed. Ask the user to revisit the purchase page and confirm the order status.');
   }
 }
@@ -2850,19 +2851,19 @@ USAGE
 
 DESCRIPTION
   Reports the effective (valid) and total record counts for an item/video dataset as seen by an
-  application, via /api/v1/GetAppItemDataCount. Use this to answer "how much effective data does
+  application, via GetAppItemDataCountV2. Use this to answer "how much effective data does
   this application have" for item/video datasets.
   User behavior datasets (user_event) do not require data-volume statistics and should be omitted
   from product-level data volume summaries. Document datasets are not counted by this command; use
   application dataset config metadata for document counts.
-  The compact output surfaces validCnt/totalCnt (and image/duration counts for video); pass \`--full\`
-  for the raw response payload.
+  The compact output surfaces validCount/totalCount (and image counts and video duration in seconds
+  for multi-modal datasets); pass \`--full\` for the raw response payload.
 
 KEY FLAGS
   --application-id  Target application ID.
   --dataset-id      Target item/video dataset ID. Do not pass user_event datasets.
   --project-name    Viking project name when the API requires project scoping.
-  --full            Return the raw GetAppItemDataCount response.
+  --full            Return the raw GetAppItemDataCountV2 response.
 
 EXAMPLES
   vs app item-data-count --application-id 123 --dataset-id 456
@@ -5357,12 +5358,12 @@ function summarizeAppItemDataCountResponse(
     Result: compactObject({
       applicationId,
       datasetId,
-      totalCnt: result.TotalCnt,
-      validCnt: result.ValidCnt,
-      imageNumTotal: result.ImageNumTotal,
-      validImageNum: result.ValidImageNum,
-      durationTotal: result.DurationTotal,
-      validDuration: result.ValidDuration
+      totalCount: result.TotalCount,
+      validCount: result.ValidCount,
+      totalImageCount: result.TotalImageCount,
+      validImageCount: result.ValidImageCount,
+      totalVideoDurationSeconds: result.TotalVideoDurationSeconds,
+      validVideoDurationSeconds: result.ValidVideoDurationSeconds
     })
   };
 }
@@ -5408,7 +5409,7 @@ function summarizeAppOnlineConfigResponse(response: Record<string, unknown>, app
       configDomains: config ? Object.keys(config) : [],
       chat: chatConfig
         ? compactObject({
-            searchSceneId: chatConfig.SearchSceneID,
+            searchSceneId: chatConfig.SearchSceneId,
             networkSearchMode: chatConfig.NetworkSearchMode,
             banWordCount: banWords.length,
             hasRoleInfo: hasNonEmptyString(chatConfig.RoleInfo),

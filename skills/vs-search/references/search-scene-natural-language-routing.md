@@ -113,6 +113,6 @@ Use this file as a routing layer only. For command execution:
 3. run the concrete command workflow,
 4. read the scene back after mutation.
 
-Field name case sensitivity: for any config area that references dataset field names (e.g. `ShuffleConfig.Rules[].FieldName`, `ShuffleExpr.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPoolsConfig.Pools[].Filter.field`), field names are case-sensitive. Before writing a field name into config, first look up the exact field name from the dataset schema via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`.
+Field name case sensitivity: for any config area that references dataset field names (e.g. `ShuffleConfig.Rules[].FieldName`, `ShuffleExpression.field`, `BoostBuryCondConfig.Rules[].Config.field`, `FilterConfig.Config.field`, `AuxiliaryPoolsConfig.Pools[].Filter.field`), field names are case-sensitive. Before writing a field name into config, first look up the exact field name from the dataset schema via `dataset get --id <dataset-id> --full` or `app dataset-config get --application-id <id> --dataset-id <id> --full`.
 
 Filter item scope note: `FilterConfig.RuleId` is only for reusing an existing stored `search_filter` rule. For a new item-scope filter, provide `FilterConfig.Config` and optional `Name`; the backend materializes the config into a `search_filter` rule during non-dry-run publish and returns the generated `RuleId` in scene readback.

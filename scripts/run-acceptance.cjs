@@ -1331,7 +1331,7 @@ async function testAuthImportEnv() {
   fs.mkdirSync(homeDir, { recursive: true });
   const server = await startV2MockServer({
     responses: {
-      GetBillingOrder: () => ({ ResponseMetadata: { RequestId: 'req-auth-status' }, Result: { Status: 'ok' } })
+      GetBillingOrderV2: () => ({ ResponseMetadata: { RequestId: 'req-auth-status' }, Result: { Status: 'ok' } })
     }
   });
 
