@@ -3,6 +3,7 @@
 
 import { jsonrepair } from 'jsonrepair';
 import { resolveCliDefaults } from './user-config';
+import { addVolcAuthorization } from './volc-sign';
 
 export interface LlmClientConfig {
   baseUrl: string;
@@ -138,24 +139,18 @@ async function buildLlmHeaders(config: LlmClientConfig, url: URL, body: string):
     throw new Error('Missing LLM credentials.');
   }
 
-  const { Signer } = await import('@volcengine/openapi');
   headers.host = url.host;
-  const signer = new Signer(
-    {
-      region: config.region,
-      method: 'POST',
-      pathname: url.pathname,
-      params: Object.fromEntries(url.searchParams.entries()),
-      headers,
-      body
-    },
-    config.service
-  );
-
-  signer.addAuthorization({
+  addVolcAuthorization({
+    region: config.region,
+    service: config.service,
+    method: 'POST',
+    pathname: url.pathname,
+    params: Object.fromEntries(url.searchParams.entries()),
+    headers,
+    body
+  }, {
     accessKeyId: config.accessKeyId,
-    secretKey: config.secretKey,
-    sessionToken: ''
+    secretKey: config.secretKey
   });
 
   return headers;

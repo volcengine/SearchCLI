@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import './node-bootstrap';
-import { Signer } from '@volcengine/openapi';
 import { formatMissingVikingAuthMessage, formatMissingVikingControlPlaneAuthMessage } from './auth-errors';
 import type { ServiceConfig } from './service-config';
 import { debugLog } from './debug-logger';
+import { addVolcAuthorization, type VolcSignedHttpMethod } from './volc-sign';
 
 const DEFAULT_OPENAPI_VERSION = '2025-03-01';
-type SignedHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+type SignedHttpMethod = VolcSignedHttpMethod;
 
 export class ApiRequestError extends Error {
   constructor(
@@ -181,22 +181,17 @@ async function buildHeaders(
 
   if (config.accessKeyId && config.secretKey) {
     headers.host = signedHost;
-    const signer = new Signer(
-      {
-        region: config.region,
-        method,
-        pathname: url.pathname,
-        params: Object.fromEntries(url.searchParams.entries()),
-        headers,
-        body: body ?? ''
-      },
-      config.service
-    );
-
-    signer.addAuthorization({
+    addVolcAuthorization({
+      region: config.region,
+      service: config.service,
+      method,
+      pathname: url.pathname,
+      params: Object.fromEntries(url.searchParams.entries()),
+      headers,
+      body: body ?? ''
+    }, {
       accessKeyId: config.accessKeyId,
-      secretKey: config.secretKey,
-      sessionToken: ''
+      secretKey: config.secretKey
     });
 
     return headers;
@@ -226,22 +221,17 @@ export function buildSignedRequestHeaders(
     host: resolveSignedHost(config, url)
   };
 
-  const signer = new Signer(
-    {
-      region: config.region,
-      method,
-      pathname: url.pathname,
-      params: Object.fromEntries(url.searchParams.entries()),
-      headers,
-      body: body ?? ''
-    },
-    config.service
-  );
-
-  signer.addAuthorization({
+  addVolcAuthorization({
+    region: config.region,
+    service: config.service,
+    method,
+    pathname: url.pathname,
+    params: Object.fromEntries(url.searchParams.entries()),
+    headers,
+    body: body ?? ''
+  }, {
     accessKeyId: config.accessKeyId,
-    secretKey: config.secretKey,
-    sessionToken: ''
+    secretKey: config.secretKey
   });
 
   return headers;

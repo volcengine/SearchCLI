@@ -48,11 +48,11 @@
     "test:acceptance:v2-live": "npm run build && VIKING_ACCEPTANCE_LIVE=1 node ./scripts/run-acceptance.cjs --dist --suite live",
     "dist:bundle": "node ./scripts/build-standalone.mjs",
     "dist:binary": "node ./scripts/package-binary.mjs",
-    "dist:matrix": "node ./scripts/package-binary.mjs node20-macos-arm64 node20-macos-x64 node20-linux-x64 node20-win-x64"
+    "dist:matrix": "node ./scripts/package-binary.mjs node20-macos-arm64 node20-macos-x64 node20-linux-x64 node20-win-x64",
+    "test:signer": "tsx ./scripts/volc-sign.test.ts"
   },
   "dependencies": {
     "@oclif/core": "^4.5.5",
-    "@volcengine/openapi": "^1.36.1",
     "csv-parse": "^5.6.0",
     "jsonrepair": "^3.13.3",
     "mongodb": "^7.4.0",
