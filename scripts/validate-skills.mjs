@@ -38,7 +38,7 @@ for (const dirName of skillDirs) {
     continue;
   }
 
-  const content = fs.readFileSync(skillFile, 'utf8');
+  const content = fs.readFileSync(skillFile, 'utf8').replace(/\r\n?/g, '\n');
   const frontmatter = parseFrontmatter(content);
   if (!frontmatter) {
     errors.push(`[${dirName}] SKILL.md must start with YAML frontmatter`);
